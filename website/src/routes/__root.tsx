@@ -2,6 +2,7 @@ import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-r
 import * as React from 'react';
 import appCss from '@/styles/app.css?url';
 import { RootProvider } from 'fumadocs-ui/provider/tanstack';
+import { Databuddy } from '@databuddy/sdk/react';
 
 export const Route = createRootRoute({
   head: () => ({
@@ -32,13 +33,10 @@ function RootComponent() {
     <html suppressHydrationWarning>
       <head>
         <HeadContent />
-        <script
-          defer
-          src="https://usedatix.com/tracker.js"
-          data-site="6ff1413d-87a7-498f-9fc7-22171764b7f8"
-        />
+
       </head>
       <body className="flex flex-col min-h-screen">
+        <Databuddy clientId='e1f706f1-7956-482d-9b32-3748354abd8a' trackOutgoingLinks={true} />
         <RootProvider
           search={{ options: { type: 'static', api: '/api/search.json' } }}
           theme={{
