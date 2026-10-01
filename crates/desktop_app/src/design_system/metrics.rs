@@ -5,7 +5,7 @@
 //! Change a number here only when the design changes — not to make one call
 //! site look better.
 
-use gpui::{Pixels, px};
+use gpui_kit::{Pixels, px};
 
 // ── Sidebar ──────────────────────────────────────────────────────
 pub const SIDEBAR_WIDTH: Pixels = px(208.0);

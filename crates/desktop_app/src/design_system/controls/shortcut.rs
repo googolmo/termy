@@ -1,4 +1,4 @@
-use gpui::{
+use gpui_kit::{
     App, ClickEvent, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce,
     SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
@@ -261,7 +261,7 @@ impl RenderOnce for ShortcutBox {
             ShortcutState::Unbound => container
                 .child(
                     div()
-                        .flex_grow()
+                        .flex_grow(1.0)
                         .min_w(px(0.0))
                         .text_size(CAPTION_SIZE)
                         .text_color(theme.text_muted)

@@ -5,8 +5,8 @@ use crate::ui::release_notes::WhatsNewAction;
 use crate::ui::update_banner::{
     UpdateBannerAction, UpdateBannerButton, UpdateBannerTone, UpdateButtonStyle, UpdateProgress,
 };
-use gpui::prelude::FluentBuilder;
-use gpui::{
+use gpui_kit::prelude::FluentBuilder;
+use gpui_kit::{
     Animation, AnimationExt as _, FontStyle, FontWeight, HighlightStyle, ImageSource,
     InteractiveText, ObjectFit, RenderImage, StyledImage, StyledText, UnderlineStyle, bounce,
     ease_in_out, relative,
@@ -34,8 +34,8 @@ pub(super) enum MarkdownImageState {
 }
 
 struct BannerTone {
-    accent: gpui::Rgba,
-    tile_bg: gpui::Rgba,
+    accent: gpui_kit::Rgba,
+    tile_bg: gpui_kit::Rgba,
     icon_path: &'static str,
 }
 
@@ -70,7 +70,9 @@ impl TerminalView {
     #[cfg(not(test))]
     pub(super) fn schedule_whats_new_on_launch(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
-            smol::Timer::after(Duration::from_millis(600)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(600))
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.maybe_open_whats_new(cx);
@@ -114,7 +116,7 @@ impl TerminalView {
     fn start_release_notes_fetch(&mut self, version: String, cx: &mut Context<Self>) {
         self.release_notes_generation = self.release_notes_generation.wrapping_add(1);
         let generation = self.release_notes_generation;
-        self.release_notes_scroll = gpui::ScrollHandle::new();
+        self.release_notes_scroll = gpui_kit::ScrollHandle::new();
         self.clear_release_notes_images(cx);
         self.release_notes = Some(ReleaseNotesDialog {
             version: version.clone(),
@@ -338,11 +340,11 @@ impl TerminalView {
     fn render_update_banner_button(
         &mut self,
         button: UpdateBannerButton,
-        updater_weak: Option<gpui::WeakEntity<AutoUpdater>>,
+        updater_weak: Option<gpui_kit::WeakEntity<AutoUpdater>>,
         release_notes_version: Option<String>,
-        accent: gpui::Rgba,
-        primary_text: gpui::Rgba,
-        background: gpui::Rgba,
+        accent: gpui_kit::Rgba,
+        primary_text: gpui_kit::Rgba,
+        background: gpui_kit::Rgba,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let action = button.action;
@@ -359,7 +361,7 @@ impl TerminalView {
             UpdateButtonStyle::Primary => (accent, primary_hover, background),
             UpdateButtonStyle::Secondary => (secondary_bg, secondary_hover, accent),
             UpdateButtonStyle::Ghost => (
-                gpui::Rgba {
+                gpui_kit::Rgba {
                     r: 0.0,
                     g: 0.0,
                     b: 0.0,
@@ -371,9 +373,9 @@ impl TerminalView {
         };
 
         div()
-            .id(gpui::ElementId::from(gpui::SharedString::from(format!(
-                "update-banner-btn-{action:?}"
-            ))))
+            .id(gpui_kit::ElementId::from(gpui_kit::SharedString::from(
+                format!("update-banner-btn-{action:?}"),
+            )))
             .h(px(28.0))
             .px(px(12.0))
             .rounded(px(UPDATE_BANNER_GEOMETRY.control_radius))
@@ -616,8 +618,8 @@ impl TerminalView {
                                 }),
                             )
                             .child(
-                                gpui::svg()
-                                    .path(gpui::SharedString::from("icons/tab_strip/x.svg"))
+                                gpui_kit::svg()
+                                    .path(gpui_kit::SharedString::from("icons/tab_strip/x.svg"))
                                     .size(px(12.0))
                                     .text_color(muted_text),
                             ),
@@ -668,10 +670,10 @@ impl TerminalView {
     fn render_markdown_document(
         &mut self,
         markdown: &str,
-        primary_text: gpui::Rgba,
-        muted_text: gpui::Rgba,
-        accent: gpui::Rgba,
-        code_bg: gpui::Rgba,
+        primary_text: gpui_kit::Rgba,
+        muted_text: gpui_kit::Rgba,
+        accent: gpui_kit::Rgba,
+        code_bg: gpui_kit::Rgba,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let style = MarkdownStyle {
@@ -937,9 +939,9 @@ impl TerminalView {
         let mut hover = style.accent;
         hover.a = 0.16;
         div()
-            .id(gpui::ElementId::from(gpui::SharedString::from(format!(
-                "release-notes-link-{index}-{label}"
-            ))))
+            .id(gpui_kit::ElementId::from(gpui_kit::SharedString::from(
+                format!("release-notes-link-{index}-{label}"),
+            )))
             .text_color(style.accent)
             .underline()
             .cursor_pointer()
@@ -967,10 +969,10 @@ impl TerminalView {
     ) -> AnyElement {
         let fallback = if alt.trim().is_empty() { "Image" } else { alt };
         match self.release_notes_images.get(url) {
-            Some(MarkdownImageState::Ready(source)) => gpui::img(source.clone())
-                .id(gpui::ElementId::from(gpui::SharedString::from(format!(
-                    "release-notes-image-{index}"
-                ))))
+            Some(MarkdownImageState::Ready(source)) => gpui_kit::img(source.clone())
+                .id(gpui_kit::ElementId::from(gpui_kit::SharedString::from(
+                    format!("release-notes-image-{index}"),
+                )))
                 .w_full()
                 .max_h(px(240.0))
                 .object_fit(ObjectFit::Contain)
@@ -986,11 +988,11 @@ impl TerminalView {
 }
 
 struct MarkdownStyle {
-    primary_text: gpui::Rgba,
-    muted_text: gpui::Rgba,
-    accent: gpui::Rgba,
-    code_bg: gpui::Rgba,
-    mono_font: gpui::SharedString,
+    primary_text: gpui_kit::Rgba,
+    muted_text: gpui_kit::Rgba,
+    accent: gpui_kit::Rgba,
+    code_bg: gpui_kit::Rgba,
+    mono_font: gpui_kit::SharedString,
 }
 
 fn render_wrapping_markdown_text(inlines: &[Inline], style: &MarkdownStyle) -> AnyElement {
@@ -1072,7 +1074,7 @@ fn render_wrapping_markdown_text(inlines: &[Inline], style: &MarkdownStyle) -> A
             .collect::<Vec<_>>();
         let urls = links.into_iter().map(|(_, url)| url).collect::<Vec<_>>();
         InteractiveText::new(
-            gpui::SharedString::from(format!(
+            gpui_kit::SharedString::from(format!(
                 "release-notes-text-{}-{}",
                 text.len(),
                 text.chars().take(32).collect::<String>()
@@ -1118,8 +1120,8 @@ fn banner_tone(tone: UpdateBannerTone, colors: &TerminalColors) -> BannerTone {
 }
 
 fn banner_icon_tile(
-    tile_bg: gpui::Rgba,
-    accent: gpui::Rgba,
+    tile_bg: gpui_kit::Rgba,
+    accent: gpui_kit::Rgba,
     icon_path: &'static str,
 ) -> AnyElement {
     div()
@@ -1132,8 +1134,8 @@ fn banner_icon_tile(
         .items_center()
         .justify_center()
         .child(
-            gpui::svg()
-                .path(gpui::SharedString::from(icon_path))
+            gpui_kit::svg()
+                .path(gpui_kit::SharedString::from(icon_path))
                 .size(px(14.0))
                 .text_color(accent),
         )
@@ -1143,8 +1145,8 @@ fn banner_icon_tile(
 fn banner_badge_chip(
     badge: &'static str,
     percent: Option<u8>,
-    accent: gpui::Rgba,
-    tile_bg: gpui::Rgba,
+    accent: gpui_kit::Rgba,
+    tile_bg: gpui_kit::Rgba,
 ) -> AnyElement {
     div()
         .flex_none()
@@ -1175,8 +1177,8 @@ fn banner_badge_chip(
 
 fn render_update_progress(
     progress: &UpdateProgress,
-    accent: gpui::Rgba,
-    muted_text: gpui::Rgba,
+    accent: gpui_kit::Rgba,
+    muted_text: gpui_kit::Rgba,
 ) -> AnyElement {
     let mut track = accent;
     track.a = 0.14;

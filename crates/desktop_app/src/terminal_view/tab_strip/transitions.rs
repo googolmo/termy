@@ -148,7 +148,9 @@ impl TerminalView {
         }
         self.tab_strip.transitions.frame_scheduled = true;
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(TAB_TRANSITION_FRAME_MS)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(TAB_TRANSITION_FRAME_MS))
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.tab_strip.transitions.frame_scheduled = false;

@@ -112,7 +112,7 @@ impl TerminalView {
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let mut remaining = delay;
             loop {
-                smol::Timer::after(remaining).await;
+                cx.background_executor().timer(remaining).await;
                 let next_delay = cx.update(|cx| {
                     this.update(cx, |view, cx| {
                         let DeferredTerminalResize::Pending {
@@ -132,7 +132,7 @@ impl TerminalView {
                     })
                 });
                 match next_delay {
-                    Ok(Ok(Some(next_delay))) => remaining = next_delay,
+                    Ok(Some(next_delay)) => remaining = next_delay,
                     _ => return,
                 }
             }
@@ -381,7 +381,7 @@ impl TerminalView {
         let font = Font {
             family: self.font_family.clone(),
             weight: FontWeight::NORMAL,
-            ..gpui::font("")
+            ..gpui_kit::font("")
         };
 
         let text_system = window.text_system();

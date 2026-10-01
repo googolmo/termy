@@ -18,10 +18,9 @@ workspace = true
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
-gpui = { workspace = true }
+gpui-kit = { workspace = true }
 alacritty_terminal = { workspace = true }
 flume = { workspace = true }
-smol = "2.0"
 anyhow = { workspace = true }
 dirs = { workspace = true }
 log = { workspace = true }
@@ -83,5 +82,5 @@ url = { workspace = true }
 rustix-openpty = "0.2"
 
 [dev-dependencies]
-gpui = { workspace = true, features = ["test-support"] }
+gpui-kit = { workspace = true, features = ["test-support"] }
 tempfile = { workspace = true }

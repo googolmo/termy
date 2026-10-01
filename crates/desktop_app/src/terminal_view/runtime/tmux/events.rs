@@ -62,7 +62,7 @@ impl TerminalView {
                 self.tmux_runtime_mut().resize_wakeup_scheduled = true;
                 let wakeup_tx = self.event_wakeup_tx.clone();
                 cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-                    smol::Timer::after(delay).await;
+                    cx.background_executor().timer(delay).await;
                     let _ = cx.update(|cx| {
                         this.update(cx, |view, _cx| {
                             // The delayed callback can outlive tmux runtime; guard before any
@@ -134,7 +134,9 @@ impl TerminalView {
         self.tmux_runtime_mut().title_refresh_wakeup_scheduled = true;
         let wakeup_tx = self.event_wakeup_tx.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(TMUX_TITLE_REFRESH_DEBOUNCE_MS)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(TMUX_TITLE_REFRESH_DEBOUNCE_MS))
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, _cx| {
                     // Same safety rule as resize wakeups: this task can fire after runtime

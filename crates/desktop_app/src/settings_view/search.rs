@@ -525,8 +525,8 @@ impl SettingsWindow {
 
     pub(super) fn start_smooth_scroll_animation(
         &mut self,
-        start_offset: gpui::Point<gpui::Pixels>,
-        target_offset: gpui::Point<gpui::Pixels>,
+        start_offset: gpui_kit::Point<gpui_kit::Pixels>,
+        target_offset: gpui_kit::Point<gpui_kit::Pixels>,
         cx: &mut Context<Self>,
     ) {
         let start_x: f32 = start_offset.x.into();
@@ -548,27 +548,27 @@ impl SettingsWindow {
             let started_at = Instant::now();
 
             loop {
-                smol::Timer::after(Duration::from_millis(SETTINGS_SCROLL_ANIMATION_TICK_MS)).await;
+                cx.background_executor()
+                    .timer(Duration::from_millis(SETTINGS_SCROLL_ANIMATION_TICK_MS))
+                    .await;
 
-                let continue_animating = cx
-                    .update(|cx| {
-                        this.update(cx, |view, cx| {
-                            if view.scroll_animation_token != token {
-                                return false;
-                            }
+                let continue_animating = cx.update(|cx| {
+                    this.update(cx, |view, cx| {
+                        if view.scroll_animation_token != token {
+                            return false;
+                        }
 
-                            let t = (started_at.elapsed().as_secs_f32() / duration.as_secs_f32())
-                                .clamp(0.0, 1.0);
-                            let eased = t * t * (3.0 - 2.0 * t);
-                            let x = start_x + (target_x - start_x) * eased;
-                            let y = start_y + (target_y - start_y) * eased;
-                            scroll_handle.set_offset(point(px(x), px(y)));
-                            cx.notify();
-                            t < 1.0
-                        })
-                        .unwrap_or(false)
+                        let t = (started_at.elapsed().as_secs_f32() / duration.as_secs_f32())
+                            .clamp(0.0, 1.0);
+                        let eased = t * t * (3.0 - 2.0 * t);
+                        let x = start_x + (target_x - start_x) * eased;
+                        let y = start_y + (target_y - start_y) * eased;
+                        scroll_handle.set_offset(point(px(x), px(y)));
+                        cx.notify();
+                        t < 1.0
                     })
-                    .unwrap_or(false);
+                    .unwrap_or(false)
+                });
 
                 if !continue_animating {
                     break;
@@ -596,7 +596,7 @@ impl SettingsWindow {
         self.sidebar_search_active = true;
         self.sidebar_search_selecting = false;
         if !self.focus_handle.is_focused(window) {
-            self.focus_handle.focus(window);
+            self.focus_handle.focus(window, cx);
         }
 
         if let Some(anchor) = self.setting_scroll_anchors.get(setting_key).cloned() {
@@ -712,7 +712,7 @@ impl SettingsWindow {
                         div()
                             .px_1()
                             .text_size(px(19.0))
-                            .font_weight(gpui::FontWeight::BOLD)
+                            .font_weight(gpui_kit::FontWeight::BOLD)
                             .text_color(self.text_primary())
                             .child("Settings"),
                     )
@@ -772,7 +772,7 @@ impl SettingsWindow {
                 div()
                     .px_2()
                     .text_size(px(SIDEBAR_GROUP_LABEL_SIZE))
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(self.text_muted())
                     .child(label),
             )
@@ -815,7 +815,7 @@ impl SettingsWindow {
                         .items_center()
                         .justify_center()
                         .text_xs()
-                        .font_weight(gpui::FontWeight::BOLD)
+                        .font_weight(gpui_kit::FontWeight::BOLD)
                         .text_color(text_primary)
                         .child(avatar_fallback)
                         .into_any_element(),
@@ -911,7 +911,7 @@ impl SettingsWindow {
         if is_active {
             let font = Font {
                 family: self.config.ui_font_family.clone().into(),
-                ..gpui::font("")
+                ..gpui_kit::font("")
             };
             return TextInputElement::new(
                 cx.entity(),
@@ -992,7 +992,7 @@ impl SettingsWindow {
                     }
                     view.sidebar_search_selecting = event.click_count == 1;
                     view.refresh_search_navigation(window, cx);
-                    view.focus_handle.focus(window);
+                    view.focus_handle.focus(window, cx);
                     cx.notify();
                 }),
             )
@@ -1171,9 +1171,9 @@ impl SettingsWindow {
                 div()
                     .text_sm()
                     .font_weight(if is_active {
-                        gpui::FontWeight::MEDIUM
+                        gpui_kit::FontWeight::MEDIUM
                     } else {
-                        gpui::FontWeight::NORMAL
+                        gpui_kit::FontWeight::NORMAL
                     })
                     .text_color(if is_active {
                         text_primary

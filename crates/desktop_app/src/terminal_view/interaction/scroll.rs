@@ -85,7 +85,7 @@ impl TerminalView {
                 self.input_scroll_suppress_until = None;
                 false
             }
-            TouchPhase::Ended => {
+            TouchPhase::Ended | TouchPhase::Cancelled => {
                 self.input_scroll_suppress_until = None;
                 cx.stop_propagation();
                 true
@@ -136,7 +136,7 @@ impl TerminalView {
                 self.terminal_scroll_accumulator_y = 0.0;
                 0
             }
-            TouchPhase::Ended => {
+            TouchPhase::Ended | TouchPhase::Cancelled => {
                 self.terminal_scroll_accumulator_y = 0.0;
                 0
             }
@@ -179,7 +179,7 @@ impl TerminalView {
 
     fn retarget_scroll_wheel_pane(
         &mut self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         cx: &mut Context<Self>,
     ) -> WheelScrollRetargetResult {
         let hovered_pane_id = self
@@ -206,7 +206,7 @@ impl TerminalView {
 
     pub(in super::super) fn terminal_scrollbar_hit_test(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
     ) -> Option<TerminalScrollbarHit> {
         let terminal = self.active_terminal()?;
@@ -349,7 +349,7 @@ impl TerminalView {
 
     pub(in super::super) fn handle_terminal_scrollbar_drag(
         &mut self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
         cx: &mut Context<Self>,
     ) {

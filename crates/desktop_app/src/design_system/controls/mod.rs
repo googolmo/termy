@@ -1,6 +1,6 @@
 //! The control library: everything that lives in a setting row's control lane.
 //!
-//! Controls are stateless [`RenderOnce`](gpui::RenderOnce) components. The host
+//! Controls are stateless [`RenderOnce`](gpui_kit::RenderOnce) components. The host
 //! owns the value and passes it in, which keeps the kit usable from a GPUI view,
 //! a preview, or a test without dragging app state along.
 
@@ -22,7 +22,7 @@ pub use stepper::Stepper;
 pub use switch::Switch;
 pub use text_field::TextField;
 
-use gpui::{App, ClickEvent, Window};
+use gpui_kit::{App, ClickEvent, Window};
 
 /// Click callback shared by the interactive controls.
 pub type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;

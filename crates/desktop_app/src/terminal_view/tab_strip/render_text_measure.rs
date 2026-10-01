@@ -1,5 +1,5 @@
 use super::super::*;
-use gpui::{Hsla, TextRun};
+use gpui_kit::{Hsla, TextRun};
 
 impl TerminalView {
     pub(super) fn measure_text_width(
@@ -31,7 +31,7 @@ impl TerminalView {
             font: Font {
                 family: font_family.clone(),
                 weight: FontWeight::NORMAL,
-                ..gpui::font("")
+                ..gpui_kit::font("")
             },
             color: Hsla {
                 h: 0.0,

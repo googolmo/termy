@@ -1,4 +1,4 @@
-use gpui::{
+use gpui_kit::{
     ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
     Styled, Window, div, px, relative,
 };
@@ -37,7 +37,7 @@ impl Slider {
 }
 
 impl RenderOnce for Slider {
-    fn render(self, _window: &mut Window, cx: &mut gpui::App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut gpui_kit::App) -> impl IntoElement {
         let theme = tokens(cx);
         // Centers the 4px track and the 16px knob on the 30px control lane.
         let track_top = (CONTROL_HEIGHT - SLIDER_TRACK_HEIGHT) / 2.0;
@@ -54,7 +54,7 @@ impl RenderOnce for Slider {
             .child(
                 div()
                     .relative()
-                    .flex_grow()
+                    .flex_grow(1.0)
                     .min_w(px(0.0))
                     .h(CONTROL_HEIGHT)
                     .child(

@@ -1,6 +1,6 @@
-//! Modal replacement for GPUI 0.2.2's non-native Linux prompt fallback.
+//! Application-owned modal Linux prompt with terminal input isolation.
 
-use gpui::{
+use gpui_kit::{
     App, AppContext, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyDownEvent, ParentElement, PromptButton, PromptHandle, PromptLevel,
     PromptResponse, Render, RenderablePromptHandle, StatefulInteractiveElement, Styled, Window,
@@ -94,7 +94,7 @@ impl Render for ModalPrompt {
                 cx.stop_propagation();
             })
             .on_any_mouse_down(cx.listener(|this, _, window, cx| {
-                this.focus.focus(window);
+                this.focus.focus(window, cx);
                 cx.stop_propagation();
             }))
             .on_mouse_move(|_, _, cx| cx.stop_propagation())
@@ -139,7 +139,7 @@ impl Render for ModalPrompt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point};
+    use gpui_kit::{Entity, Modifiers, TestAppContext, VisualTestContext, point};
 
     struct TerminalUnderlay {
         focus: FocusHandle,
@@ -153,9 +153,9 @@ mod tests {
                 .size_full()
                 .track_focus(&self.focus)
                 .key_context("Terminal")
-                .on_any_mouse_down(cx.listener(|this, _, window, _| {
+                .on_any_mouse_down(cx.listener(|this, _, window, cx| {
                     this.mouse_downs += 1;
-                    this.focus.focus(window);
+                    this.focus.focus(window, cx);
                 }))
                 .on_key_down(cx.listener(|this, _, _, _| this.keys += 1))
         }
@@ -165,7 +165,7 @@ mod tests {
         cx.update(|cx| cx.set_prompt_builder(render_prompt));
         cx.add_window_view(|window, cx| {
             let focus = cx.focus_handle();
-            focus.focus(window);
+            focus.focus(window, cx);
             TerminalUnderlay {
                 focus,
                 mouse_downs: 0,
@@ -174,7 +174,7 @@ mod tests {
         })
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn keyboard_cancels_prompt_without_reaching_terminal_and_restores_focus(
         cx: &mut TestAppContext,
     ) {
@@ -196,7 +196,7 @@ mod tests {
         terminal.read_with(cx, |terminal, _| assert_eq!(terminal.keys, 1));
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn mouse_is_modal_and_both_buttons_resolve_the_prompt(cx: &mut TestAppContext) {
         let (terminal, cx) = setup(cx);
         for index in 0..2 {
@@ -230,7 +230,7 @@ mod tests {
         terminal.read_with(cx, |terminal, _| assert_eq!(terminal.mouse_downs, 1));
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn keyboard_can_confirm_or_navigate_to_cancel(cx: &mut TestAppContext) {
         let (_, cx) = setup(cx);
         for (keys, expected) in [

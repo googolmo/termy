@@ -1,4 +1,4 @@
-use gpui::{
+use gpui_kit::{
     App, ClickEvent, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce,
     Rgba, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
@@ -96,7 +96,7 @@ impl RenderOnce for Select {
             )
             .child(
                 div()
-                    .flex_grow()
+                    .flex_grow(1.0)
                     .min_w(px(0.0))
                     .text_size(BODY_SIZE)
                     .text_color(theme.text_primary)
@@ -112,7 +112,7 @@ pub struct SelectItem {
     label: SharedString,
     selected: bool,
     hovered: bool,
-    leading: Option<gpui::AnyElement>,
+    leading: Option<gpui_kit::AnyElement>,
 }
 
 impl SelectItem {
@@ -222,7 +222,7 @@ impl RenderOnce for SelectMenu {
                 )
                 .child(
                     div()
-                        .flex_grow()
+                        .flex_grow(1.0)
                         .min_w(px(0.0))
                         .text_size(CAPTION_SIZE)
                         .text_color(label_color)

@@ -53,7 +53,9 @@ impl TerminalView {
         let token = tab.pending_command_token;
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(delay_ms)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(delay_ms))
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     if view.activate_pending_command_title_for_id(tab_id, token) {

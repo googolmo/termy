@@ -36,9 +36,9 @@ use crate::terminal_ui::TmuxClient;
 use commands::{OpenConfig, OpenSettings};
 use deeplink::{DeepLinkArgument, DeepLinkRoute};
 use flume::Receiver;
-use gpui::{
-    App, Application, AsyncApp, Bounds, Pixels, WindowBounds, WindowHandle, WindowKind,
-    WindowOptions, prelude::*, px, size,
+use gpui_kit::{
+    App, AsyncApp, Bounds, Pixels, WindowBounds, WindowHandle, WindowKind, WindowOptions,
+    prelude::*, px, size,
 };
 use startup::StartupBlocker;
 use terminal_view::{TerminalView, initial_window_background_appearance};
@@ -218,7 +218,7 @@ fn guard_tmux_startup(config: &mut config::AppConfig) -> Option<String> {
     Some(blocker.tmux_fallback_message())
 }
 
-fn normalized_startup_window_size(startup_config: &config::AppConfig) -> gpui::Size<Pixels> {
+fn normalized_startup_window_size(startup_config: &config::AppConfig) -> gpui_kit::Size<Pixels> {
     let window_width = startup_config.window_width;
     let window_height = startup_config.window_height;
 
@@ -240,8 +240,8 @@ fn normalized_startup_window_size(startup_config: &config::AppConfig) -> gpui::S
 
 #[cfg(target_os = "windows")]
 fn should_apply_windows_startup_resize(
-    current: gpui::Size<Pixels>,
-    desired: gpui::Size<Pixels>,
+    current: gpui_kit::Size<Pixels>,
+    desired: gpui_kit::Size<Pixels>,
 ) -> bool {
     const WINDOW_SIZE_EPSILON: f32 = 0.5;
 
@@ -276,19 +276,19 @@ pub(crate) fn open_terminal_window(
     let benchmark_mode = std::env::var_os("TERMY_BENCHMARK_COMMAND").is_some();
 
     #[cfg(target_os = "macos")]
-    let titlebar = Some(gpui::TitlebarOptions {
+    let titlebar = Some(gpui_kit::TitlebarOptions {
         title: Some("Termy".into()),
         appears_transparent: true,
-        traffic_light_position: Some(gpui::point(px(12.0), px(10.0))),
+        traffic_light_position: Some(gpui_kit::point(px(12.0), px(10.0))),
     });
     #[cfg(target_os = "windows")]
-    let titlebar = Some(gpui::TitlebarOptions {
+    let titlebar = Some(gpui_kit::TitlebarOptions {
         title: Some("Termy".into()),
         appears_transparent: false,
         traffic_light_position: None,
     });
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-    let titlebar = Some(gpui::TitlebarOptions {
+    let titlebar = Some(gpui_kit::TitlebarOptions {
         title: Some("Termy".into()),
         appears_transparent: false,
         traffic_light_position: None,
@@ -303,7 +303,7 @@ pub(crate) fn open_terminal_window(
             // Let the Linux compositor/window manager own the titlebar,
             // controls, borders, and resize affordances.
             #[cfg(target_os = "linux")]
-            window_decorations: Some(gpui::WindowDecorations::Server),
+            window_decorations: Some(gpui_kit::WindowDecorations::Server),
             // Keep both sides of the xctrace comparison visible even when the
             // benchmark is launched from an IDE or another frontmost app.
             // Normal product windows retain the standard level.
@@ -383,7 +383,7 @@ pub(crate) fn open_terminal_window(
                         let native_drop_view = view.downgrade();
                         cx.spawn(async move |cx: &mut AsyncApp| {
                             while let Ok(result) = native_drop_rx.recv_async().await {
-                                let _ = cx.update(|cx| {
+                                cx.update(|cx| {
                                     let _ = native_drop_view.update(cx, |view, cx| {
                                         view.handle_native_file_drop_result(result, cx);
                                     });
@@ -503,7 +503,7 @@ fn start_theme_install_from_deeplink(cx: &mut App, slug: String) {
                     .await;
                 crate::ui::toast::dismiss_toast(install_loading_id);
 
-                let _ = cx.update(|cx| match install_result {
+                cx.update(|cx| match install_result {
                     Ok(installed_theme) => {
                         crate::ui::toast::success(installed_theme.message.clone());
                         app_actions::update_open_settings_windows(cx, |view, settings_cx| {
@@ -620,7 +620,7 @@ fn handle_open_urls(cx: &mut App, urls: &[String]) {
 fn spawn_deeplink_listener(cx: &mut App, deeplink_rx: Receiver<Vec<String>>) {
     cx.spawn(async move |cx: &mut AsyncApp| {
         while let Ok(urls) = deeplink_rx.recv_async().await {
-            let _ = cx.update(|cx| handle_open_urls(cx, &urls));
+            cx.update(|cx| handle_open_urls(cx, &urls));
         }
     })
     .detach();
@@ -669,7 +669,7 @@ fn main() {
         Err(error) => log::warn!("Termy instance handoff unavailable: {error}"),
     }
 
-    let application = Application::new().with_assets(crate::asset_source::EmbeddedAssets);
+    let application = gpui_kit::application().with_assets(crate::asset_source::EmbeddedAssets);
     launch_probe::record_stage("platform_created");
 
     application.on_reopen(|cx| {
@@ -685,6 +685,7 @@ fn main() {
     });
 
     application.run(move |cx: &mut App| {
+        gpui_kit::init(cx);
         launch_probe::record_stage("application_running");
         #[cfg(target_os = "linux")]
         cx.set_prompt_builder(linux_prompt::render_prompt);
@@ -789,7 +790,7 @@ mod tests {
     use crate::app_actions;
     use crate::config::AppConfig;
     use crate::deeplink::NewTabDeepLink;
-    use gpui::{
+    use gpui_kit::{
         App, AppContext, Context, IntoElement, Render, TestAppContext, Window, WindowOptions, div,
         px, size,
     };
@@ -840,7 +841,7 @@ mod tests {
         assert_eq!(startup.deeplinks, vec!["termy://window"]);
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn linux_launch_handoffs_open_independent_windows(cx: &mut TestAppContext) {
         let home = tempfile::tempdir().expect("instance home");
         let super::instance::InstanceClaim::Primary(guard) =
@@ -954,7 +955,7 @@ mod tests {
         assert!(warning.contains("starting in native mode"));
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn reopen_if_no_windows_opens_a_window(cx: &mut TestAppContext) {
         assert!(cx.windows().is_empty(), "expected no windows at test start");
 
@@ -967,7 +968,7 @@ mod tests {
         assert_eq!(cx.windows().len(), 1);
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn reopen_if_no_windows_does_not_open_when_window_exists(cx: &mut TestAppContext) {
         cx.update(open_test_window);
         assert_eq!(cx.windows().len(), 1);
@@ -981,7 +982,7 @@ mod tests {
         assert_eq!(cx.windows().len(), 1);
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn focus_or_open_main_window_opens_when_missing(cx: &mut TestAppContext) {
         assert_eq!(cx.windows().len(), 0);
 
@@ -992,7 +993,7 @@ mod tests {
         assert_eq!(cx.windows().len(), 1);
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn focus_or_open_main_window_reuses_existing_window(cx: &mut TestAppContext) {
         cx.update(open_test_window);
         assert_eq!(cx.windows().len(), 1);
@@ -1007,7 +1008,7 @@ mod tests {
         assert_eq!(cx.windows().len(), 1);
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn handle_open_urls_opens_window_before_dispatch(cx: &mut TestAppContext) {
         let handled = RefCell::new(Vec::new());
 
@@ -1027,7 +1028,7 @@ mod tests {
         assert_eq!(*handled.borrow(), vec![(DeepLinkRoute::Settings, None)]);
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn bare_deeplink_opens_window_without_error_route(cx: &mut TestAppContext) {
         let handled = RefCell::new(Vec::new());
 
@@ -1048,7 +1049,7 @@ mod tests {
     }
 
     #[cfg(unix)]
-    #[gpui::test]
+    #[gpui_kit::test]
     fn folder_open_target_dispatches_a_new_tab(cx: &mut TestAppContext) {
         let handled = RefCell::new(Vec::new());
 
@@ -1078,7 +1079,7 @@ mod tests {
     }
 
     #[cfg(target_os = "macos")]
-    #[gpui::test]
+    #[gpui_kit::test]
     fn finder_service_reuses_open_window_for_selected_folders(cx: &mut TestAppContext) {
         let handled = RefCell::new(Vec::new());
         let directory = "/tmp/it's a folder & another";
@@ -1110,7 +1111,7 @@ mod tests {
         assert_eq!(*handled.borrow(), vec![expected.clone(), expected]);
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn new_tab_deeplink_passes_route_without_argument(cx: &mut TestAppContext) {
         let handled = RefCell::new(Vec::new());
 
@@ -1187,7 +1188,7 @@ mod tests {
         assert!(should_apply_windows_startup_resize(current, target));
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn new_tab_deeplink_ignores_optional_command(cx: &mut TestAppContext) {
         let handled = RefCell::new(Vec::new());
 
@@ -1207,7 +1208,7 @@ mod tests {
         assert_eq!(*handled.borrow(), vec![(DeepLinkRoute::NewTab, None)]);
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn new_tab_deeplink_ignores_optional_command_and_passes_dir(cx: &mut TestAppContext) {
         let handled = RefCell::new(Vec::new());
 
@@ -1238,7 +1239,7 @@ mod tests {
         );
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn theme_install_deeplink_passes_slug_argument(cx: &mut TestAppContext) {
         let handled = RefCell::new(Vec::new());
 
@@ -1266,7 +1267,7 @@ mod tests {
         );
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn settings_deeplink_reuses_existing_settings_window(cx: &mut TestAppContext) {
         cx.update(|app| {
             app_actions::open_settings_window(app).expect("settings window should open");

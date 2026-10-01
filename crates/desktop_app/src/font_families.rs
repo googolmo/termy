@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use gpui::{Font, FontWeight, SharedString, TextSystem, px};
+use gpui_kit::{Font, FontWeight, SharedString, TextSystem, px};
 use termy_core::config_core::DEFAULT_FONT_FAMILY;
 
 const TERMINAL_METRIC_GLYPHS: [char; 5] = ['M', 'i', 'W', '0', ' '];
@@ -209,7 +209,7 @@ fn font_has_fixed_ascii_advances(text_system: &TextSystem, family: &str) -> bool
     let font = Font {
         family: family.to_string().into(),
         weight: FontWeight::NORMAL,
-        ..gpui::font("")
+        ..gpui_kit::font("")
     };
     let font_id = text_system.resolve_font(&font);
     let font_size = px(TERMINAL_METRIC_FONT_SIZE);
@@ -364,7 +364,7 @@ mod tests {
         // GPUI's test context uses NoopTextSystem, which cannot catch a font
         // fallback regression. Headless Application uses the real Linux backend
         // without requiring an X11/Wayland display or GPU.
-        let app = gpui::Application::headless();
+        let app = gpui_kit::Application::headless();
         let text_system = app.text_system();
         let preferred = system_monospace_family();
         assert_ne!(preferred, "monospace", "install a system monospace font");
@@ -382,7 +382,7 @@ mod tests {
                 "{requested} resolved to proportional {family}"
             );
 
-            let font = gpui::font(family.clone());
+            let font = gpui_kit::font(family.clone());
             let font_id = text_system.resolve_font(&font);
             for font_size in [10.0, 14.0, 24.0] {
                 let font_size = px(font_size);

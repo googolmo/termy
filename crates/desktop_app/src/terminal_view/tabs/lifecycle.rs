@@ -818,9 +818,9 @@ impl TerminalView {
     pub(crate) fn focus_terminal_after_tab_activation(
         &mut self,
         window: &mut Window,
-        _cx: &mut Context<Self>,
+        cx: &mut Context<Self>,
     ) {
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         self.reset_cursor_blink_phase();
     }
 
@@ -1385,8 +1385,10 @@ impl TerminalView {
         if terminals.is_empty() {
             return;
         }
-        cx.spawn(async move |_this, _cx| {
-            smol::unblock(move || drop(terminals)).await;
+        cx.spawn(async move |_this, cx| {
+            cx.background_executor()
+                .spawn(async move { drop(terminals) })
+                .await;
         })
         .detach();
     }
@@ -1551,18 +1553,20 @@ impl TerminalView {
         let generation = self.native_split_generation;
 
         cx.spawn(async move |this, cx| {
-            let result = smol::unblock(move || {
-                Self::native_spawn_terminal_blocking(
-                    size,
-                    preferred_working_dir,
-                    wakeup_router,
-                    tab_shell_integration,
-                    terminal_runtime,
-                    launch,
-                    multiplexer,
-                )
-            })
-            .await;
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    Self::native_spawn_terminal_blocking(
+                        size,
+                        preferred_working_dir,
+                        wakeup_router,
+                        tab_shell_integration,
+                        terminal_runtime,
+                        launch,
+                        multiplexer,
+                    )
+                })
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     if view.native_split_generation != generation {

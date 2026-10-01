@@ -4,7 +4,7 @@
 //! few pixels with the same ease-out used by settings switches. High-frequency
 //! keyboard UI (command palette, tab switching) must not use these helpers.
 
-use gpui::{Animation, AnimationExt as _, AnyElement, IntoElement, Styled, ease_out_quint, px};
+use gpui_kit::{Animation, AnimationExt as _, AnyElement, IntoElement, Styled, ease_out_quint, px};
 use std::time::Duration;
 
 /// Small popovers, search, menus, and banners.
@@ -18,21 +18,21 @@ pub const OVERLAY_ENTER_SLIDE_PX: f32 = 8.0;
 
 pub fn enter_from_above(
     element: impl Styled + IntoElement + 'static,
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui_kit::ElementId>,
 ) -> AnyElement {
     fade_slide_y(element, id, -OVERLAY_ENTER_SLIDE_PX, OVERLAY_ENTER_MS)
 }
 
 pub fn fade_in(
     element: impl Styled + IntoElement + 'static,
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui_kit::ElementId>,
 ) -> AnyElement {
     fade_slide_y(element, id, 0.0, TOOLTIP_ENTER_MS)
 }
 
 pub fn enter_from_left(
     element: impl Styled + IntoElement + 'static,
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui_kit::ElementId>,
     width: f32,
 ) -> AnyElement {
     element
@@ -46,7 +46,7 @@ pub fn enter_from_left(
 
 fn fade_slide_y(
     element: impl Styled + IntoElement + 'static,
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui_kit::ElementId>,
     from_y: f32,
     duration_ms: u64,
 ) -> AnyElement {

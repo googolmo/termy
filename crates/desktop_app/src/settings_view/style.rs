@@ -148,8 +148,9 @@ impl SettingsWindow {
     }
 
     /// Zero-blur spread shadow that reads as a focus ring around a control.
-    pub(super) fn focus_ring_shadow(color: Rgba) -> gpui::BoxShadow {
-        gpui::BoxShadow {
+    pub(super) fn focus_ring_shadow(color: Rgba) -> gpui_kit::BoxShadow {
+        gpui_kit::BoxShadow {
+            inset: false,
             color: color.into(),
             offset: point(px(0.0), px(0.0)),
             blur_radius: px(0.0),
@@ -197,7 +198,7 @@ impl SettingsWindow {
         tile_radius: f32,
         icon_size: f32,
         emphasized: bool,
-    ) -> gpui::Div {
+    ) -> gpui_kit::Div {
         div()
             .flex_none()
             .w(px(tile_size))
@@ -288,7 +289,7 @@ impl SettingsWindow {
 
     pub(super) fn settings_scrollbar_range(&self, window: &Window) -> ScrollbarRange {
         let viewport_height: f32 = window.viewport_size().height.into();
-        let max_offset: f32 = self.content_scroll_handle.max_offset().height.into();
+        let max_offset: f32 = self.content_scroll_handle.max_offset().y.into();
         let offset_y: f32 = self.content_scroll_handle.offset().y.into();
         let offset = (-offset_y).max(0.0);
         ScrollbarRange {

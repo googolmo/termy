@@ -1,11 +1,11 @@
-use gpui::{App, ImageSource, RenderImage};
+use gpui_kit::{App, ImageSource, RenderImage};
 use std::{collections::HashMap, rc::Rc, sync::Arc};
 use termy_core::KittyGraphicsRenderPlacement;
 
 struct Texture {
     source: ImageSource,
     bytes: usize,
-    cx: gpui::AsyncApp,
+    cx: gpui_kit::AsyncApp,
 }
 
 impl Drop for Texture {
@@ -16,7 +16,7 @@ impl Drop for Texture {
             // Release atlas entries on the next foreground turn, after painting.
             self.cx
                 .spawn(async move |cx| {
-                    let _ = cx.update(|cx| cx.drop_image(image, None));
+                    cx.update(|cx| cx.drop_image(image, None));
                 })
                 .detach();
         }
@@ -57,8 +57,8 @@ impl KittyImageCache {
             .expect("validated Kitty image dimensions");
             ImageSource::Render(Arc::new(RenderImage::new(vec![image::Frame::new(buffer)])))
         } else {
-            Arc::new(gpui::Image::from_bytes(
-                gpui::ImageFormat::Png,
+            Arc::new(gpui_kit::Image::from_bytes(
+                gpui_kit::ImageFormat::Png,
                 placement.image.png().to_vec(),
             ))
             .into()

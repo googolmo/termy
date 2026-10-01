@@ -1,5 +1,5 @@
 use super::*;
-use gpui::prelude::FluentBuilder as _;
+use gpui_kit::prelude::FluentBuilder as _;
 use std::ops::Range;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -416,7 +416,9 @@ impl TerminalView {
         self.search_debounce_token = self.search_debounce_token.wrapping_add(1);
         let token = self.search_debounce_token;
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(SEARCH_DEBOUNCE_MS)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(SEARCH_DEBOUNCE_MS))
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     if view.search_debounce_token == token {
@@ -453,7 +455,7 @@ impl TerminalView {
             self.search_state.mode(),
             termy_core::search_engine::SearchMode::Regex
         );
-        let error_color = gpui::Rgba {
+        let error_color = gpui_kit::Rgba {
             r: 0.98,
             g: 0.48,
             b: 0.48,
@@ -494,8 +496,8 @@ impl TerminalView {
                         }),
                     )
                     .child(
-                        gpui::svg()
-                            .path(gpui::SharedString::from(icon))
+                        gpui_kit::svg()
+                            .path(gpui_kit::SharedString::from(icon))
                             .size(px(13.0))
                             .text_color(button_text),
                     )
@@ -524,7 +526,7 @@ impl TerminalView {
                 .bg(if active {
                     button_active_bg
                 } else {
-                    gpui::Rgba {
+                    gpui_kit::Rgba {
                         r: 0.0,
                         g: 0.0,
                         b: 0.0,
@@ -605,8 +607,8 @@ impl TerminalView {
                                                 .items_center()
                                                 .justify_center()
                                                 .child(
-                                                    gpui::svg()
-                                                        .path(gpui::SharedString::from(
+                                                    gpui_kit::svg()
+                                                        .path(gpui_kit::SharedString::from(
                                                             "icons/settings/search.svg",
                                                         ))
                                                         .size(px(13.0))
@@ -644,7 +646,7 @@ impl TerminalView {
                                                         self.render_inline_input_layer(
                                                             Font {
                                                                 family: self.ui_font_family.clone(),
-                                                                ..gpui::font("")
+                                                                ..gpui_kit::font("")
                                                             },
                                                             px(13.0),
                                                             strong_text.into(),
@@ -722,7 +724,7 @@ impl TerminalView {
                                         } else if case_sensitive || regex_mode {
                                             overlay_style.panel_foreground(0.08)
                                         } else {
-                                            gpui::Rgba {
+                                            gpui_kit::Rgba {
                                                 r: 0.0,
                                                 g: 0.0,
                                                 b: 0.0,
@@ -740,8 +742,8 @@ impl TerminalView {
                                             }),
                                         )
                                         .child(
-                                            gpui::svg()
-                                                .path(gpui::SharedString::from(
+                                            gpui_kit::svg()
+                                                .path(gpui_kit::SharedString::from(
                                                     "icons/settings/more.svg",
                                                 ))
                                                 .size(px(14.0))
@@ -778,8 +780,8 @@ impl TerminalView {
                                             }),
                                         )
                                         .child(
-                                            gpui::svg()
-                                                .path(gpui::SharedString::from(
+                                            gpui_kit::svg()
+                                                .path(gpui_kit::SharedString::from(
                                                     "icons/tab_strip/x.svg",
                                                 ))
                                                 .size(px(11.0))

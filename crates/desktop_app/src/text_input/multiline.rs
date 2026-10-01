@@ -1,12 +1,12 @@
 use super::{INLINE_INPUT_LINE_HEIGHT_MULTIPLIER, TextInputAlignment, TextInputProvider};
-use gpui::{
+use gpui_kit::{
     Bounds, ContentMask, ElementInputHandler, Entity, EntityInputHandler, Font, Hsla, IntoElement,
     PaintQuad, Pixels, ShapedLine, Styled, TextRun, UnderlineStyle, canvas, fill, point, px, size,
 };
 
 pub struct MultilineTextInputElement<V: TextInputProvider> {
     view: Entity<V>,
-    focus_handle: gpui::FocusHandle,
+    focus_handle: gpui_kit::FocusHandle,
     font: Font,
     font_size: Pixels,
     text_color: Hsla,
@@ -17,7 +17,7 @@ pub struct MultilineTextInputElement<V: TextInputProvider> {
 impl<V: TextInputProvider> MultilineTextInputElement<V> {
     pub fn new(
         view: Entity<V>,
-        focus_handle: gpui::FocusHandle,
+        focus_handle: gpui_kit::FocusHandle,
         font: Font,
         font_size: Pixels,
         text_color: Hsla,
@@ -113,10 +113,10 @@ fn text_runs(
     runs
 }
 
-impl<V: TextInputProvider + gpui::Render + EntityInputHandler> IntoElement
+impl<V: TextInputProvider + gpui_kit::Render + EntityInputHandler> IntoElement
     for MultilineTextInputElement<V>
 {
-    type Element = gpui::Canvas<MultilinePrepaintState>;
+    type Element = gpui_kit::Canvas<MultilinePrepaintState>;
 
     fn into_element(self) -> Self::Element {
         let focus_handle = self.focus_handle;
@@ -339,6 +339,8 @@ impl<V: TextInputProvider + gpui::Render + EntityInputHandler> IntoElement
                                         prepaint.line_bounds[index].top(),
                                     ),
                                     prepaint.line_bounds[index].size.height,
+                                    gpui_kit::TextAlign::Left,
+                                    None,
                                     window,
                                     cx,
                                 )

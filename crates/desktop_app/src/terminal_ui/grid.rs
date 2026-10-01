@@ -1,4 +1,4 @@
-use gpui::{
+use gpui_kit::{
     App, Bounds, Element, Font, FontFeatures, FontStyle, FontWeight, Hsla, IntoElement,
     PathBuilder, Pixels, ShapedLine, SharedString, Size, StrikethroughStyle, TextRun,
     UnderlineStyle as GpuiUnderlineStyle, Window, point, px, quad,
@@ -685,9 +685,9 @@ fn paint_block_element_quad(
                 bounds,
                 px(0.0),
                 fill,
-                gpui::Edges::default(),
+                gpui_kit::Edges::default(),
                 Hsla::transparent_black(),
-                gpui::BorderStyle::default(),
+                gpui_kit::BorderStyle::default(),
             ));
         }
     }
@@ -1099,7 +1099,7 @@ impl Element for TerminalGrid {
     type RequestLayoutState = ();
     type PrepaintState = ();
 
-    fn id(&self) -> Option<gpui::ElementId> {
+    fn id(&self) -> Option<gpui_kit::ElementId> {
         None
     }
 
@@ -1109,22 +1109,22 @@ impl Element for TerminalGrid {
 
     fn request_layout(
         &mut self,
-        _id: Option<&gpui::GlobalElementId>,
-        _inspector_id: Option<&gpui::InspectorElementId>,
+        _id: Option<&gpui_kit::GlobalElementId>,
+        _inspector_id: Option<&gpui_kit::InspectorElementId>,
         window: &mut Window,
         cx: &mut App,
-    ) -> (gpui::LayoutId, Self::RequestLayoutState) {
+    ) -> (gpui_kit::LayoutId, Self::RequestLayoutState) {
         let width = self.cell_size.width * self.cols as f32;
         let height = self.cell_size.height * self.rows as f32;
 
         let layout_id = window.request_layout(
-            gpui::Style {
-                size: gpui::Size {
-                    width: gpui::Length::Definite(gpui::DefiniteLength::Absolute(
-                        gpui::AbsoluteLength::Pixels(width),
+            gpui_kit::Style {
+                size: gpui_kit::Size {
+                    width: gpui_kit::Length::Definite(gpui_kit::DefiniteLength::Absolute(
+                        gpui_kit::AbsoluteLength::Pixels(width),
                     )),
-                    height: gpui::Length::Definite(gpui::DefiniteLength::Absolute(
-                        gpui::AbsoluteLength::Pixels(height),
+                    height: gpui_kit::Length::Definite(gpui_kit::DefiniteLength::Absolute(
+                        gpui_kit::AbsoluteLength::Pixels(height),
                     )),
                 },
                 ..Default::default()
@@ -1138,8 +1138,8 @@ impl Element for TerminalGrid {
 
     fn prepaint(
         &mut self,
-        _id: Option<&gpui::GlobalElementId>,
-        _inspector_id: Option<&gpui::InspectorElementId>,
+        _id: Option<&gpui_kit::GlobalElementId>,
+        _inspector_id: Option<&gpui_kit::InspectorElementId>,
         _bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         _window: &mut Window,
@@ -1149,8 +1149,8 @@ impl Element for TerminalGrid {
 
     fn paint(
         &mut self,
-        _id: Option<&gpui::GlobalElementId>,
-        _inspector_id: Option<&gpui::InspectorElementId>,
+        _id: Option<&gpui_kit::GlobalElementId>,
+        _inspector_id: Option<&gpui_kit::InspectorElementId>,
         bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         _prepaint: &mut Self::PrepaintState,
@@ -1371,7 +1371,7 @@ impl TerminalGrid {
                 .is_some_and(|batch| batch.can_append(cell.col, row, key, &underline));
             if should_append {
                 if let Some(batch) = current.as_mut() {
-                    batch.append_cell(cell.char, cell.combining.as_deref().map(|text| &**text));
+                    batch.append_cell(cell.char, cell.combining.as_deref());
                 }
                 continue;
             }
@@ -1381,7 +1381,7 @@ impl TerminalGrid {
                 cell.col,
                 row,
                 cell.char,
-                cell.combining.as_deref().map(|text| &**text),
+                cell.combining.as_deref(),
                 key,
                 underline,
             ));
@@ -1446,9 +1446,9 @@ impl TerminalGrid {
             bounds,
             px(0.0),
             self.clear_bg,
-            gpui::Edges::default(),
+            gpui_kit::Edges::default(),
             Hsla::transparent_black(),
-            gpui::BorderStyle::default(),
+            gpui_kit::BorderStyle::default(),
         ));
     }
 
@@ -1457,7 +1457,7 @@ impl TerminalGrid {
         &self,
         row: usize,
         row_ops: &mut CachedRowPaintOps,
-        origin: gpui::Point<Pixels>,
+        origin: gpui_kit::Point<Pixels>,
         window: &mut Window,
         cx: &mut App,
         font_normal: &Font,
@@ -1490,9 +1490,9 @@ impl TerminalGrid {
                     bounds,
                     px(0.0),
                     span.color,
-                    gpui::Edges::default(),
+                    gpui_kit::Edges::default(),
                     Hsla::transparent_black(),
-                    gpui::BorderStyle::default(),
+                    gpui_kit::BorderStyle::default(),
                 ));
             }
         }
@@ -1579,7 +1579,14 @@ impl TerminalGrid {
                     }
                     // Keep custom decorations below glyphs, matching GPUI's
                     // built-in underline paint order.
-                    let _ = line.paint(point(x, origin.y), self.cell_size.height, window, cx);
+                    let _ = line.paint(
+                        point(x, origin.y),
+                        self.cell_size.height,
+                        gpui_kit::TextAlign::Left,
+                        None,
+                        window,
+                        cx,
+                    );
                 }
                 TextDrawOp::Block(block) => {
                     let x = origin.x + self.cell_size.width * block.col as f32;
@@ -1717,7 +1724,7 @@ impl TerminalGrid {
     fn cursor_bounds_for_row(
         &self,
         row: usize,
-        origin: gpui::Point<Pixels>,
+        origin: gpui_kit::Point<Pixels>,
     ) -> Option<Bounds<Pixels>> {
         let (cursor_col, cursor_row) = self.cursor_cell?;
         if !self.cursor_visible {
@@ -1766,7 +1773,12 @@ impl TerminalGrid {
         Some(cursor_bounds)
     }
 
-    fn paint_cursor_for_row(&self, row: usize, origin: gpui::Point<Pixels>, window: &mut Window) {
+    fn paint_cursor_for_row(
+        &self,
+        row: usize,
+        origin: gpui_kit::Point<Pixels>,
+        window: &mut Window,
+    ) {
         let Some(bounds) = self.cursor_bounds_for_row(row, origin) else {
             return;
         };
@@ -1774,9 +1786,9 @@ impl TerminalGrid {
             bounds,
             px(0.0),
             self.cursor_color,
-            gpui::Edges::default(),
+            gpui_kit::Edges::default(),
             Hsla::transparent_black(),
-            gpui::BorderStyle::default(),
+            gpui_kit::BorderStyle::default(),
         ));
     }
 
@@ -2099,7 +2111,7 @@ impl TerminalGrid {
 mod tests {
     mod scroll;
     use super::*;
-    use gpui::{Bounds, Size, point, px};
+    use gpui_kit::{Bounds, Size, point, px};
 
     #[test]
     fn block_cursor_covers_entire_wide_character() {
@@ -2288,7 +2300,7 @@ mod tests {
     fn resolve_glyph_point(
         bounds: Bounds<Pixels>,
         value: termy_core::TerminalGlyphPoint,
-    ) -> gpui::Point<Pixels> {
+    ) -> gpui_kit::Point<Pixels> {
         point(
             bounds.origin.x + bounds.size.width * value.x,
             bounds.origin.y + bounds.size.height * value.y,

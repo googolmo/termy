@@ -14,8 +14,10 @@ impl TerminalView {
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             loop {
-                smol::Timer::after(Duration::from_millis(16)).await;
-                let Ok(Ok(keep_animating)) = cx.update(|cx| {
+                cx.background_executor()
+                    .timer(Duration::from_millis(16))
+                    .await;
+                let Ok(keep_animating) = cx.update(|cx| {
                     this.update(cx, |view, cx| {
                         if !view.tab_strip.drag_preview.autoscroll_animating()
                             || view.tab_strip.drag.is_none()

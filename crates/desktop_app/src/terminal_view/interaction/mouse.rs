@@ -60,7 +60,10 @@ impl TerminalView {
         }
     }
 
-    fn is_plain_click_cursor_move_gesture(modifiers: gpui::Modifiers, click_count: usize) -> bool {
+    fn is_plain_click_cursor_move_gesture(
+        modifiers: gpui_kit::Modifiers,
+        click_count: usize,
+    ) -> bool {
         click_count == 1
             && !modifiers.control
             && !modifiers.alt
@@ -140,7 +143,7 @@ impl TerminalView {
 
     fn begin_selection_drag_from_pending_cursor_move(
         &mut self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
     ) -> bool {
         let Some(pending) = self.pending_cursor_move_click.as_ref() else {
             return false;
@@ -219,7 +222,9 @@ impl TerminalView {
         cx.notify();
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(CURSOR_MOVE_PREVIEW_MS)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(CURSOR_MOVE_PREVIEW_MS))
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     if view.pending_cursor_move_preview.as_ref() == Some(&preview) {
@@ -261,7 +266,7 @@ impl TerminalView {
         pane_id: &str,
         axis: PaneResizeAxis,
         edge: PaneResizeEdge,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
     ) -> bool {
         let (x, y) = self.terminal_content_position(position);
         self.pane_resize_drag = Some(PaneResizeDragState {
@@ -290,7 +295,7 @@ impl TerminalView {
 
     fn pane_resize_hit_test(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
     ) -> Option<PaneResizeDragState> {
         let tab = self.session.tabs.get(self.session.active_tab)?;
@@ -594,7 +599,7 @@ impl TerminalView {
         PaneResizeResult::Applied
     }
 
-    fn apply_pane_resize_drag(&mut self, position: gpui::Point<Pixels>) -> bool {
+    fn apply_pane_resize_drag(&mut self, position: gpui_kit::Point<Pixels>) -> bool {
         let Some(drag_state) = self.pane_resize_drag.as_ref() else {
             return false;
         };
@@ -719,7 +724,7 @@ impl TerminalView {
         )
     }
 
-    fn selection_drag_autoscroll_lines(&self, position: gpui::Point<Pixels>) -> i32 {
+    fn selection_drag_autoscroll_lines(&self, position: gpui_kit::Point<Pixels>) -> i32 {
         let Some(geometry) = self.terminal_viewport_geometry() else {
             return 0;
         };
@@ -735,7 +740,7 @@ impl TerminalView {
 
     pub(in super::super) fn update_selection_head_from_position(
         &mut self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         clamp: bool,
     ) -> bool {
         let Some(next) = self.position_to_selection_pos(position, clamp) else {
@@ -756,7 +761,7 @@ impl TerminalView {
 
     fn handle_selection_drag_motion(
         &mut self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         allow_autoscroll: bool,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -791,7 +796,7 @@ impl TerminalView {
 
     fn finish_selection_drag_at_position(
         &mut self,
-        position: Option<gpui::Point<Pixels>>,
+        position: Option<gpui_kit::Point<Pixels>>,
         cx: &mut Context<Self>,
     ) -> bool {
         if !self.selection_dragging {
@@ -991,7 +996,7 @@ impl TerminalView {
         self.pending_cursor_move_preview = None;
 
         // Focus the terminal on click
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         self.reset_cursor_blink_phase();
         if event.button != MouseButton::Right {
             let _ = self.close_terminal_context_menu(cx);

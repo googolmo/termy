@@ -2,6 +2,25 @@
 
 Main desktop application.
 
+## UI framework
+
+The desktop uses `gpui-kit = 0.7.0` with `default-features = false`, backed by
+its matching `gpui-pre = 0.3.7` snapshot. Import framework APIs through
+`gpui_kit`; do not add a separate GPUI dependency. Styled Kit components and
+Kit icon assets are disabled. Termy's `design_system`, assets, themes,
+terminal renderer, and overlays remain application-owned.
+
+Startup uses `gpui_kit::application()` and initializes the Base layer with
+`gpui_kit::init(cx)`. Windows intentionally retain their existing typed roots
+via `cx.open_window`: window routing, tab transfer, plugin UI, and close handling
+rely on `WindowHandle<TerminalView>`/`SettingsWindow`. Kit's `open_window` helper
+would replace those roots with `base::Root`; adopt that only alongside a future
+component/overlay migration. The settings gallery follows the same bootstrap.
+
+Kit supplies the native macOS, Windows, X11, and Wayland backends. UI tests use
+`gpui_kit::test` with the dev-only `test-support` feature. The migration was built
+with Rust 1.98.1; validate native behavior on each release platform.
+
 ## Owner
 
 This crate owns the GPUI app shell, windows, titlebar/chrome, menus, settings, onboarding, command execution, and user-visible desktop workflows. Single-instance handoff lives in `src/instance.rs`: Linux launches open independent terminal windows in the running process, including `--working-directory` launches. `--new-window` explicitly requests a window on any platform; `--new-tab` and `termy://new` request a tab. Other `termy://` routes retain their existing behavior. macOS and Windows retain their default launch behavior. File-manager verbs are registered at startup through `termy::native_sdk::register_open_tab_here`.

@@ -2,7 +2,7 @@ use cocoa::{
     appkit::{NSEventType, NSWindow, NSWindowCollectionBehavior},
     base::{BOOL, NO, YES, id, nil},
 };
-use gpui::Window;
+use gpui_kit::Window;
 use objc::{
     class,
     declare::ClassDecl,
@@ -101,7 +101,7 @@ pub(crate) fn start_titlebar_window_drag(window: &Window) -> Result<(), NativeTi
         if event_type != NSEventType::NSLeftMouseDown as usize || event_window != ns_window {
             return Err(NativeTitlebarDragError::MissingMouseDownEvent);
         }
-        // Unlike GPUI 0.2.2's macOS start_window_move (a no-op), this hands
+        // Keep the validated original mouse-down handoff: this hands
         // movement to Window Server and returns immediately.
         let _: () = msg_send![ns_window, performWindowDragWithEvent: event];
     }

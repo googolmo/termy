@@ -140,7 +140,7 @@ impl InspectorState {
     }
 }
 
-fn keystroke_modifiers_label(modifiers: gpui::Modifiers) -> String {
+fn keystroke_modifiers_label(modifiers: gpui_kit::Modifiers) -> String {
     let mut label = String::new();
     if modifiers.control {
         label.push('⌃');
@@ -366,7 +366,7 @@ impl TerminalView {
 
     pub(super) fn record_inspector_key_event(
         &mut self,
-        event: &gpui::KeyDownEvent,
+        event: &gpui_kit::KeyDownEvent,
         route: &'static str,
         cx: &mut Context<Self>,
     ) {
@@ -443,8 +443,8 @@ impl TerminalView {
     fn inspector_row(
         label: &'static str,
         value: String,
-        label_color: gpui::Rgba,
-        value_color: gpui::Rgba,
+        label_color: gpui_kit::Rgba,
+        value_color: gpui_kit::Rgba,
     ) -> AnyElement {
         div()
             .flex_none()
@@ -477,9 +477,9 @@ impl TerminalView {
 
     fn render_inspector_terminal_tab(
         &self,
-        text_primary: gpui::Rgba,
-        text_muted: gpui::Rgba,
-        accent: gpui::Rgba,
+        text_primary: gpui_kit::Rgba,
+        text_muted: gpui_kit::Rgba,
+        accent: gpui_kit::Rgba,
     ) -> AnyElement {
         let runtime_label = match self.runtime_kind() {
             RuntimeKind::Native => "native",
@@ -677,8 +677,8 @@ impl TerminalView {
 
     fn render_inspector_runtime_tab(
         &self,
-        text_primary: gpui::Rgba,
-        text_muted: gpui::Rgba,
+        text_primary: gpui_kit::Rgba,
+        text_muted: gpui_kit::Rgba,
     ) -> AnyElement {
         let mut content = div().flex().flex_col();
         content = content
@@ -790,8 +790,8 @@ impl TerminalView {
 
     fn render_inspector_input_tab(
         &self,
-        text_primary: gpui::Rgba,
-        text_muted: gpui::Rgba,
+        text_primary: gpui_kit::Rgba,
+        text_muted: gpui_kit::Rgba,
     ) -> AnyElement {
         let active_overlay = if self.is_command_palette_open() {
             "command palette"
@@ -924,8 +924,8 @@ impl TerminalView {
 
     fn render_inspector_config_tab(
         &self,
-        text_primary: gpui::Rgba,
-        text_muted: gpui::Rgba,
+        text_primary: gpui_kit::Rgba,
+        text_muted: gpui_kit::Rgba,
     ) -> AnyElement {
         let rows: Vec<(&'static str, String)> = vec![
             ("Theme", self.theme_id.clone()),
@@ -1023,8 +1023,8 @@ impl TerminalView {
 
     fn render_inspector_keyboard_tab(
         &self,
-        text_primary: gpui::Rgba,
-        text_muted: gpui::Rgba,
+        text_primary: gpui_kit::Rgba,
+        text_muted: gpui_kit::Rgba,
     ) -> AnyElement {
         let header = div()
             .flex_none()
@@ -1085,8 +1085,8 @@ impl TerminalView {
 
     fn render_inspector_render_tab(
         &self,
-        text_primary: gpui::Rgba,
-        text_muted: gpui::Rgba,
+        text_primary: gpui_kit::Rgba,
+        text_muted: gpui_kit::Rgba,
     ) -> AnyElement {
         let stats = &self.debug_overlay_stats;
         let terminal_ui = terminal_ui_render_metrics_snapshot();
@@ -1290,7 +1290,7 @@ impl TerminalView {
                     .bg(if is_active {
                         active_tab_bg
                     } else {
-                        gpui::transparent_black().into()
+                        gpui_kit::transparent_black().into()
                     })
                     .hover(move |s| s.bg(hover_tab_bg))
                     .cursor_pointer()
@@ -1360,8 +1360,8 @@ impl TerminalView {
                 .hover(move |s| s.bg(hover_tab_bg).text_color(text_primary))
                 .cursor_pointer()
                 .child(
-                    gpui::svg()
-                        .path(gpui::SharedString::from("icons/tab_strip/x.svg"))
+                    gpui_kit::svg()
+                        .path(gpui_kit::SharedString::from("icons/tab_strip/x.svg"))
                         .size(px(10.0))
                         .text_color(text_muted),
                 )

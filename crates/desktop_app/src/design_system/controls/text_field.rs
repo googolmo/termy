@@ -1,4 +1,4 @@
-use gpui::{
+use gpui_kit::{
     AnyElement, App, IntoElement, ParentElement, Pixels, RenderOnce, Rgba, SharedString, Styled,
     Window, div, px,
 };
@@ -156,7 +156,7 @@ impl RenderOnce for TextField {
             }))
             .child(
                 div()
-                    .flex_grow()
+                    .flex_grow(1.0)
                     .min_w(px(0.0))
                     .text_size(BODY_SIZE)
                     .text_color(text_color)

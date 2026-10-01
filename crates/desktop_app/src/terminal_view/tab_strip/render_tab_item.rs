@@ -42,7 +42,7 @@ impl TerminalView {
         &self,
         input: &TabItemRenderInput,
         palette: &TabStripPalette,
-        close_text_color: gpui::Rgba,
+        close_text_color: gpui_kit::Rgba,
         hover_tab_index: usize,
         close_tab_index: usize,
         cx: &mut Context<Self>,
@@ -114,8 +114,10 @@ impl TerminalView {
                         })
                         .cursor_pointer()
                         .child(
-                            gpui::svg()
-                                .path(gpui::SharedString::from("icons/command_palette/pin.svg"))
+                            gpui_kit::svg()
+                                .path(gpui_kit::SharedString::from(
+                                    "icons/command_palette/pin.svg",
+                                ))
                                 .size(px(10.0))
                                 .text_color(close_text_color),
                         ),
@@ -176,8 +178,8 @@ impl TerminalView {
                     })
                     .cursor_pointer()
                     .child(
-                        gpui::svg()
-                            .path(gpui::SharedString::from("icons/tab_strip/x.svg"))
+                        gpui_kit::svg()
+                            .path(gpui_kit::SharedString::from("icons/tab_strip/x.svg"))
                             .size(px(10.0))
                             .text_color(close_text_color),
                     ),
@@ -429,7 +431,7 @@ impl TerminalView {
                             Font {
                                 family: font_family.clone(),
                                 weight: FontWeight::NORMAL,
-                                ..gpui::font("")
+                                ..gpui_kit::font("")
                             },
                             px(title_font_size),
                             rename_text_color.into(),

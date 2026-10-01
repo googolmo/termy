@@ -4,7 +4,7 @@
 //! when a row has nothing to reset, so glyphs and controls line up vertically
 //! down a whole card.
 
-use gpui::{
+use gpui_kit::{
     AnyElement, App, IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window, div, px,
 };
 
@@ -113,7 +113,7 @@ impl RenderOnce for SettingRow {
             .flex()
             .flex_col()
             .gap(px(2.0))
-            .flex_grow()
+            .flex_grow(1.0)
             .min_w(px(0.0));
 
         if has_error {

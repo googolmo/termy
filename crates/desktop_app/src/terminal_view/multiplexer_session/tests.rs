@@ -1,5 +1,5 @@
 use super::*;
-use gpui::{AppContext, TestAppContext, WindowHandle, WindowOptions};
+use gpui_kit::{AppContext, TestAppContext, WindowHandle, WindowOptions};
 use std::{
     fs,
     path::Path,
@@ -9,7 +9,7 @@ use termy_core::multiplexer::SessionClient;
 
 const PREFIX: &str = "terminal_view::multiplexer_session::tests::";
 
-#[gpui::test]
+#[gpui_kit::test]
 fn multiplexer_is_off_by_default_and_config_changes_require_restart(cx: &mut TestAppContext) {
     let mut config = AppConfig::default();
     assert!(!config.multiplexer_enabled);
@@ -39,6 +39,9 @@ fn test_config() -> AppConfig {
 }
 
 fn window(cx: &mut TestAppContext, empty: bool) -> WindowHandle<TerminalView> {
+    // These integration windows receive wakeups from real PTY/IPC threads.
+    // Tell GPUI's test scheduler that this is intentionally non-deterministic I/O.
+    cx.executor().allow_parking();
     cx.update(|cx| {
         cx.open_window(WindowOptions::default(), |window, cx| {
             cx.new(|cx| TerminalView::new_for_window(window, cx, test_config(), empty))
@@ -122,7 +125,7 @@ fn host_process() {
     }
 }
 
-#[gpui::test]
+#[gpui_kit::test]
 fn desktop_client_process(cx: &mut TestAppContext) {
     let Ok(root) = std::env::var("TERMY_DESKTOP_MUX_ROOT") else {
         return;
@@ -179,8 +182,9 @@ fn desktop_client_process(cx: &mut TestAppContext) {
             serde_json::to_vec(&ids(&client)).unwrap(),
         )
         .unwrap();
-        // Exercise the app-quit observer rather than calling detach directly.
-        cx.update(|cx| cx.quit());
+        // TestAppContext::quit runs shutdown observers; the test platform
+        // implementation of App::quit is a no-op.
+        cx.quit();
         cx.run_until_parked();
     } else if phase == "restore" {
         assert_eq!(cx.update(|cx| crate::multiplexer::pending_windows(cx)), 1);
@@ -242,13 +246,13 @@ fn desktop_client_process(cx: &mut TestAppContext) {
         });
         cx.run_until_parked();
         assert_eq!(ids(&client).len(), 3);
-        cx.update(|cx| cx.quit());
+        cx.quit();
         cx.run_until_parked();
     } else if phase == "transfer" {
         let second = window(cx, false);
         let before = ids(&client);
         update(cx, first, |view, cx| {
-            view.arm_window_tab_drag(0, gpui::point(px(1.0), px(1.0)), cx);
+            view.arm_window_tab_drag(0, gpui_kit::point(px(1.0), px(1.0)), cx);
         });
         cx.update(|cx| {
             second
@@ -266,6 +270,7 @@ fn desktop_client_process(cx: &mut TestAppContext) {
         });
         wait(|| {
             cx.run_until_parked();
+            cx.executor().advance_clock(Duration::from_millis(100));
             update(cx, second, |view, _| view.session.tabs.len() == 2)
         });
         assert_eq!(
@@ -282,7 +287,7 @@ fn desktop_client_process(cx: &mut TestAppContext) {
             cx.run_until_parked();
             ids(&client).len() == 2
         });
-        cx.update(|cx| cx.quit());
+        cx.quit();
         cx.run_until_parked();
     } else {
         assert_eq!(cx.update(|cx| crate::multiplexer::pending_windows(cx)), 0);
@@ -318,7 +323,7 @@ impl Drop for Host {
     }
 }
 
-#[gpui::test]
+#[gpui_kit::test]
 fn multiplexer_text_selection_survives_scrolling_and_output(cx: &mut TestAppContext) {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("host");
@@ -383,7 +388,7 @@ fn multiplexer_text_selection_survives_scrolling_and_output(cx: &mut TestAppCont
                 view.handle_terminal_scroll_wheel(
                     &ScrollWheelEvent {
                         position: end,
-                        delta: gpui::ScrollDelta::Lines(point(0.0, 1.0)),
+                        delta: gpui_kit::ScrollDelta::Lines(point(0.0, 1.0)),
                         touch_phase: TouchPhase::Moved,
                         ..Default::default()
                     },
@@ -435,7 +440,7 @@ fn multiplexer_text_selection_survives_scrolling_and_output(cx: &mut TestAppCont
     client.shutdown().unwrap();
 }
 
-#[gpui::test]
+#[gpui_kit::test]
 fn desktop_saves_preserve_cli_workspace_edits(cx: &mut TestAppContext) {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("host");

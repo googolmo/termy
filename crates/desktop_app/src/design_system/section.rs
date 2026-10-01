@@ -1,6 +1,6 @@
 //! Content column, section headers, and the grouped cards inside them.
 
-use gpui::{
+use gpui_kit::{
     AnyElement, App, IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window, div, px,
 };
 
@@ -42,7 +42,7 @@ impl RenderOnce for SettingsContent {
         div()
             .flex()
             .flex_col()
-            .flex_grow()
+            .flex_grow(1.0)
             .min_w(px(0.0))
             .gap(CARD_GAP)
             .px(CONTENT_GUTTER_X)
@@ -108,7 +108,7 @@ impl RenderOnce for SectionHeader {
                     .flex()
                     .items_center()
                     .gap(px(12.0))
-                    .flex_grow()
+                    .flex_grow(1.0)
                     .min_w(px(0.0))
                     .children(self.leading)
                     .child(
@@ -120,7 +120,7 @@ impl RenderOnce for SectionHeader {
                             .child(
                                 div()
                                     .text_size(SECTION_TITLE_SIZE)
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                                     .text_color(theme.text_primary)
                                     .child(self.title),
                             )
@@ -221,10 +221,10 @@ impl RenderOnce for SettingsGroup {
             .gap(px(10.0))
             .child(
                 div()
-                    .flex_grow()
+                    .flex_grow(1.0)
                     .min_w(px(0.0))
                     .text_size(GROUP_TITLE_SIZE)
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(theme.text_muted)
                     .child(self.label),
             )

@@ -62,8 +62,10 @@ impl SettingsWindow {
         cx.notify();
         let runtime = self.plugin_runtime.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let snapshot =
-                smol::unblock(move || Self::load_plugin_settings_snapshot(&runtime)).await;
+            let snapshot = cx
+                .background_executor()
+                .spawn(async move { Self::load_plugin_settings_snapshot(&runtime) })
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.apply_plugin_settings_snapshot(snapshot);
@@ -89,12 +91,14 @@ impl SettingsWindow {
         cx.notify();
         let runtime = self.plugin_runtime.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let (result, snapshot) = smol::unblock(move || {
-                let result = runtime.set_plugin_setting(&plugin_id, &key, value);
-                let snapshot = Self::load_plugin_settings_snapshot(&runtime);
-                (result, snapshot)
-            })
-            .await;
+            let (result, snapshot) = cx
+                .background_executor()
+                .spawn(async move {
+                    let result = runtime.set_plugin_setting(&plugin_id, &key, value);
+                    let snapshot = Self::load_plugin_settings_snapshot(&runtime);
+                    (result, snapshot)
+                })
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.apply_plugin_settings_snapshot(snapshot);
@@ -123,12 +127,14 @@ impl SettingsWindow {
         cx.notify();
         let runtime = self.plugin_runtime.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let (result, snapshot) = smol::unblock(move || {
-                let result = runtime.reset_plugin_setting(&plugin_id, &key);
-                let snapshot = Self::load_plugin_settings_snapshot(&runtime);
-                (result, snapshot)
-            })
-            .await;
+            let (result, snapshot) = cx
+                .background_executor()
+                .spawn(async move {
+                    let result = runtime.reset_plugin_setting(&plugin_id, &key);
+                    let snapshot = Self::load_plugin_settings_snapshot(&runtime);
+                    (result, snapshot)
+                })
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.apply_plugin_settings_snapshot(snapshot);
@@ -162,7 +168,7 @@ impl SettingsWindow {
             state: TextInputState::new(value),
             selecting: false,
         });
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         cx.notify();
     }
 
@@ -187,7 +193,7 @@ impl SettingsWindow {
             input.state.set_cursor_utf16(index);
         }
         input.selecting = event.click_count == 1;
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         cx.notify();
     }
 
@@ -338,7 +344,7 @@ impl SettingsWindow {
                 return;
             }
 
-            let (result, snapshot) = smol::unblock(move || {
+            let (result, snapshot) = cx.background_executor().spawn(async move {
                 let result = runtime.install_from_directory(&path);
                 let snapshot = Self::load_plugin_settings_snapshot(&runtime);
                 (result, snapshot)
@@ -374,12 +380,14 @@ impl SettingsWindow {
         cx.notify();
         let runtime = self.plugin_runtime.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let (result, snapshot) = smol::unblock(move || {
-                let result = runtime.set_plugin_enabled(&id, enabled);
-                let snapshot = Self::load_plugin_settings_snapshot(&runtime);
-                (result, snapshot)
-            })
-            .await;
+            let (result, snapshot) = cx
+                .background_executor()
+                .spawn(async move {
+                    let result = runtime.set_plugin_enabled(&id, enabled);
+                    let snapshot = Self::load_plugin_settings_snapshot(&runtime);
+                    (result, snapshot)
+                })
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.apply_plugin_settings_snapshot(snapshot);
@@ -416,12 +424,14 @@ impl SettingsWindow {
                 return;
             }
 
-            let (result, snapshot) = smol::unblock(move || {
-                let result = runtime.uninstall_plugin(&id);
-                let snapshot = Self::load_plugin_settings_snapshot(&runtime);
-                (result, snapshot)
-            })
-            .await;
+            let (result, snapshot) = cx
+                .background_executor()
+                .spawn(async move {
+                    let result = runtime.uninstall_plugin(&id);
+                    let snapshot = Self::load_plugin_settings_snapshot(&runtime);
+                    (result, snapshot)
+                })
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.apply_plugin_settings_snapshot(snapshot);
@@ -516,7 +526,7 @@ impl SettingsWindow {
         let input_bg = self.bg_input();
         let font = Font {
             family: self.config.ui_font_family.clone().into(),
-            ..gpui::font("")
+            ..gpui_kit::font("")
         };
         let display = if secret {
             if configured {
@@ -868,7 +878,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(self.text_primary())
                             .child(title),
                     )
@@ -977,7 +987,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(self.text_primary())
                             .child("Bun runtime"),
                     )
@@ -986,7 +996,7 @@ impl SettingsWindow {
             .child(
                 div()
                     .text_xs()
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(status_color)
                     .child(status),
             )
@@ -1012,7 +1022,7 @@ impl SettingsWindow {
             .rounded(px(SETTINGS_BUTTON_RADIUS))
             .bg(accent)
             .text_xs()
-            .font_weight(gpui::FontWeight::MEDIUM)
+            .font_weight(gpui_kit::FontWeight::MEDIUM)
             .text_color(button_text)
             .cursor_pointer()
             .flex()
@@ -1041,7 +1051,7 @@ impl SettingsWindow {
             .border_color(border)
             .bg(button_bg)
             .text_xs()
-            .font_weight(gpui::FontWeight::MEDIUM)
+            .font_weight(gpui_kit::FontWeight::MEDIUM)
             .text_color(text_secondary)
             .cursor_pointer()
             .flex()
@@ -1057,7 +1067,7 @@ impl SettingsWindow {
             .px_3()
             .rounded(px(SETTINGS_BUTTON_RADIUS))
             .text_xs()
-            .font_weight(gpui::FontWeight::MEDIUM)
+            .font_weight(gpui_kit::FontWeight::MEDIUM)
             .text_color(muted)
             .cursor_pointer()
             .flex()
@@ -1087,7 +1097,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(self.text_primary())
                             .child("Local plugins"),
                     )
@@ -1122,7 +1132,7 @@ impl SettingsWindow {
             .child(
                 div()
                     .text_sm()
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(self.text_primary())
                     .child("No plugins installed"),
             )
@@ -1182,7 +1192,7 @@ impl SettingsWindow {
             .border_color(border)
             .bg(button_bg)
             .text_xs()
-            .font_weight(gpui::FontWeight::MEDIUM)
+            .font_weight(gpui_kit::FontWeight::MEDIUM)
             .text_color(text_secondary)
             .cursor_pointer()
             .flex()
@@ -1211,7 +1221,7 @@ impl SettingsWindow {
             .px_3()
             .rounded(px(SETTINGS_BUTTON_RADIUS))
             .text_xs()
-            .font_weight(gpui::FontWeight::MEDIUM)
+            .font_weight(gpui_kit::FontWeight::MEDIUM)
             .text_color(muted)
             .cursor_pointer()
             .flex()
@@ -1249,7 +1259,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(text_primary)
                             .child(plugin.name),
                     )
@@ -1270,7 +1280,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_xs()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(status_color)
                             .child(status),
                     )
@@ -1300,7 +1310,7 @@ impl SettingsWindow {
             .child(
                 div()
                     .text_sm()
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(error_color)
                     .child("Plugin runtime needs attention"),
             );
@@ -1325,7 +1335,7 @@ impl SettingsWindow {
             .child(
                 div()
                     .text_sm()
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(self.text_primary())
                     .child("Trusted local code"),
             )

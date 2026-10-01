@@ -4,7 +4,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::terminal_view) struct TerminalContextMenuState {
-    pub(in crate::terminal_view) anchor_position: gpui::Point<Pixels>,
+    pub(in crate::terminal_view) anchor_position: gpui_kit::Point<Pixels>,
     pub(in crate::terminal_view) buffer_position: Option<SelectionPos>,
     pub(in crate::terminal_view) image: Option<KittyImageSelection>,
     pub(in crate::terminal_view) selected_text: Option<String>,
@@ -14,7 +14,7 @@ pub(in crate::terminal_view) struct TerminalContextMenuState {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::terminal_view) struct TabContextMenuState {
-    pub(in crate::terminal_view) anchor_position: gpui::Point<Pixels>,
+    pub(in crate::terminal_view) anchor_position: gpui_kit::Point<Pixels>,
     pub(in crate::terminal_view) tab_id: TabId,
     pub(in crate::terminal_view) pinned: bool,
 }
@@ -22,7 +22,7 @@ pub(in crate::terminal_view) struct TabContextMenuState {
 impl TerminalView {
     fn terminal_context_menu_buffer_position(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
     ) -> Option<SelectionPos> {
         let (_, buffer_position) = self.position_to_pane_selection_pos(position, false)?;
         Some(buffer_position)
@@ -69,7 +69,7 @@ impl TerminalView {
     #[cfg(target_os = "macos")]
     fn native_context_menu_anchor(
         window: &Window,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
     ) -> Option<crate::native_sdk::NativeContextMenuAnchor> {
         let raw_handle = HasWindowHandle::window_handle(window).ok()?.as_raw();
         let native_view = match raw_handle {
@@ -241,16 +241,18 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let action = smol::unblock(move || {
-                crate::native_sdk::show_copy_paste_context_menu(
-                    buffer_position_label,
-                    can_copy,
-                    can_copy_image,
-                    can_paste,
-                    anchor,
-                )
-            })
-            .await;
+            let action = cx
+                .background_executor()
+                .spawn(async move {
+                    crate::native_sdk::show_copy_paste_context_menu(
+                        buffer_position_label,
+                        can_copy,
+                        can_copy_image,
+                        can_paste,
+                        anchor,
+                    )
+                })
+                .await;
 
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
@@ -273,9 +275,10 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let action =
-                smol::unblock(move || crate::native_sdk::show_tab_context_menu(pinned, anchor))
-                    .await;
+            let action = cx
+                .background_executor()
+                .spawn(async move { crate::native_sdk::show_tab_context_menu(pinned, anchor) })
+                .await;
 
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
@@ -293,7 +296,7 @@ impl TerminalView {
     #[cfg(not(target_os = "macos"))]
     pub(in super::super) fn open_terminal_context_menu(
         &mut self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
         self.open_terminal_context_menu_with_native_anchor(position, None, cx);
@@ -301,7 +304,7 @@ impl TerminalView {
 
     pub(in super::super) fn open_terminal_context_menu_for_window(
         &mut self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
         cx: &mut Context<Self>,
     ) {
@@ -318,7 +321,7 @@ impl TerminalView {
 
     fn open_terminal_context_menu_with_native_anchor(
         &mut self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         native_anchor: Option<crate::native_sdk::NativeContextMenuAnchor>,
         cx: &mut Context<Self>,
     ) {
@@ -369,7 +372,7 @@ impl TerminalView {
     pub(in super::super) fn open_tab_context_menu_for_window(
         &mut self,
         tab_index: usize,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
         cx: &mut Context<Self>,
     ) {
@@ -387,7 +390,7 @@ impl TerminalView {
     fn open_tab_context_menu_with_native_anchor(
         &mut self,
         tab_index: usize,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         native_anchor: Option<crate::native_sdk::NativeContextMenuAnchor>,
         cx: &mut Context<Self>,
     ) {

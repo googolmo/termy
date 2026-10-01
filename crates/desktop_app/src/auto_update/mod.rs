@@ -1,4 +1,4 @@
-use gpui::{App, AsyncApp, WeakEntity};
+use gpui_kit::{App, AsyncApp, WeakEntity};
 
 mod engine;
 
@@ -41,7 +41,7 @@ impl AutoUpdater {
         let weak = entity;
         cx.spawn(async move |cx: &mut AsyncApp| {
             let result = bg.await;
-            let _ = cx.update(|cx| {
+            cx.update(|cx| {
                 let Some(this) = weak.upgrade() else { return };
                 this.update(cx, |this, cx| {
                     match result {
@@ -126,7 +126,7 @@ impl AutoUpdater {
                     break;
                 };
                 let ver = progress_version.clone();
-                let _ = cx.update(|cx| {
+                cx.update(|cx| {
                     this.update(cx, |this, cx| {
                         if !matches!(
                             &this.state,
@@ -149,7 +149,7 @@ impl AutoUpdater {
         let weak_done = entity;
         cx.spawn(async move |cx: &mut AsyncApp| {
             let result = bg.await;
-            let _ = cx.update(|cx| {
+            cx.update(|cx| {
                 let Some(this) = weak_done.upgrade() else {
                     return;
                 };
@@ -192,7 +192,7 @@ impl AutoUpdater {
         let weak = entity;
         cx.spawn(async move |cx: &mut AsyncApp| {
             let result = bg.await;
-            let _ = cx.update(|cx| {
+            cx.update(|cx| {
                 let Some(this) = weak.upgrade() else { return };
                 this.update(cx, |this, cx| {
                     match result {
@@ -213,7 +213,7 @@ impl AutoUpdater {
         .detach();
     }
 
-    pub fn dismiss(&mut self, cx: &mut gpui::Context<Self>) {
+    pub fn dismiss(&mut self, cx: &mut gpui_kit::Context<Self>) {
         self.state = UpdateState::Idle;
         cx.notify();
     }

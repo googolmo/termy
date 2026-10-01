@@ -1,7 +1,7 @@
 use super::*;
 use crate::theme_store;
-use gpui::Modifiers;
-use gpui::point;
+use gpui_kit::Modifiers;
+use gpui_kit::point;
 use state::{
     CommandPaletteCommandIntent, CommandPaletteItem, CommandPaletteItemKind,
     CommandPaletteScrollDirection, ReleaseListState, command_palette_next_scroll_y,
@@ -889,8 +889,10 @@ impl TerminalView {
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             loop {
-                smol::Timer::after(Duration::from_millis(16)).await;
-                let Ok(Ok(keep_animating)) = cx.update(|cx| {
+                cx.background_executor()
+                    .timer(Duration::from_millis(16))
+                    .await;
+                let Ok(keep_animating) = cx.update(|cx| {
                     this.update(cx, |view, cx| {
                         let changed = view.tick_command_palette_scroll_animation();
                         if changed {
@@ -927,7 +929,7 @@ impl TerminalView {
         let scroll_handle = self.command_palette.base_scroll_handle();
         let offset = scroll_handle.offset();
         let current_y = -Into::<f32>::into(offset.y);
-        let max_offset_from_handle: f32 = scroll_handle.max_offset().height.into();
+        let max_offset_from_handle: f32 = scroll_handle.max_offset().y.into();
         let max_scroll = max_offset_from_handle
             .max(self.command_palette.scroll_max_y())
             .max(0.0);
@@ -1379,12 +1381,12 @@ impl TerminalView {
                 cx,
             ),
             CommandPaletteItemKind::AppInfoEntry { label, value } => {
-                cx.write_to_clipboard(gpui::ClipboardItem::new_string(value));
+                cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(value));
                 crate::ui::toast::success(format!("Copied {label}"));
                 self.notify_overlay(cx);
             }
             CommandPaletteItemKind::AppInfoCopyAll { payload } => {
-                cx.write_to_clipboard(gpui::ClipboardItem::new_string(payload));
+                cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(payload));
                 crate::ui::toast::success("Copied app info to clipboard");
                 self.close_command_palette(cx);
                 self.notify_overlay(cx);
@@ -1749,6 +1751,31 @@ impl TerminalView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui_kit::test]
+    fn palette_keyboard_input_and_dismissal(cx: &mut gpui_kit::TestAppContext) {
+        let config = crate::config::AppConfig {
+            auto_update: false,
+            native_tab_persistence: false,
+            tmux_enabled: false,
+            ..Default::default()
+        };
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            crate::keybindings::install_keybindings(cx, &config, false);
+        });
+        let (view, cx) =
+            cx.add_window_view(|window, cx| TerminalView::new_for_window(window, cx, config, true));
+        cx.simulate_keystrokes("secondary-p");
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| assert!(view.is_command_palette_open()));
+        cx.simulate_input("split");
+        view.read_with(cx, |view, _| {
+            assert_eq!(view.command_palette.input().text(), "split");
+        });
+        cx.simulate_keystrokes("escape");
+        view.read_with(cx, |view, _| assert!(!view.is_command_palette_open()));
+    }
 
     #[test]
     fn escape_action_is_mode_dependent() {

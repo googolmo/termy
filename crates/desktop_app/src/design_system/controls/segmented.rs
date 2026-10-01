@@ -1,4 +1,4 @@
-use gpui::{
+use gpui_kit::{
     App, ClickEvent, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce,
     SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
@@ -77,7 +77,7 @@ impl RenderOnce for SegmentedControl {
                 let mut segment = div()
                     .id(SharedString::from(format!("{id}-{index}")))
                     .flex()
-                    .flex_grow()
+                    .flex_grow(1.0)
                     .min_w(px(0.0))
                     .items_center()
                     .justify_center()

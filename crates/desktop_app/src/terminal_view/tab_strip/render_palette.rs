@@ -2,24 +2,24 @@ use super::super::*;
 
 #[derive(Clone, Copy)]
 pub(super) struct TabStripPalette {
-    pub(super) tab_stroke_color: gpui::Rgba,
-    pub(super) inactive_tab_bg: gpui::Rgba,
-    pub(super) active_tab_bg: gpui::Rgba,
-    pub(super) hovered_tab_bg: gpui::Rgba,
-    pub(super) active_tab_text: gpui::Rgba,
-    pub(super) inactive_tab_text: gpui::Rgba,
-    pub(super) active_tab_indicator: gpui::Rgba,
-    pub(super) close_button_bg: gpui::Rgba,
-    pub(super) close_button_hover_bg: gpui::Rgba,
-    pub(super) close_button_danger_hover_bg: gpui::Rgba,
-    pub(super) close_button_hover_text: gpui::Rgba,
-    pub(super) switch_hint_bg: gpui::Rgba,
-    pub(super) switch_hint_border: gpui::Rgba,
-    pub(super) switch_hint_text: gpui::Rgba,
-    pub(super) tab_drop_marker_color: gpui::Rgba,
+    pub(super) tab_stroke_color: gpui_kit::Rgba,
+    pub(super) inactive_tab_bg: gpui_kit::Rgba,
+    pub(super) active_tab_bg: gpui_kit::Rgba,
+    pub(super) hovered_tab_bg: gpui_kit::Rgba,
+    pub(super) active_tab_text: gpui_kit::Rgba,
+    pub(super) inactive_tab_text: gpui_kit::Rgba,
+    pub(super) active_tab_indicator: gpui_kit::Rgba,
+    pub(super) close_button_bg: gpui_kit::Rgba,
+    pub(super) close_button_hover_bg: gpui_kit::Rgba,
+    pub(super) close_button_danger_hover_bg: gpui_kit::Rgba,
+    pub(super) close_button_hover_text: gpui_kit::Rgba,
+    pub(super) switch_hint_bg: gpui_kit::Rgba,
+    pub(super) switch_hint_border: gpui_kit::Rgba,
+    pub(super) switch_hint_text: gpui_kit::Rgba,
+    pub(super) tab_drop_marker_color: gpui_kit::Rgba,
 }
 
-pub(super) fn resolve_branding_text_color(palette: &TabStripPalette) -> gpui::Rgba {
+pub(super) fn resolve_branding_text_color(palette: &TabStripPalette) -> gpui_kit::Rgba {
     let mut color = palette.inactive_tab_text;
     color.a = color.a.max(TAB_STRIP_BRANDING_TEXT_ALPHA_FLOOR);
     color
@@ -29,7 +29,7 @@ impl TerminalView {
     pub(super) fn resolve_tab_strip_palette(
         &self,
         colors: &TerminalColors,
-        tabbar_bg: gpui::Rgba,
+        tabbar_bg: gpui_kit::Rgba,
     ) -> TabStripPalette {
         let tab_stroke_color = resolve_chrome_stroke_color(
             tabbar_bg,

@@ -5,9 +5,9 @@
 //! cargo run -p termy --example settings_gallery
 //! ```
 
-use gpui::{
-    App, AppContext, Application, Bounds, Context, IntoElement, ParentElement, Render, Styled,
-    TitlebarOptions, Window, WindowBounds, WindowOptions, div, point, px, size,
+use gpui_kit::{
+    App, AppContext, Bounds, Context, IntoElement, ParentElement, Render, Styled, TitlebarOptions,
+    Window, WindowBounds, WindowOptions, div, point, px, size,
 };
 use termy::design_system::{
     Badge, Button, ButtonSize, EmptyState, IconButton, IconName, Palette, SectionHeader, Select,
@@ -256,7 +256,7 @@ impl Render for Gallery {
                 div()
                     .flex()
                     .flex_row()
-                    .flex_grow()
+                    .flex_grow(1.0)
                     .min_h(px(0.0))
                     .overflow_hidden()
                     .child(self.sidebar(cx))
@@ -266,9 +266,10 @@ impl Render for Gallery {
 }
 
 fn main() {
-    Application::new()
+    gpui_kit::application()
         .with_assets(termy::design_system::Assets)
         .run(|cx: &mut App| {
+            gpui_kit::init(cx);
             theme::set_tokens(Tokens::dark(), cx);
 
             let bounds = Bounds {

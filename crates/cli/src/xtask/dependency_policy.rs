@@ -51,6 +51,20 @@ const ALLOWED_LICENSES: &[&str] = &[
 
 const REVIEWED_LICENSE_EXCEPTIONS: &[LicenseException] = &[
     LicenseException {
+        name: "enum-iterator",
+        version: "2.3.0",
+        license: "0BSD",
+        source_contains: "crates.io-index",
+        reason: "permissive BSD Zero Clause license; GPUI Kit transitive dependency",
+    },
+    LicenseException {
+        name: "enum-iterator-derive",
+        version: "1.5.0",
+        license: "0BSD",
+        source_contains: "crates.io-index",
+        reason: "permissive BSD Zero Clause license; enum-iterator derive macro",
+    },
+    LicenseException {
         name: "clipboard-win",
         version: "5.4.1",
         license: "BSL-1.0",

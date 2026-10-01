@@ -6,7 +6,7 @@ use super::state_layouts::SavedLayoutIntent;
 use super::state_tmux::{TmuxSessionIntent, TmuxSessionRow, TmuxSessionStatusHint};
 use crate::config::SHELL_DECIDE_THEME_ID;
 use crate::terminal_ui::TmuxSocketTarget;
-use gpui::{Pixels, Point, UniformListScrollHandle};
+use gpui_kit::{Pixels, Point, UniformListScrollHandle};
 use std::collections::HashMap;
 use std::ops::Range;
 #[cfg(unix)]
@@ -639,7 +639,7 @@ impl CommandPaletteState {
         !self.hover_locked
     }
 
-    pub(super) fn base_scroll_handle(&self) -> gpui::ScrollHandle {
+    pub(super) fn base_scroll_handle(&self) -> gpui_kit::ScrollHandle {
         self.scroll_handle.0.borrow().base_handle.clone()
     }
 

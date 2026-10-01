@@ -1,11 +1,11 @@
-use gpui::{FocusHandle, KeyBinding, MenuItem, OsAction, Window, actions};
+use gpui_kit::{FocusHandle, KeyBinding, MenuItem, OsAction, Window, actions};
 use termy_core::command_core::{CommandAvailability, CommandCapabilities, CommandId};
 
 const GLOBAL_CONTEXT: Option<&str> = None;
 const TERMINAL_CONTEXT: Option<&str> = Some("Terminal");
 const INLINE_INPUT_CONTEXT: Option<&str> = Some("InlineInput");
 
-#[derive(Clone, Debug, PartialEq, Eq, gpui::Action)]
+#[derive(Clone, Debug, PartialEq, Eq, gpui_kit::Action)]
 #[action(namespace = termy, no_json)]
 pub struct RunNamedTask {
     pub task_name: String,
@@ -17,7 +17,7 @@ impl RunNamedTask {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, gpui::Action)]
+#[derive(Clone, Debug, PartialEq, Eq, gpui_kit::Action)]
 #[action(namespace = termy, no_json)]
 pub struct RunPluginCommand {
     pub plugin_id: String,

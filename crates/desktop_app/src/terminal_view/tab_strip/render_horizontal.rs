@@ -24,7 +24,7 @@ impl TerminalView {
         font_family: &SharedString,
         termy_branding_slot_start_x: f32,
         termy_branding_slot_width: f32,
-        termy_branding_text_color: gpui::Rgba,
+        termy_branding_text_color: gpui_kit::Rgba,
     ) -> Option<AnyElement> {
         (termy_branding_slot_width > f32::EPSILON).then(|| {
             div()
@@ -54,7 +54,7 @@ impl TerminalView {
         window: &Window,
         colors: &TerminalColors,
         font_family: &SharedString,
-        tabbar_bg: gpui::Rgba,
+        tabbar_bg: gpui_kit::Rgba,
         _show_sidebar_chrome: bool,
         _cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
@@ -93,7 +93,7 @@ impl TerminalView {
         font_family: &SharedString,
         termy_branding_slot_start_x: f32,
         termy_branding_slot_width: f32,
-        termy_branding_text_color: gpui::Rgba,
+        termy_branding_text_color: gpui_kit::Rgba,
         workspace_actions: Option<AnyElement>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -447,8 +447,8 @@ impl TerminalView {
                         }),
                     )
                     .child(
-                        gpui::svg()
-                            .path(gpui::SharedString::from("icons/tab_strip/plus.svg"))
+                        gpui_kit::svg()
+                            .path(gpui_kit::SharedString::from("icons/tab_strip/plus.svg"))
                             .size(px(13.0))
                             .text_color(icon_color),
                     ),
@@ -461,7 +461,7 @@ impl TerminalView {
         window: &Window,
         colors: &TerminalColors,
         font_family: &SharedString,
-        tabbar_bg: gpui::Rgba,
+        tabbar_bg: gpui_kit::Rgba,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let font_family_key = font_family.as_ref();

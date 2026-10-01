@@ -553,7 +553,7 @@ impl TerminalView {
 
     pub(in super::super) fn position_to_pane_cell(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         clamp: bool,
     ) -> Option<(String, CellPos)> {
         let tab = self.session.tabs.get(self.session.active_tab)?;
@@ -578,7 +578,7 @@ impl TerminalView {
 
     fn kitty_image_at_position_with_negative_z(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         allow_negative_z_over_foreground: bool,
     ) -> Option<KittyImageSelection> {
         let (pane_id, cell) = self.position_to_pane_cell(position, false)?;
@@ -623,7 +623,7 @@ impl TerminalView {
     /// this path so a negative-z image can still offer Copy Image where text overlaps it.
     pub(in super::super) fn kitty_image_at_position(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
     ) -> Option<KittyImageSelection> {
         self.kitty_image_at_position_with_negative_z(position, true)
     }
@@ -633,7 +633,7 @@ impl TerminalView {
     /// selectable.
     pub(in super::super) fn kitty_image_at_position_for_left_click(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
     ) -> Option<KittyImageSelection> {
         self.kitty_image_at_position_with_negative_z(position, false)
     }
@@ -641,7 +641,7 @@ impl TerminalView {
     pub(in super::super) fn position_to_cell_in_pane(
         &self,
         pane_id: &str,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         clamp: bool,
     ) -> Option<CellPos> {
         let tab = self.session.tabs.get(self.session.active_tab)?;
@@ -752,7 +752,7 @@ impl TerminalView {
 
     pub(in super::super) fn position_to_cell(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         clamp: bool,
     ) -> Option<CellPos> {
         let (pane_id, cell) = self.position_to_pane_cell(position, clamp)?;
@@ -761,7 +761,7 @@ impl TerminalView {
 
     pub(in super::super) fn position_to_selection_pos(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         clamp: bool,
     ) -> Option<SelectionPos> {
         let cell = self.position_to_cell(position, clamp)?;
@@ -770,7 +770,7 @@ impl TerminalView {
 
     pub(in super::super) fn position_to_pane_selection_pos(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         clamp: bool,
     ) -> Option<(String, SelectionPos)> {
         let (pane_id, cell) = self.position_to_pane_cell(position, clamp)?;
@@ -998,7 +998,7 @@ impl TerminalView {
         }
     }
 
-    pub(in super::super) fn is_link_modifier(modifiers: gpui::Modifiers) -> bool {
+    pub(in super::super) fn is_link_modifier(modifiers: gpui_kit::Modifiers) -> bool {
         modifiers.secondary() && !modifiers.alt && !modifiers.function
     }
 }
@@ -1367,21 +1367,23 @@ mod tests {
 
     #[test]
     fn link_modifier_requires_secondary_key() {
-        assert!(!TerminalView::is_link_modifier(gpui::Modifiers::default()));
+        assert!(!TerminalView::is_link_modifier(
+            gpui_kit::Modifiers::default()
+        ));
         assert!(TerminalView::is_link_modifier(
-            gpui::Modifiers::secondary_key()
+            gpui_kit::Modifiers::secondary_key()
         ));
     }
 
     #[test]
     fn link_modifier_ignores_alt_and_function_chords() {
-        assert!(!TerminalView::is_link_modifier(gpui::Modifiers {
+        assert!(!TerminalView::is_link_modifier(gpui_kit::Modifiers {
             alt: true,
-            ..gpui::Modifiers::secondary_key()
+            ..gpui_kit::Modifiers::secondary_key()
         }));
-        assert!(!TerminalView::is_link_modifier(gpui::Modifiers {
+        assert!(!TerminalView::is_link_modifier(gpui_kit::Modifiers {
             function: true,
-            ..gpui::Modifiers::secondary_key()
+            ..gpui_kit::Modifiers::secondary_key()
         }));
     }
 

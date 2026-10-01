@@ -15,33 +15,33 @@ pub(super) const COMMAND_PALETTE_SHORTCUT_RADIUS: f32 = 6.0;
 
 #[derive(Clone, Copy)]
 pub(in super::super) struct CommandPaletteStyle {
-    pub(in super::super) panel_bg: gpui::Rgba,
-    pub(in super::super) panel_border: gpui::Rgba,
-    pub(in super::super) primary_text: gpui::Rgba,
-    pub(in super::super) muted_text: gpui::Rgba,
-    pub(in super::super) input_selection: gpui::Rgba,
-    pub(super) selected_bg: gpui::Rgba,
+    pub(in super::super) panel_bg: gpui_kit::Rgba,
+    pub(in super::super) panel_border: gpui_kit::Rgba,
+    pub(in super::super) primary_text: gpui_kit::Rgba,
+    pub(in super::super) muted_text: gpui_kit::Rgba,
+    pub(in super::super) input_selection: gpui_kit::Rgba,
+    pub(super) selected_bg: gpui_kit::Rgba,
     // Accent applied to the characters a query matched in a row title.
-    pub(super) match_text: gpui::Rgba,
-    pub(super) shortcut_bg: gpui::Rgba,
-    pub(super) shortcut_text: gpui::Rgba,
-    pub(super) scrollbar_track: gpui::Rgba,
-    pub(super) scrollbar_thumb: gpui::Rgba,
+    pub(super) match_text: gpui_kit::Rgba,
+    pub(super) shortcut_bg: gpui_kit::Rgba,
+    pub(super) shortcut_text: gpui_kit::Rgba,
+    pub(super) scrollbar_track: gpui_kit::Rgba,
+    pub(super) scrollbar_thumb: gpui_kit::Rgba,
     icon_tile_alpha_idle: f32,
     icon_tile_alpha_selected: f32,
 }
 
 pub(super) fn command_palette_border_color(
-    chrome_surface_bg: gpui::Rgba,
-    foreground: gpui::Rgba,
+    chrome_surface_bg: gpui_kit::Rgba,
+    foreground: gpui_kit::Rgba,
     stroke_mix: f32,
-) -> gpui::Rgba {
+) -> gpui_kit::Rgba {
     resolve_chrome_stroke_color(chrome_surface_bg, foreground, stroke_mix)
 }
 
 /// Theme ANSI colour that identifies a palette category, matching the
 /// colour-coded tiles in Settings.
-pub(super) fn category_tint(colors: &TerminalColors, category: &str) -> gpui::Rgba {
+pub(super) fn category_tint(colors: &TerminalColors, category: &str) -> gpui_kit::Rgba {
     let mut tint = match category {
         "Tabs" => colors.ansi[6],
         "Panes" => colors.cursor,
@@ -106,7 +106,7 @@ impl CommandPaletteStyle {
         }
     }
 
-    pub(super) fn icon_tile_bg(&self, tint: gpui::Rgba, selected: bool) -> gpui::Rgba {
+    pub(super) fn icon_tile_bg(&self, tint: gpui_kit::Rgba, selected: bool) -> gpui_kit::Rgba {
         let mut fill = tint;
         fill.a = if selected {
             self.icon_tile_alpha_selected
@@ -116,7 +116,7 @@ impl CommandPaletteStyle {
         fill
     }
 
-    pub(super) fn icon_tile_glyph(&self, tint: gpui::Rgba, enabled: bool) -> gpui::Rgba {
+    pub(super) fn icon_tile_glyph(&self, tint: gpui_kit::Rgba, enabled: bool) -> gpui_kit::Rgba {
         if enabled { tint } else { self.muted_text }
     }
 }
@@ -135,13 +135,13 @@ mod tests {
 
     #[test]
     fn command_palette_border_matches_shared_chrome_stroke_derivation() {
-        let chrome_surface_bg = gpui::Rgba {
+        let chrome_surface_bg = gpui_kit::Rgba {
             r: 0.02,
             g: 0.05,
             b: 0.12,
             a: 0.9,
         };
-        let foreground = gpui::Rgba {
+        let foreground = gpui_kit::Rgba {
             r: 0.8,
             g: 0.88,
             b: 0.93,
@@ -158,25 +158,25 @@ mod tests {
     #[test]
     fn known_categories_use_distinct_theme_slots() {
         let colors = TerminalColors {
-            background: gpui::Rgba {
+            background: gpui_kit::Rgba {
                 r: 0.0,
                 g: 0.0,
                 b: 0.0,
                 a: 1.0,
             },
-            foreground: gpui::Rgba {
+            foreground: gpui_kit::Rgba {
                 r: 1.0,
                 g: 1.0,
                 b: 1.0,
                 a: 1.0,
             },
-            cursor: gpui::Rgba {
+            cursor: gpui_kit::Rgba {
                 r: 0.1,
                 g: 0.2,
                 b: 0.3,
                 a: 1.0,
             },
-            ansi: std::array::from_fn(|index| gpui::Rgba {
+            ansi: std::array::from_fn(|index| gpui_kit::Rgba {
                 r: index as f32 / 16.0,
                 g: 0.4,
                 b: 0.5,

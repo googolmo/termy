@@ -2,7 +2,7 @@
 //! layouts. A fresh database imports legacy `native-tabs.json` once and reads
 //! it no further.
 //!
-//! sqlx is async-first while the app runs on gpui/smol, so the store owns a
+//! sqlx is async-first while the app runs on GPUI Kit, so the store owns a
 //! small single-threaded tokio runtime and exposes blocking methods. Callers
 //! already run persistence work off the UI thread (debounced write threads),
 //! or accept a fast blocking call (startup restore, quit-time sync).

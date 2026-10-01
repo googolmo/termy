@@ -3,7 +3,7 @@ use crate::{
     config::AppConfig,
     workspace_store::{StoredPane, StoredSession, StoredTab, StoredWorkspace},
 };
-use gpui::{App, Global};
+use gpui_kit::{App, Global};
 use std::{
     collections::{HashSet, VecDeque},
     sync::{

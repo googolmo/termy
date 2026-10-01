@@ -1,4 +1,4 @@
-use gpui::{Bounds, Hsla, Pixels, Rgba, Size, point, px, size};
+use gpui_kit::{Bounds, Hsla, Pixels, Rgba, Size, point, px, size};
 
 /// Let an opaque viewport majority fill the TUI's padding. A tab, status bar, or
 /// hovered corner must not recolor the entire surface. With no majority, retain
@@ -100,8 +100,8 @@ mod tests {
 
     #[test]
     fn opaque_tui_background_fills_terminal_padding_and_shell_restores_its_theme() {
-        let theme = gpui::rgb(0x0b1020);
-        let tui: Hsla = gpui::rgb(0xfff6ef).into();
+        let theme = gpui_kit::rgb(0x0b1020);
+        let tui: Hsla = gpui_kit::rgb(0xfff6ef).into();
         assert_eq!(
             tui_surface_background(true, [tui].into_iter(), theme),
             tui.into()
@@ -119,10 +119,10 @@ mod tests {
 
     #[test]
     fn hovering_tui_tabs_does_not_recolor_the_surrounding_background() {
-        let theme = gpui::rgb(0x0b1020);
-        let body: Hsla = gpui::rgb(0x1a1b26).into();
-        let tab: Hsla = gpui::rgb(0x202231).into();
-        let hover: Hsla = gpui::rgb(0x33364d).into();
+        let theme = gpui_kit::rgb(0x0b1020);
+        let body: Hsla = gpui_kit::rgb(0x1a1b26).into();
+        let tab: Hsla = gpui_kit::rgb(0x202231).into();
+        let hover: Hsla = gpui_kit::rgb(0x33364d).into();
         let mut cells = vec![vec![body; 8]; 4];
         cells[0].fill(tab);
         let background = |cells: &[Vec<Hsla>]| {
@@ -139,9 +139,9 @@ mod tests {
 
     #[test]
     fn tui_surface_requires_an_opaque_majority_and_tracks_theme_changes() {
-        let theme = gpui::rgb(0x0b1020);
-        let dark: Hsla = gpui::rgb(0x1a1b26).into();
-        let light: Hsla = gpui::rgb(0xfff6ef).into();
+        let theme = gpui_kit::rgb(0x0b1020);
+        let dark: Hsla = gpui_kit::rgb(0x1a1b26).into();
+        let light: Hsla = gpui_kit::rgb(0xfff6ef).into();
         let transparent = Hsla { a: 0.5, ..dark };
 
         for backgrounds in [
@@ -166,8 +166,8 @@ mod tests {
 
     #[test]
     fn fractional_edges_follow_adjacent_cells_without_gaps_or_overdraw() {
-        let light: Hsla = gpui::rgb(0xfff6ef).into();
-        let dark: Hsla = gpui::rgb(0x222222).into();
+        let light: Hsla = gpui_kit::rgb(0xfff6ef).into();
+        let dark: Hsla = gpui_kit::rgb(0x222222).into();
         let colors = [[light, dark], [dark, light]];
         let fills = terminal_edge_backgrounds(
             size(2, 2),

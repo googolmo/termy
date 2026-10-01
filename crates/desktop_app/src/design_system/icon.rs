@@ -7,7 +7,7 @@
 
 use std::borrow::Cow;
 
-use gpui::{
+use gpui_kit::{
     App, AssetSource, IntoElement, Pixels, RenderOnce, Result, Rgba, SharedString, Styled, Window,
     svg,
 };

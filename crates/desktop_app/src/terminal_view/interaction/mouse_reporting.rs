@@ -65,18 +65,18 @@ impl MouseTrackedButton {
     }
 }
 
-fn is_mouse_reporting_bypass(modifiers: gpui::Modifiers) -> bool {
+fn is_mouse_reporting_bypass(modifiers: gpui_kit::Modifiers) -> bool {
     modifiers.shift
 }
 
 fn should_skip_mouse_reporting_for_bypass(
-    modifiers: gpui::Modifiers,
+    modifiers: gpui_kit::Modifiers,
     has_forwarded_press: bool,
 ) -> bool {
     is_mouse_reporting_bypass(modifiers) && !has_forwarded_press
 }
 
-fn terminal_mouse_modifiers(modifiers: gpui::Modifiers) -> TerminalMouseModifiers {
+fn terminal_mouse_modifiers(modifiers: gpui_kit::Modifiers) -> TerminalMouseModifiers {
     TerminalMouseModifiers {
         shift: modifiers.shift,
         alt: modifiers.alt,
@@ -246,7 +246,7 @@ impl TerminalView {
         mode: TerminalMouseMode,
         event_kind: TerminalMouseEventKind,
         cell: CellPos,
-        modifiers: gpui::Modifiers,
+        modifiers: gpui_kit::Modifiers,
     ) -> Option<Vec<u8>> {
         encode_mouse_report(
             mode,
@@ -264,7 +264,7 @@ impl TerminalView {
         pane_id: &str,
         event_kind: TerminalMouseEventKind,
         cell: CellPos,
-        modifiers: gpui::Modifiers,
+        modifiers: gpui_kit::Modifiers,
     ) -> MouseForwardOutcome {
         let Some(mode) = self.pane_mouse_mode(pane_id) else {
             return MouseForwardOutcome::NotHandled;
@@ -279,7 +279,7 @@ impl TerminalView {
         mode: TerminalMouseMode,
         event_kind: TerminalMouseEventKind,
         cell: CellPos,
-        modifiers: gpui::Modifiers,
+        modifiers: gpui_kit::Modifiers,
     ) -> MouseForwardOutcome {
         let send_result = Self::encode_mouse_packet(mode, event_kind, cell, modifiers)
             .map(|packet| self.send_owned_mouse_packet_to_pane(pane_id, packet));
@@ -321,7 +321,7 @@ impl TerminalView {
                 col: target.col,
                 row: target.row,
             },
-            gpui::Modifiers::default(),
+            gpui_kit::Modifiers::default(),
         );
     }
 
@@ -625,7 +625,7 @@ impl TerminalView {
                 self.mouse_reporting.scroll_accumulator_x = 0.0;
                 self.mouse_reporting.scroll_accumulator_y = 0.0;
             }
-            TouchPhase::Ended => {
+            TouchPhase::Ended | TouchPhase::Cancelled => {
                 self.mouse_reporting.scroll_accumulator_x = 0.0;
                 self.mouse_reporting.scroll_accumulator_y = 0.0;
             }
@@ -702,7 +702,7 @@ impl TerminalView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::Modifiers;
+    use gpui_kit::Modifiers;
     use termy_core::TerminalMouseMode;
 
     fn enabled_mode() -> TerminalMouseMode {

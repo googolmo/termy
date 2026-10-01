@@ -130,7 +130,7 @@ impl SettingsWindow {
     fn begin_add_ssh_host(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.ssh_input = None;
         self.ssh_form = Some(SshHostForm::new());
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         cx.notify();
     }
 
@@ -157,7 +157,7 @@ impl SettingsWindow {
         };
         self.ssh_input = None;
         self.ssh_form = Some(SshHostForm::from_host(&host, secret_saved));
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         cx.notify();
     }
 
@@ -332,7 +332,7 @@ impl SettingsWindow {
         self.blur_sidebar_search();
         self.theme_store_search_active = false;
         self.ssh_input = Some(ActiveSshInput::new(field, value));
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         cx.notify();
     }
 
@@ -451,7 +451,7 @@ impl SettingsWindow {
             }
             input.selecting = event.click_count == 1;
         }
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         cx.notify();
     }
 
@@ -505,7 +505,7 @@ impl SettingsWindow {
         };
         let font = Font {
             family: self.config.ui_font_family.clone().into(),
-            ..gpui::font("")
+            ..gpui_kit::font("")
         };
 
         let content: AnyElement = if is_active {
@@ -631,7 +631,7 @@ impl SettingsWindow {
             .child(
                 div()
                     .text_size(px(12.0))
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(self.text_secondary())
                     .child(label),
             )
@@ -666,7 +666,7 @@ impl SettingsWindow {
                 .rounded(px(SETTINGS_BUTTON_RADIUS))
                 .cursor_pointer()
                 .text_size(px(12.0))
-                .font_weight(gpui::FontWeight::MEDIUM)
+                .font_weight(gpui_kit::FontWeight::MEDIUM)
                 .bg(if selected { accent } else { self.bg_input() })
                 .text_color(if selected {
                     accent_text
@@ -732,7 +732,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_size(px(12.0))
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(self.text_secondary())
                             .child("Authentication"),
                     )
@@ -824,7 +824,7 @@ impl SettingsWindow {
             .rounded(px(SETTINGS_BUTTON_RADIUS))
             .bg(accent)
             .text_size(px(12.0))
-            .font_weight(gpui::FontWeight::MEDIUM)
+            .font_weight(gpui_kit::FontWeight::MEDIUM)
             .text_color(accent_text)
             .cursor_pointer()
             .on_click(cx.listener(|view, _, _, cx| {
@@ -849,7 +849,7 @@ impl SettingsWindow {
             .child(
                 div()
                     .text_size(px(15.0))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                     .text_color(self.text_primary())
                     .child(if is_editing {
                         "Edit SSH host"
@@ -915,7 +915,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_size(px(13.0))
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(self.text_primary())
                             .child(host.display_name),
                     )
@@ -984,7 +984,7 @@ impl SettingsWindow {
             .rounded(px(SETTINGS_BUTTON_RADIUS))
             .bg(self.accent_with_alpha(0.95))
             .text_size(px(12.0))
-            .font_weight(gpui::FontWeight::MEDIUM)
+            .font_weight(gpui_kit::FontWeight::MEDIUM)
             .text_color(
                 self.contrasting_text_for_fill(self.accent_with_alpha(0.95), self.bg_card()),
             )
@@ -1045,7 +1045,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_size(px(13.0))
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(self.text_primary())
                             .child("No saved SSH hosts"),
                     )

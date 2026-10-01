@@ -1,6 +1,6 @@
 //! The settings sidebar: search, group labels, and section items.
 
-use gpui::{
+use gpui_kit::{
     AnyElement, App, ClickEvent, ElementId, InteractiveElement, IntoElement, ParentElement,
     RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
@@ -67,7 +67,7 @@ impl RenderOnce for Sidebar {
             .border_r_1()
             .border_color(theme.row_separator)
             .children(self.children)
-            .child(div().flex_grow())
+            .child(div().flex_grow(1.0))
             .children(self.footer.map(|footer| {
                 div()
                     .px(SIDEBAR_ITEM_PADDING_X)
@@ -153,7 +153,7 @@ impl RenderOnce for SidebarSearch {
             .child(Icon::new(IconName::Search).size(px(13.0)).color(icon_color))
             .child(
                 div()
-                    .flex_grow()
+                    .flex_grow(1.0)
                     .min_w(px(0.0))
                     .text_size(CAPTION_SIZE)
                     .text_color(text_color)
@@ -211,7 +211,7 @@ impl RenderOnce for SidebarGroupLabel {
             .pt(top_gap)
             .pb(SIDEBAR_GROUP_LABEL_PADDING_BOTTOM)
             .text_size(GROUP_TITLE_SIZE)
-            .font_weight(gpui::FontWeight::MEDIUM)
+            .font_weight(gpui_kit::FontWeight::MEDIUM)
             .text_color(theme.text_muted)
             .child(self.label)
     }
@@ -262,12 +262,16 @@ impl RenderOnce for SidebarItem {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = tokens(cx);
         let (icon_color, label_color, weight) = if self.selected {
-            (theme.accent, theme.text_primary, gpui::FontWeight::MEDIUM)
+            (
+                theme.accent,
+                theme.text_primary,
+                gpui_kit::FontWeight::MEDIUM,
+            )
         } else {
             (
                 theme.text_secondary,
                 theme.text_secondary,
-                gpui::FontWeight::NORMAL,
+                gpui_kit::FontWeight::NORMAL,
             )
         };
 
@@ -309,7 +313,7 @@ impl RenderOnce for SidebarItem {
         )
         .child(
             div()
-                .flex_grow()
+                .flex_grow(1.0)
                 .min_w(px(0.0))
                 .text_size(crate::design_system::metrics::BODY_SIZE)
                 .font_weight(weight)

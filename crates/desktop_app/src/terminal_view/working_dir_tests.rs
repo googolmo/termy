@@ -1,7 +1,7 @@
 use super::*;
 
-#[gpui::test]
-fn new_tab_inherits_cwd_after_shell_cd_with_foreground_app(cx: &mut gpui::TestAppContext) {
+#[gpui_kit::test]
+fn new_tab_inherits_cwd_after_shell_cd_with_foreground_app(cx: &mut gpui_kit::TestAppContext) {
     let root = tempfile::tempdir().unwrap();
     let initial = root.path().join("initial");
     let project = root.path().join("project with spaces");
@@ -85,10 +85,10 @@ fn new_tab_inherits_cwd_after_shell_cd_with_foreground_app(cx: &mut gpui::TestAp
     });
 }
 
-#[gpui::test]
+#[gpui_kit::test]
 // #388: exercised by just test-tmux-integration on macOS and Linux CI.
 #[ignore = "requires tmux >= 3.3"]
-fn new_tmux_tab_inherits_live_pane_cwd_with_foreground_app(cx: &mut gpui::TestAppContext) {
+fn new_tmux_tab_inherits_live_pane_cwd_with_foreground_app(cx: &mut gpui_kit::TestAppContext) {
     use crate::terminal_ui::{TmuxClient, TmuxLaunchTarget, TmuxRuntimeConfig, TmuxSocketTarget};
     struct Server(String);
     impl Drop for Server {

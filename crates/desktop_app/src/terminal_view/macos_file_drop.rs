@@ -7,7 +7,7 @@ use cocoa::{
     foundation::{NSArray, NSAutoreleasePool, NSFastEnumeration, NSPoint, NSString, NSUInteger},
 };
 use flume::Sender;
-use gpui::{Pixels, Point, Window, point, px};
+use gpui_kit::{Pixels, Point, Window, point, px};
 use objc::{
     class,
     declare::ClassDecl,

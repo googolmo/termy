@@ -27,7 +27,7 @@ impl TerminalView {
 
     pub(in super::super) fn terminal_content_position(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
     ) -> (f32, f32) {
         let x: f32 = position.x.into();
         let y: f32 = position.y.into();

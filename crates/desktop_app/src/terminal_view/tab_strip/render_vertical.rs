@@ -21,7 +21,7 @@ impl TerminalView {
         window: &Window,
         colors: &TerminalColors,
         font_family: &SharedString,
-        sidebar_bg: gpui::Rgba,
+        sidebar_bg: gpui_kit::Rgba,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let palette = self.resolve_tab_strip_palette(colors, sidebar_bg);
@@ -168,8 +168,8 @@ impl TerminalView {
                 }),
             )
             .child(
-                gpui::svg()
-                    .path(gpui::SharedString::from(icon_path))
+                gpui_kit::svg()
+                    .path(gpui_kit::SharedString::from(icon_path))
                     .size(px(13.0))
                     .text_color(icon_color),
             )

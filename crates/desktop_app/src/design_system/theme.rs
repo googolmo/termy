@@ -11,7 +11,7 @@
 //! - **Overlays** (borders, separators, hover, tints) keep their alpha, exactly
 //!   as the app does, so they read correctly over whichever surface is beneath.
 
-use gpui::{App, Global, Rgba, rgb};
+use gpui_kit::{App, Global, Rgba, rgb};
 
 /// Terminal colors a theme must provide for the kit to derive its tokens.
 #[derive(Clone, Copy, Debug, PartialEq)]

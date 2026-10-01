@@ -1,6 +1,6 @@
 use super::*;
 use crate::text_editing;
-use gpui::{
+use gpui_kit::{
     Bounds, ContentMask, ElementInputHandler, Entity, EntityInputHandler, Font, Hsla, IntoElement,
     PaintQuad, Pixels, ShapedLine, TextRun, UTF16Selection, UnderlineStyle, Window, canvas, fill,
     point, px, size,
@@ -364,7 +364,7 @@ impl InlineInputState {
             .map(|range| self.range_to_utf16(range))
     }
 
-    pub(super) fn character_index_for_point(&self, point: gpui::Point<Pixels>) -> usize {
+    pub(super) fn character_index_for_point(&self, point: gpui_kit::Point<Pixels>) -> usize {
         if self.text.is_empty() {
             return 0;
         }
@@ -529,7 +529,7 @@ pub(super) struct InlineInputPrepaintState {
 }
 
 impl IntoElement for InlineInputElement {
-    type Element = gpui::Canvas<InlineInputPrepaintState>;
+    type Element = gpui_kit::Canvas<InlineInputPrepaintState>;
 
     fn into_element(self) -> Self::Element {
         let focus_handle = self.focus_handle;
@@ -913,6 +913,8 @@ impl IntoElement for InlineInputElement {
                                 line.paint(
                                     point(row_bounds.left() + offset_x, row_bounds.top()),
                                     row_bounds.size.height,
+                                    gpui_kit::TextAlign::Left,
+                                    None,
                                     window,
                                     cx,
                                 )
@@ -1037,7 +1039,7 @@ impl TerminalView {
             .left_0()
             .right_0()
             .bottom_0()
-            .cursor(gpui::CursorStyle::IBeam)
+            .cursor(gpui_kit::CursorStyle::IBeam)
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(Self::handle_inline_input_mouse_down),
@@ -1201,7 +1203,7 @@ impl TerminalView {
             return;
         }
 
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
 
         let target_utf16 = match self.active_inline_input_state() {
             Some(state) => state.character_index_for_point(event.position),
@@ -1390,7 +1392,7 @@ impl TerminalView {
         let y = geometry.origin_y + (cursor_row as f32) * cell_height;
         Some(Bounds::new(
             point(px(x), px(y)),
-            gpui::size(px(cell_width), px(cell_height)),
+            gpui_kit::size(px(cell_width), px(cell_height)),
         ))
     }
 }
@@ -1527,7 +1529,7 @@ impl EntityInputHandler for TerminalView {
 
     fn character_index_for_point(
         &mut self,
-        point: gpui::Point<Pixels>,
+        point: gpui_kit::Point<Pixels>,
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<usize> {

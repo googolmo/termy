@@ -276,7 +276,7 @@ mod tests {
     fn every_command_has_an_embedded_icon_and_a_category() {
         for id in CommandId::all() {
             let icon = command_icon_path(id);
-            let embedded = gpui::AssetSource::load(&crate::asset_source::EmbeddedAssets, icon)
+            let embedded = gpui_kit::AssetSource::load(&crate::asset_source::EmbeddedAssets, icon)
                 .ok()
                 .flatten()
                 .is_some();

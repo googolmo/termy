@@ -102,7 +102,7 @@ impl PluginLifecycleTracker {
 }
 
 pub(in crate::terminal_view) struct PluginLifecycleState {
-    window_handle: gpui::AnyWindowHandle,
+    window_handle: gpui_kit::AnyWindowHandle,
     window_id: String,
     terminal_ready_emitted: bool,
     tracker: PluginLifecycleTracker,
@@ -112,7 +112,7 @@ pub(in crate::terminal_view) struct PluginLifecycleState {
 }
 
 impl PluginLifecycleState {
-    pub(in crate::terminal_view) fn new(window_handle: gpui::AnyWindowHandle) -> Self {
+    pub(in crate::terminal_view) fn new(window_handle: gpui_kit::AnyWindowHandle) -> Self {
         Self {
             window_handle,
             window_id: format!(
@@ -427,9 +427,11 @@ impl TerminalView {
         let runtime = self.plugin_runtime.clone();
         let window_handle = self.plugin_lifecycle.window_handle;
         cx.spawn(async move |_this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let dispatch =
-                smol::unblock(move || runtime.dispatch_event(pending.event, pending.context)).await;
-            let _ = cx.update(|cx| {
+            let dispatch = cx
+                .background_executor()
+                .spawn(async move { runtime.dispatch_event(pending.event, pending.context) })
+                .await;
+            cx.update(|cx| {
                 let Some(window_handle) = window_handle.downcast::<Self>() else {
                     return;
                 };
@@ -497,7 +499,10 @@ impl TerminalView {
         self.plugin_refresh_in_flight = true;
         let runtime = self.plugin_runtime.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let refresh = smol::unblock(move || runtime.refresh_if_changed()).await;
+            let refresh = cx
+                .background_executor()
+                .spawn(async move { runtime.refresh_if_changed() })
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.plugin_refresh_in_flight = false;
@@ -531,7 +536,9 @@ impl TerminalView {
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             // Keep Bun discovery and TypeScript loading out of the first-paint
             // window. Explicit plugin entry points still refresh on demand.
-            smol::Timer::after(Duration::from_millis(250)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(250))
+                .await;
             let _ = cx.update(|cx| this.update(cx, |view, cx| view.schedule_plugin_refresh(cx)));
         })
         .detach();
@@ -811,21 +818,25 @@ impl TerminalView {
         let runtime = self.plugin_runtime.clone();
         let window_handle = self.plugin_lifecycle.window_handle;
         cx.spawn(async move |_this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(150)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(150))
+                .await;
             let (plugin_id, command_id, input_id, revision, generation) = request;
             let completed_input_id = input_id.clone();
-            let result = smol::unblock(move || {
-                runtime.resolve_pick_options(
-                    &plugin_id,
-                    &command_id,
-                    &input_id,
-                    &revision,
-                    &query,
-                    context,
-                )
-            })
-            .await;
-            let _ = cx.update(|cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    runtime.resolve_pick_options(
+                        &plugin_id,
+                        &command_id,
+                        &input_id,
+                        &revision,
+                        &query,
+                        context,
+                    )
+                })
+                .await;
+            cx.update(|cx| {
                 let Some(window_handle) = window_handle.downcast::<Self>() else {
                     return;
                 };
@@ -961,8 +972,11 @@ impl TerminalView {
         let plugin_id = plugin_id.to_string();
         let command_id = command_id.to_string();
         cx.spawn(async move |_this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let refresh = smol::unblock(move || runtime.refresh_if_changed()).await;
-            let _ = cx.update(|cx| {
+            let refresh = cx
+                .background_executor()
+                .spawn(async move { runtime.refresh_if_changed() })
+                .await;
+            cx.update(|cx| {
                 let _ = window_handle.update(cx, |view, window, cx| {
                     view.update_plugin_refresh_error(&refresh.errors, cx);
                     view.start_plugin_command(&plugin_id, &command_id, window, cx);
@@ -1118,7 +1132,7 @@ impl TerminalView {
                     (None, Some(percentage)) => format!("{progress_title} ({percentage}%)"),
                     (None, None) => format!("Running {progress_title}…"),
                 };
-                let _ = cx.update(|cx| {
+                cx.update(|cx| {
                     crate::ui::toast::update_toast(
                         loading_id,
                         crate::ui::toast::ToastKind::Loading,
@@ -1135,27 +1149,29 @@ impl TerminalView {
         self.notify_overlay(cx);
 
         cx.spawn(async move |_this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let result = smol::unblock(move || {
-                let result = runtime.invoke_with_control(
-                    &plugin_id,
-                    &command_id,
-                    &revision,
-                    inputs,
-                    context,
-                    &control,
-                );
-                let opens_view = result.as_ref().is_ok_and(|actions| {
-                    actions
-                        .iter()
-                        .any(|action| matches!(action, PluginAction::ViewOpen { .. }))
-                });
-                if !opens_view {
-                    runtime.suspend_if_eventless();
-                }
-                result
-            })
-            .await;
-            let _ = cx.update(|cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    let result = runtime.invoke_with_control(
+                        &plugin_id,
+                        &command_id,
+                        &revision,
+                        inputs,
+                        context,
+                        &control,
+                    );
+                    let opens_view = result.as_ref().is_ok_and(|actions| {
+                        actions
+                            .iter()
+                            .any(|action| matches!(action, PluginAction::ViewOpen { .. }))
+                    });
+                    if !opens_view {
+                        runtime.suspend_if_eventless();
+                    }
+                    result
+                })
+                .await;
+            cx.update(|cx| {
                 crate::ui::toast::dismiss_toast(loading_id);
                 let _ = window_handle.update(cx, |view, window, cx| {
                     view.plugin_invocations.remove(&loading_id);

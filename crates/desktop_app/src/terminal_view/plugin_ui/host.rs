@@ -62,7 +62,7 @@ impl TerminalView {
             view.load(context, cx);
         });
         if target == PluginViewTarget::CommandPalette {
-            self.focus_handle.focus(window);
+            self.focus_handle.focus(window, cx);
         }
         cx.notify();
         self.notify_overlay(cx);
@@ -102,7 +102,7 @@ impl TerminalView {
     pub(in crate::terminal_view) fn command_palette_plugin_ui(
         &self,
         cx: &App,
-    ) -> Option<gpui::Entity<PluginUiView>> {
+    ) -> Option<gpui_kit::Entity<PluginUiView>> {
         self.plugin_ui
             .as_ref()
             .filter(|view| view.read(cx).target() == PluginViewTarget::CommandPalette)
@@ -112,7 +112,7 @@ impl TerminalView {
     pub(in crate::terminal_view) fn modal_plugin_ui(
         &self,
         cx: &App,
-    ) -> Option<gpui::Entity<PluginUiView>> {
+    ) -> Option<gpui_kit::Entity<PluginUiView>> {
         self.plugin_ui
             .as_ref()
             .filter(|view| view.read(cx).target() == PluginViewTarget::Modal)
@@ -142,7 +142,7 @@ impl TerminalView {
             return;
         }
         self.plugin_runtime.suspend_if_eventless();
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         cx.notify();
         self.notify_overlay(cx);
     }

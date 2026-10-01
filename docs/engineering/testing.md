@@ -21,7 +21,7 @@ double-click still performs the system titlebar action, tabs can be selected
 and reordered, the new-tab button works, and terminal text selection does not
 move the window.
 
-The pinned GPUI 0.2.2 `start_window_move` is a no-op on macOS. Termy calls
+Termy retains its native drag bridge across the GPUI Kit migration and calls
 AppKit's `performWindowDragWithEvent:` from the hit-tested mouse-down handler;
 state-machine tests alone cannot verify this native handoff.
 
@@ -45,9 +45,9 @@ On an X11 or XWayland desktop, launch `termy` from a terminal, open a second
 window, and open Settings. All windows should open with system-managed titlebars
 without a panic. Repeat with `TERMY_LINUX_BACKEND=wayland` on a Wayland desktop.
 
-GPUI 0.2.2's X11 `HasWindowHandle::window_handle` is unimplemented and panics
-instead of returning an error. Do not query it to set `_GTK_THEME_VARIANT`;
-leave titlebar theming to the window manager until the backend supports it.
+The former GPUI 0.2.2 backend panicked when querying X11 raw window handles.
+The Kit snapshot implements those handles, but Termy continues to leave
+titlebar theming to the window manager and does not set `_GTK_THEME_VARIANT`.
 GPUI test windows do not exercise this native backend, so unit tests alone
 cannot validate Linux startup.
 

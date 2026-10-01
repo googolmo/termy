@@ -1,5 +1,5 @@
 use super::*;
-use gpui::AnimationExt as _;
+use gpui_kit::AnimationExt as _;
 
 impl SettingsWindow {
     fn masked_secret_value(text: &str) -> String {
@@ -54,7 +54,7 @@ impl SettingsWindow {
                 .py(px(5.0))
                 .rounded(px(SETTINGS_BUTTON_RADIUS))
                 .text_xs()
-                .font_weight(gpui::FontWeight::MEDIUM)
+                .font_weight(gpui_kit::FontWeight::MEDIUM)
                 .text_color(text_muted)
                 .cursor_pointer()
                 .hover(move |s| s.bg(hover_bg).text_color(text_primary))
@@ -341,7 +341,7 @@ impl SettingsWindow {
         let knob: AnyElement = if is_animating {
             knob.with_animation(
                 SharedString::from(format!("{id}-knob-{checked}")),
-                gpui::Animation::new(animation_window).with_easing(gpui::ease_out_quint()),
+                gpui_kit::Animation::new(animation_window).with_easing(gpui_kit::ease_out_quint()),
                 move |knob, delta| {
                     let on_progress = if checked { delta } else { 1.0 - delta };
                     knob.left(px(knob_left_for(on_progress)))
@@ -589,7 +589,7 @@ impl SettingsWindow {
 
                 let font = Font {
                     family: self.config.ui_font_family.clone().into(),
-                    ..gpui::font("")
+                    ..gpui_kit::font("")
                 };
 
                 return div()
@@ -620,7 +620,7 @@ impl SettingsWindow {
             }
             let font = Font {
                 family: self.config.ui_font_family.clone().into(),
-                ..gpui::font("")
+                ..gpui_kit::font("")
             };
             return TextInputElement::new(
                 cx.entity(),
@@ -722,7 +722,7 @@ impl SettingsWindow {
                 input.selecting = false;
             }
         }
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         cx.notify();
     }
 
@@ -870,7 +870,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(text_primary)
                             .child(title),
                     )
@@ -1064,7 +1064,7 @@ impl SettingsWindow {
             .border_1()
             .border_color(border_color)
             .text_color(text_primary)
-            .font_weight(gpui::FontWeight::BOLD)
+            .font_weight(gpui_kit::FontWeight::BOLD)
             .text_sm()
             .child(label)
             .on_click(cx.listener(move |view, _, _, cx| {
@@ -1309,7 +1309,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(text_primary)
                             .child(title),
                     )

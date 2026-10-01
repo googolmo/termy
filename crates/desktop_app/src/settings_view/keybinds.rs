@@ -155,11 +155,11 @@ impl SettingsWindow {
         self.blur_sidebar_search();
         self.active_input = None;
         self.capturing_action = Some(action);
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         cx.notify();
     }
 
-    fn has_no_modifiers(modifiers: gpui::Modifiers) -> bool {
+    fn has_no_modifiers(modifiers: gpui_kit::Modifiers) -> bool {
         !modifiers.control
             && !modifiers.alt
             && !modifiers.shift
@@ -187,7 +187,7 @@ impl SettingsWindow {
 
     fn canonicalize_captured_trigger(
         key: &str,
-        modifiers: gpui::Modifiers,
+        modifiers: gpui_kit::Modifiers,
     ) -> Result<Option<String>, String> {
         let normalized_key = key.trim().to_ascii_lowercase();
         if normalized_key.is_empty() || Self::is_modifier_only_key(&normalized_key) {
@@ -391,7 +391,7 @@ impl SettingsWindow {
                     .child(
                         div()
                             .text_sm()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(self.text_primary())
                             .child(action_title),
                     )
@@ -539,9 +539,9 @@ mod tests {
     use std::collections::HashMap;
     use termy_core::command_core::{CommandId, ResolvedKeybind, command_specs};
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn tab_shortcuts_expand_and_capture_cancels_without_changing_bindings(
-        cx: &mut gpui::TestAppContext,
+        cx: &mut gpui_kit::TestAppContext,
     ) {
         let (settings, cx) = cx.add_window_view(|window, cx| {
             let mut view = SettingsWindow::new(window, cx);
@@ -551,7 +551,7 @@ mod tests {
                 line_number: 1,
                 value: "alt-x=switch_to_tab_1".into(),
             }];
-            view.focus_handle.focus(window);
+            view.focus_handle.focus(window, cx);
             view
         });
         cx.run_until_parked();
@@ -561,7 +561,7 @@ mod tests {
         let more = cx
             .debug_bounds("more-tab-shortcuts")
             .expect("tab shortcut disclosure");
-        cx.simulate_click(more.center(), gpui::Modifiers::default());
+        cx.simulate_click(more.center(), gpui_kit::Modifiers::default());
         cx.run_until_parked();
         assert!(cx.debug_bounds("keybind-row-switch_to_tab_1").is_some());
         settings.read_with(cx, |view, _| {
@@ -575,9 +575,15 @@ mod tests {
         let record = cx
             .debug_bounds("keybind-bind-cycle_tabs")
             .expect("main tab switch shortcut");
-        assert_eq!(record.size.width, gpui::px(super::SETTINGS_CONTROL_WIDTH));
-        assert_eq!(record.size.height, gpui::px(super::SETTINGS_CONTROL_HEIGHT));
-        cx.simulate_click(record.center(), gpui::Modifiers::default());
+        assert_eq!(
+            record.size.width,
+            gpui_kit::px(super::SETTINGS_CONTROL_WIDTH)
+        );
+        assert_eq!(
+            record.size.height,
+            gpui_kit::px(super::SETTINGS_CONTROL_HEIGHT)
+        );
+        cx.simulate_click(record.center(), gpui_kit::Modifiers::default());
         settings.read_with(cx, |view, _| {
             assert_eq!(view.capturing_action, Some(CommandId::CycleTabs));
         });
@@ -588,18 +594,21 @@ mod tests {
             assert_eq!(view.config.keybind_lines[0].value, "alt-x=switch_to_tab_1");
         });
         let more = cx.debug_bounds("more-tab-shortcuts").unwrap();
-        cx.simulate_click(more.center(), gpui::Modifiers::default());
+        cx.simulate_click(more.center(), gpui_kit::Modifiers::default());
         cx.run_until_parked();
         settings.read_with(cx, |view, _| assert!(!view.show_more_tab_shortcuts));
         assert_eq!(
             cx.debug_bounds("keybind-row-new_tab").unwrap().origin.y,
             other_shortcuts_y
         );
-        cx.simulate_resize(gpui::size(gpui::px(760.0), gpui::px(560.0)));
+        cx.simulate_resize(gpui_kit::size(gpui_kit::px(760.0), gpui_kit::px(560.0)));
         cx.run_until_parked();
         let record = cx.debug_bounds("keybind-bind-cycle_tabs").unwrap();
-        assert_eq!(record.size.width, gpui::px(super::SETTINGS_CONTROL_WIDTH));
-        assert!(record.right() < gpui::px(760.0));
+        assert_eq!(
+            record.size.width,
+            gpui_kit::px(super::SETTINGS_CONTROL_WIDTH)
+        );
+        assert!(record.right() < gpui_kit::px(760.0));
     }
 
     #[test]
@@ -719,7 +728,7 @@ mod tests {
 
     #[test]
     fn canonicalize_captured_trigger_supports_modifier_combos() {
-        let modifiers = gpui::Modifiers {
+        let modifiers = gpui_kit::Modifiers {
             alt: true,
             shift: true,
             ..Default::default()
@@ -732,7 +741,7 @@ mod tests {
 
     #[test]
     fn canonicalize_captured_trigger_ignores_modifier_only_keys() {
-        let modifiers = gpui::Modifiers {
+        let modifiers = gpui_kit::Modifiers {
             shift: true,
             ..Default::default()
         };

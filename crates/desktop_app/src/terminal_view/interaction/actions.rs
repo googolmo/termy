@@ -1,7 +1,7 @@
 use super::*;
 use termy_core::command_core::{CommandCapabilities, CommandUnavailableReason};
 
-pub(in super::super) trait NumberedPaneAction: gpui::Action {
+pub(in super::super) trait NumberedPaneAction: gpui_kit::Action {
     const COMMAND: CommandAction;
 }
 

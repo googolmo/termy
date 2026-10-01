@@ -7,7 +7,7 @@
 //!
 //! ```no_run
 //! use termy::design_system::{Button, SettingRow, SettingsGroup, Switch, theme};
-//! use gpui::{App, ParentElement as _};
+//! use gpui_kit::{App, ParentElement as _};
 //!
 //! fn appearance_group(_cx: &mut App) -> SettingsGroup {
 //!     SettingsGroup::new("THEME").child(

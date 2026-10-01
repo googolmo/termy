@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gpui::ScrollHandle;
+use gpui_kit::ScrollHandle;
 
 use super::hints::TabSwitchHintState;
 use super::layout::TabStripLayoutSnapshot;

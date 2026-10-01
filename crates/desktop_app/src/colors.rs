@@ -4,7 +4,7 @@ use crate::config::{
 };
 use crate::theme_store;
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, NamedColor, Rgb as AnsiRgb};
-use gpui::Rgba;
+use gpui_kit::Rgba;
 use termy_core::themes;
 use termy_core::themes::Rgb8;
 

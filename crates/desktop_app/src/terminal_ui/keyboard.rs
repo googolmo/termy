@@ -1,7 +1,7 @@
 use termy_core::{TerminalKeyEventKind, TerminalKeyboardMode, TermyKeystroke, TermyModifiers};
 
 pub fn keystroke_to_input(
-    keystroke: &gpui::Keystroke,
+    keystroke: &gpui_kit::Keystroke,
     event_kind: TerminalKeyEventKind,
     keyboard_mode: TerminalKeyboardMode,
     prompt_shortcuts_enabled: bool,

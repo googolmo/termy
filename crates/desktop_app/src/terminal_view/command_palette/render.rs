@@ -11,8 +11,8 @@ use super::style::{
 };
 use super::*;
 use crate::ui::scrollbar::{self, ScrollbarPaintStyle, ScrollbarRange};
-use gpui::prelude::FluentBuilder;
-use gpui::uniform_list;
+use gpui_kit::prelude::FluentBuilder;
+use gpui_kit::uniform_list;
 use std::ops::Range;
 
 /// Renders a row title with the query's matched characters accented. Disabled
@@ -25,20 +25,20 @@ fn highlighted_title(
     style: &CommandPaletteStyle,
 ) -> AnyElement {
     let weight = if is_selected && is_enabled {
-        gpui::FontWeight::MEDIUM
+        gpui_kit::FontWeight::MEDIUM
     } else {
-        gpui::FontWeight::NORMAL
+        gpui_kit::FontWeight::NORMAL
     };
     if highlights.is_empty() || !is_enabled {
         return div().font_weight(weight).child(title).into_any_element();
     }
 
-    let highlight = gpui::HighlightStyle {
+    let highlight = gpui_kit::HighlightStyle {
         color: Some(style.match_text.into()),
-        font_weight: Some(gpui::FontWeight::BOLD),
+        font_weight: Some(gpui_kit::FontWeight::BOLD),
         ..Default::default()
     };
-    let runs: Vec<(Range<usize>, gpui::HighlightStyle)> = highlights
+    let runs: Vec<(Range<usize>, gpui_kit::HighlightStyle)> = highlights
         .iter()
         .filter(|range| {
             range.end <= title.len()
@@ -54,14 +54,14 @@ fn highlighted_title(
 
     div()
         .font_weight(weight)
-        .child(gpui::StyledText::new(title).with_highlights(runs))
+        .child(gpui_kit::StyledText::new(title).with_highlights(runs))
         .into_any_element()
 }
 
 fn palette_icon_tile(
     icon_path: &'static str,
-    tile_bg: gpui::Rgba,
-    glyph: gpui::Rgba,
+    tile_bg: gpui_kit::Rgba,
+    glyph: gpui_kit::Rgba,
     tile_size: f32,
     tile_radius: f32,
     icon_size: f32,
@@ -76,8 +76,8 @@ fn palette_icon_tile(
         .items_center()
         .justify_center()
         .child(
-            gpui::svg()
-                .path(gpui::SharedString::from(icon_path))
+            gpui_kit::svg()
+                .path(gpui_kit::SharedString::from(icon_path))
                 .size(px(icon_size))
                 .text_color(glyph),
         )
@@ -88,7 +88,7 @@ fn palette_icon_tile(
 /// multi-keystroke binding puts extra space between its keystrokes.
 fn shortcut_keycap_row(
     label: &str,
-    text_color: gpui::Rgba,
+    text_color: gpui_kit::Rgba,
     style: &CommandPaletteStyle,
 ) -> AnyElement {
     let keystrokes = shortcut_keycaps(label);
@@ -133,7 +133,7 @@ impl TerminalView {
         item_count: usize,
     ) -> ScrollbarRange {
         let scroll_handle = self.command_palette.base_scroll_handle();
-        let max_offset_from_handle: f32 = scroll_handle.max_offset().height.into();
+        let max_offset_from_handle: f32 = scroll_handle.max_offset().y.into();
         let estimated_content_height = item_count as f32 * COMMAND_PALETTE_ROW_HEIGHT;
         let estimated_max_offset = (estimated_content_height - viewport_height).max(0.0);
         let max_offset = max_offset_from_handle.max(estimated_max_offset);
@@ -225,7 +225,7 @@ impl TerminalView {
         item_count: usize,
     ) -> Option<scrollbar::ScrollbarMetrics> {
         let scroll_handle = self.command_palette.base_scroll_handle();
-        let max_offset_from_handle: f32 = scroll_handle.max_offset().height.into();
+        let max_offset_from_handle: f32 = scroll_handle.max_offset().y.into();
         let estimated_content_height = item_count as f32 * COMMAND_PALETTE_ROW_HEIGHT;
         let estimated_max_offset = (estimated_content_height - viewport_height).max(0.0);
         let max_offset = max_offset_from_handle.max(estimated_max_offset);
@@ -587,7 +587,7 @@ impl TerminalView {
         let style = CommandPaletteStyle::resolve(self);
         let input_font = Font {
             family: self.ui_font_family.clone(),
-            ..gpui::font("")
+            ..gpui_kit::font("")
         };
         let empty_state_message = match self.command_palette.mode() {
             CommandPaletteMode::TmuxSessions
@@ -671,7 +671,7 @@ impl TerminalView {
             )
             .flex_1()
             .h(px(list_height))
-            .track_scroll(self.command_palette.scroll_handle().clone())
+            .track_scroll(self.command_palette.scroll_handle())
             .into_any_element();
             let mut list_container = div()
                 .w_full()
@@ -705,7 +705,7 @@ impl TerminalView {
                         .pr(px(2.0))
                         .cursor_pointer()
                         .child(
-                            gpui::canvas(
+                            gpui_kit::canvas(
                                 move |bounds, _, cx| {
                                     bounds_entity.update(cx, |view, _| {
                                         view.command_palette_scrollbar_lane_bounds = Some(bounds);
@@ -744,7 +744,7 @@ impl TerminalView {
             list_container.into_any_element()
         };
 
-        let scrim_color = gpui::Rgba {
+        let scrim_color = gpui_kit::Rgba {
             r: 0.0,
             g: 0.0,
             b: 0.0,

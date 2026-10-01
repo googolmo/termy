@@ -788,7 +788,7 @@ impl SettingsWindow {
         let search_content = if is_search_active {
             let font = Font {
                 family: self.config.ui_font_family.clone().into(),
-                ..gpui::font("")
+                ..gpui_kit::font("")
             };
             TextInputElement::new(
                 cx.entity(),
@@ -859,7 +859,7 @@ impl SettingsWindow {
                         view.theme_store_search_state.set_cursor_utf16(index);
                     }
                     view.theme_store_search_selecting = event.click_count == 1;
-                    view.focus_handle.focus(window);
+                    view.focus_handle.focus(window, cx);
                     cx.notify();
                 }),
             )
@@ -963,7 +963,7 @@ impl SettingsWindow {
                     .border_color(border_color)
                     .bg(bg_input)
                     .text_xs()
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(text_secondary)
                     .whitespace_nowrap()
                     .cursor_pointer()
@@ -1018,7 +1018,7 @@ impl SettingsWindow {
                             .child(
                                 div()
                                     .text_sm()
-                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                                     .text_color(text_primary)
                                     .child("Syncing theme registry"),
                             )
@@ -1054,7 +1054,7 @@ impl SettingsWindow {
                             .child(
                                 div()
                                     .text_sm()
-                                    .font_weight(gpui::FontWeight::MEDIUM)
+                                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                                     .text_color(text_primary)
                                     .child("Registry did not respond"),
                             )
@@ -1068,7 +1068,7 @@ impl SettingsWindow {
                             .rounded(px(SETTINGS_BUTTON_RADIUS))
                             .bg(accent)
                             .text_xs()
-                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .font_weight(gpui_kit::FontWeight::MEDIUM)
                             .text_color(button_text)
                             .cursor_pointer()
                             .flex()
@@ -1130,7 +1130,7 @@ impl SettingsWindow {
                 .child(
                     div()
                         .text_sm()
-                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                         .text_color(text_primary)
                         .child("No themes yet"),
                 )
@@ -1177,7 +1177,7 @@ impl SettingsWindow {
                 .child(
                     div()
                         .text_sm()
-                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                         .text_color(text_primary)
                         .child("No matching themes"),
                 )
@@ -1260,7 +1260,7 @@ impl SettingsWindow {
                 .border_color(border_color)
                 .bg(bg_input)
                 .text_xs()
-                .font_weight(gpui::FontWeight::MEDIUM)
+                .font_weight(gpui_kit::FontWeight::MEDIUM)
                 .text_color(text_secondary)
                 .cursor_pointer()
                 .flex()
@@ -1286,7 +1286,7 @@ impl SettingsWindow {
                 .rounded(px(SETTINGS_BUTTON_RADIUS))
                 .bg(accent)
                 .text_xs()
-                .font_weight(gpui::FontWeight::MEDIUM)
+                .font_weight(gpui_kit::FontWeight::MEDIUM)
                 .text_color(button_text)
                 .cursor_pointer()
                 .flex()
@@ -1341,8 +1341,8 @@ impl SettingsWindow {
         let theme_slug = theme.slug;
 
         div()
-            .flex_grow()
-            .flex_shrink()
+            .flex_grow(1.0)
+            .flex_shrink(1.0)
             .flex_basis(px(240.0))
             .min_w(px(240.0))
             .max_w(px(360.0))
@@ -1376,7 +1376,7 @@ impl SettingsWindow {
                             .flex_1()
                             .min_w(px(0.0))
                             .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .font_weight(gpui_kit::FontWeight::SEMIBOLD)
                             .text_color(text_primary)
                             .overflow_hidden()
                             .child(theme_name),
@@ -1587,7 +1587,7 @@ impl SettingsWindow {
                     .rounded(px(SETTINGS_INPUT_RADIUS))
                     .bg(accent)
                     .text_sm()
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .font_weight(gpui_kit::FontWeight::MEDIUM)
                     .text_color(button_text)
                     .cursor_pointer()
                     .hover(move |s| s.bg(accent_hover).text_color(button_hover_text))

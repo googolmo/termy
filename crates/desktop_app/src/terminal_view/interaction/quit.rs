@@ -1,5 +1,5 @@
 use super::*;
-use gpui::PromptLevel;
+use gpui_kit::PromptLevel;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CloseRequestTarget {
@@ -378,7 +378,7 @@ impl TerminalView {
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let confirmed = matches!(prompt.await, Ok(0));
-            let _ = cx.update(|cx| {
+            cx.update(|cx| {
                 let mut follow_through = false;
                 if this
                     .update(cx, |view, _| {
@@ -511,9 +511,9 @@ impl TerminalView {
 mod tests {
     use super::{CloseRequestTarget, TerminalView};
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn close_confirmation_handles_repeated_close_cancel_retry_and_confirm(
-        cx: &mut gpui::TestAppContext,
+        cx: &mut gpui_kit::TestAppContext,
     ) {
         cx.update(|cx| cx.set_prompt_builder(crate::linux_prompt::render_prompt));
         let config = crate::config::AppConfig {

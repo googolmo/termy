@@ -18,8 +18,8 @@ use crate::ui::scrollbar::{ScrollbarVisibilityController, ScrollbarVisibilityMod
 use crate::ui::toast::ToastManager;
 use alacritty_terminal::{grid::Dimensions, term::cell::Flags};
 use flume::{Sender, bounded};
-use gpui::AppContext;
-use gpui::{
+use gpui_kit::AppContext;
+use gpui_kit::{
     AnyElement, App, AsyncApp, Bounds, ClipboardEntry, ClipboardItem, Context, DragMoveEvent,
     Element, Entity, ExternalPaths, FocusHandle, Focusable, Font, FontWeight, InteractiveElement,
     IntoElement, KeyDownEvent, KeyUpEvent, ModifiersChangedEvent, MouseButton, MouseDownEvent,
@@ -1349,7 +1349,7 @@ pub struct TerminalView {
     native_terminal_wakeup_router: NativeTerminalWakeupRouter,
     native_terminal_wakeup_batch: HashSet<NativeTerminalWakeupId>,
     focus_handle: FocusHandle,
-    window_handle: gpui::AnyWindowHandle,
+    window_handle: gpui_kit::AnyWindowHandle,
     owns_persisted_session: bool,
     multiplexer: Option<Arc<crate::multiplexer::WindowSession>>,
     multiplexer_enabled_config: bool,
@@ -1360,7 +1360,7 @@ pub struct TerminalView {
     dark_theme: String,
     custom_colors: config::CustomColors,
     system_appearance: SystemAppearance,
-    appearance_subscription: Option<gpui::Subscription>,
+    appearance_subscription: Option<gpui_kit::Subscription>,
     colors: TerminalColors,
     inactive_tab_scrollback: Option<usize>,
     tasks: Vec<TaskConfig>,
@@ -1427,7 +1427,7 @@ pub struct TerminalView {
     line_height: f32,
     copy_on_select: bool,
     copy_on_select_toast: bool,
-    last_terminal_modifiers: gpui::Modifiers,
+    last_terminal_modifiers: gpui_kit::Modifiers,
     pending_key_releases: HashMap<String, PendingKeyRelease>,
     deferred_ime_key_releases: HashSet<String>,
     selection_anchor: Option<SelectionPos>,
@@ -1466,8 +1466,8 @@ pub struct TerminalView {
     resize_indicator_dims: Option<(u16, u16)>,
     resize_indicator_visible_until: Option<Instant>,
     resize_indicator_animation_scheduled: bool,
-    resize_throttle_task: Option<gpui::Task<()>>,
-    kitty_animation_task: Option<gpui::Task<()>>,
+    resize_throttle_task: Option<gpui_kit::Task<()>>,
+    kitty_animation_task: Option<gpui_kit::Task<()>>,
     kitty_animation_deadline: Option<Instant>,
     last_resize_applied_at: Option<Instant>,
     last_terminal_resize_signature: Option<TerminalResizeSignature>,
@@ -1697,7 +1697,7 @@ impl TerminalView {
         }
     }
 
-    fn ansi_rgb_from_rgba(color: gpui::Rgba) -> TerminalColor {
+    fn ansi_rgb_from_rgba(color: gpui_kit::Rgba) -> TerminalColor {
         let to_u8 = |component: f32| (component.clamp(0.0, 1.0) * 255.0).round() as u8;
         TerminalColor {
             r: to_u8(color.r),
@@ -2085,7 +2085,9 @@ impl TerminalView {
         }
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(TAB_SWITCH_HINT_ANIMATION_FRAME_MS)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(TAB_SWITCH_HINT_ANIMATION_FRAME_MS))
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.tab_strip.switch_hints.finish_animation_frame();
@@ -2104,7 +2106,9 @@ impl TerminalView {
         }
         self.tab_strip.interaction_animation_scheduled = true;
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(TAB_INTERACTION_ANIMATION_FRAME_MS)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(TAB_INTERACTION_ANIMATION_FRAME_MS))
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.tab_strip.interaction_animation_scheduled = false;
@@ -2131,7 +2135,9 @@ impl TerminalView {
         }
         self.new_tab_animation_scheduled = true;
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(NEW_TAB_ANIMATION_FRAME_MS)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(NEW_TAB_ANIMATION_FRAME_MS))
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.new_tab_animation_scheduled = false;
@@ -2302,7 +2308,9 @@ impl TerminalView {
         self.allow_quit_without_prompt = true;
         cx.notify();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(BENCHMARK_EXIT_GRACE_DURATION).await;
+            cx.background_executor()
+                .timer(BENCHMARK_EXIT_GRACE_DURATION)
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     if view
@@ -2379,7 +2387,7 @@ impl TerminalView {
         }
 
         self.resize_throttle_task = Some(cx.spawn(async move |this, cx| {
-            smol::Timer::after(delay).await;
+            cx.background_executor().timer(delay).await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.resize_throttle_task = None;
@@ -2450,7 +2458,7 @@ impl TerminalView {
         &self,
         overlay_style: OverlayStyleBuilder<'_>,
         base_alpha: f32,
-    ) -> gpui::Rgba {
+    ) -> gpui_kit::Rgba {
         match self.terminal_scrollbar_style {
             TerminalScrollbarStyle::Neutral => overlay_style.panel_foreground(base_alpha),
             TerminalScrollbarStyle::MutedTheme => {
@@ -2881,10 +2889,11 @@ impl TerminalView {
         self.terminal_scrollbar_track_hold_active = true;
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             loop {
-                smol::Timer::after(Duration::from_millis(
-                    TERMINAL_SCROLLBAR_TRACK_HOLD_REPEAT_MS,
-                ))
-                .await;
+                cx.background_executor()
+                    .timer(Duration::from_millis(
+                        TERMINAL_SCROLLBAR_TRACK_HOLD_REPEAT_MS,
+                    ))
+                    .await;
                 let mut keep_running = false;
                 let result = cx.update(|cx| {
                     this.update(cx, |view, cx| {
@@ -2934,7 +2943,9 @@ impl TerminalView {
         self.terminal_scrollbar_animation_active = true;
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             loop {
-                smol::Timer::after(Duration::from_millis(16)).await;
+                cx.background_executor()
+                    .timer(Duration::from_millis(16))
+                    .await;
 
                 let mut keep_running = false;
                 let result = cx.update(|cx| {
@@ -3025,7 +3036,7 @@ impl TerminalView {
         let window_handle = window.window_handle();
 
         // Focus the terminal immediately
-        focus_handle.focus(window);
+        focus_handle.focus(window, cx);
 
         // Process terminal events on the next frame so bursty PTY wakeups do not monopolize
         // the UI executor and starve actual paints.
@@ -3064,7 +3075,9 @@ impl TerminalView {
                 let fallback_view = this.clone();
                 let fallback_scheduled = terminal_frame_drain_scheduled.clone();
                 let fallback = cx.spawn(async move |cx| {
-                    smol::Timer::after(Duration::from_millis(100)).await;
+                    cx.background_executor()
+                        .timer(Duration::from_millis(100))
+                        .await;
                     if fallback_scheduled.swap(false, Ordering::AcqRel) {
                         let _ = cx.update(|cx| {
                             fallback_view.update(cx, |view, cx| {
@@ -3136,7 +3149,9 @@ impl TerminalView {
         // unfocused cursor is drawn solid, so blinking would only burn redraws).
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             loop {
-                smol::Timer::after(Duration::from_millis(CURSOR_BLINK_INTERVAL_MS)).await;
+                cx.background_executor()
+                    .timer(Duration::from_millis(CURSOR_BLINK_INTERVAL_MS))
+                    .await;
                 let result = cx
                     .update_window(window_handle, |_, window, cx| {
                         let window_active = window.is_window_active();
@@ -3358,7 +3373,7 @@ impl TerminalView {
             line_height: config.line_height.clamp(MIN_LINE_HEIGHT, MAX_LINE_HEIGHT),
             copy_on_select: config.copy_on_select,
             copy_on_select_toast: config.copy_on_select_toast,
-            last_terminal_modifiers: gpui::Modifiers::default(),
+            last_terminal_modifiers: gpui_kit::Modifiers::default(),
             pending_key_releases: HashMap::default(),
             deferred_ime_key_releases: HashSet::default(),
             selection_anchor: None,
@@ -3528,7 +3543,9 @@ impl TerminalView {
         if view.benchmark_session.is_some() {
             cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
                 loop {
-                    smol::Timer::after(BENCHMARK_SAMPLE_INTERVAL).await;
+                    cx.background_executor()
+                        .timer(BENCHMARK_SAMPLE_INTERVAL)
+                        .await;
                     let result = cx.update(|cx| {
                         this.update(cx, |view, cx| {
                             view.sample_benchmark_session();
@@ -3618,8 +3635,10 @@ impl TerminalView {
         {
             let weak = updater.downgrade();
             cx.spawn(async move |_this: WeakEntity<Self>, cx: &mut AsyncApp| {
-                smol::Timer::after(Duration::from_millis(5000)).await;
-                let _ = cx.update(|cx| AutoUpdater::check(weak, cx));
+                cx.background_executor()
+                    .timer(Duration::from_millis(5000))
+                    .await;
+                cx.update(|cx| AutoUpdater::check(weak, cx));
             })
             .detach();
         }
@@ -3643,7 +3662,7 @@ impl TerminalView {
 
     fn handle_window_appearance_change(
         &mut self,
-        appearance: gpui::WindowAppearance,
+        appearance: gpui_kit::WindowAppearance,
         cx: &mut Context<Self>,
     ) {
         let next = system_appearance_from_window(appearance);

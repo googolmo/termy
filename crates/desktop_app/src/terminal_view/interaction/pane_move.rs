@@ -50,7 +50,7 @@ impl TerminalView {
     /// Alt + the platform secondary modifier (Cmd on macOS, Ctrl elsewhere)
     /// starts a pane-move drag. Link clicks use secondary *without* alt and
     /// plain selection uses no modifier, so this combination is free.
-    pub(in super::super) fn is_pane_move_modifier(modifiers: gpui::Modifiers) -> bool {
+    pub(in super::super) fn is_pane_move_modifier(modifiers: gpui_kit::Modifiers) -> bool {
         modifiers.alt && modifiers.secondary()
     }
 
@@ -60,7 +60,7 @@ impl TerminalView {
 
     pub(in super::super) fn try_begin_pane_move_drag(
         &mut self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -98,7 +98,7 @@ impl TerminalView {
     pub(in super::super) fn begin_pane_move_drag_from_handle(
         &mut self,
         pane_id: String,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
         cx: &mut Context<Self>,
     ) {
@@ -131,7 +131,7 @@ impl TerminalView {
 
     pub(in super::super) fn update_pane_move_drag(
         &mut self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
         cx: &mut Context<Self>,
     ) {
@@ -185,7 +185,7 @@ impl TerminalView {
     /// its frame.
     fn pane_move_hit_test(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
     ) -> Option<(String, f32, f32)> {
         let content_bounds = self.terminal_content_bounds(window)?;
@@ -216,7 +216,7 @@ impl TerminalView {
 
     fn pane_move_drop_target(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
         source_pane_id: &str,
     ) -> Option<PaneMoveDropTarget> {
@@ -242,7 +242,7 @@ impl TerminalView {
 
     fn pane_move_tab_drop_target(
         &self,
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         window: &Window,
     ) -> Option<TabId> {
         if !self.should_render_tab_strip_chrome() {

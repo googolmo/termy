@@ -1,4 +1,4 @@
-use gpui::{
+use gpui_kit::{
     AnyElement, CursorStyle, InteractiveElement, IntoElement, ParentElement, Rgba, Styled, div, px,
 };
 use std::time::{Duration, Instant};

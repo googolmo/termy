@@ -10,7 +10,7 @@ impl PluginUiView {
         }
     }
 
-    fn align(element: gpui::Div, alignment: PluginUiAlignment) -> gpui::Div {
+    fn align(element: gpui_kit::Div, alignment: PluginUiAlignment) -> gpui_kit::Div {
         match alignment {
             PluginUiAlignment::Start => element.items_start(),
             PluginUiAlignment::Center => element.items_center(),
@@ -219,7 +219,7 @@ impl PluginUiView {
                                     focus_handle,
                                     Font {
                                         family: ui_font.clone(),
-                                        ..gpui::font("")
+                                        ..gpui_kit::font("")
                                     },
                                     px(13.0),
                                     style.primary_text.into(),
@@ -347,7 +347,7 @@ impl PluginUiView {
                             focus_handle,
                             Font {
                                 family: ui_font.clone(),
-                                ..gpui::font("")
+                                ..gpui_kit::font("")
                             },
                             px(13.0),
                             style.primary_text.into(),
@@ -562,7 +562,7 @@ impl PluginUiView {
                                     view.commit_active_input();
                                     view.active_input = None;
                                     view.focused_control = Some(list_id.clone());
-                                    view.focus_handle.focus(window);
+                                    view.focus_handle.focus(window, cx);
                                     cx.notify();
                                 }),
                             )
@@ -790,7 +790,7 @@ impl PluginUiView {
                             .child(
                                 div()
                                     .h_full()
-                                    .w(gpui::relative(
+                                    .w(gpui_kit::relative(
                                         value.map_or(0.35, |value| f32::from(value) / 100.0),
                                     ))
                                     .rounded(px(3.0))

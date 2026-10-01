@@ -3,7 +3,7 @@ use crate::config::{self, AppConfig, SystemAppearance, system_appearance_from_wi
 use crate::text_input::{TextInputAlignment, TextInputElement, TextInputProvider, TextInputState};
 use crate::theme_store::{self, ThemeStoreAuthSession, ThemeStoreAuthUser, ThemeStoreTheme};
 use crate::ui::scrollbar::{self as ui_scrollbar, ScrollbarPaintStyle, ScrollbarRange};
-use gpui::{
+use gpui_kit::{
     AnyElement, AsyncApp, Bounds, Context, FocusHandle, Font, InteractiveElement, IntoElement,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit,
     ParentElement, Pixels, Render, Rgba, ScrollAnchor, ScrollHandle, ScrollWheelEvent,
@@ -172,7 +172,7 @@ pub struct SettingsWindow {
     scroll_animation_token: u64,
     colors: TerminalColors,
     system_appearance: SystemAppearance,
-    appearance_subscription: Option<gpui::Subscription>,
+    appearance_subscription: Option<gpui_kit::Subscription>,
     last_window_background_appearance: Option<WindowBackgroundAppearance>,
     theme_store_themes: Vec<ThemeStoreTheme>,
     theme_store_loaded: bool,
@@ -303,7 +303,7 @@ impl SettingsWindow {
             ssh_hosts_error,
             ssh_form: None,
         };
-        view.focus_handle.focus(window);
+        view.focus_handle.focus(window, cx);
 
         #[cfg(not(test))]
         {
@@ -363,7 +363,7 @@ impl SettingsWindow {
 
     fn handle_window_appearance_change(
         &mut self,
-        appearance: gpui::WindowAppearance,
+        appearance: gpui_kit::WindowAppearance,
         cx: &mut Context<Self>,
     ) {
         let next = system_appearance_from_window(appearance);
@@ -415,10 +415,10 @@ impl SettingsWindow {
         let registry_url = Self::theme_store_registry_url();
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let result = smol::unblock(move || {
-                theme_store::fetch_theme_store_themes_blocking(&registry_url)
-            })
-            .await;
+            let result = cx
+                .background_executor()
+                .spawn(async move { theme_store::fetch_theme_store_themes_blocking(&registry_url) })
+                .await;
 
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
@@ -457,8 +457,10 @@ impl SettingsWindow {
         let loading_id = crate::ui::toast::loading(format!("Installing {}...", theme.name));
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            let result =
-                smol::unblock(move || theme_store::install_theme_from_store_blocking(theme)).await;
+            let result = cx
+                .background_executor()
+                .spawn(async move { theme_store::install_theme_from_store_blocking(theme) })
+                .await;
 
             crate::ui::toast::dismiss_toast(loading_id);
 
@@ -590,11 +592,13 @@ impl SettingsWindow {
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let session_token = session.session_token.clone();
-            let result = smol::unblock(move || {
-                theme_store::logout_auth_session_blocking(&api_base, &session_token)?;
-                theme_store::clear_auth_session()
-            })
-            .await;
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    theme_store::logout_auth_session_blocking(&api_base, &session_token)?;
+                    theme_store::clear_auth_session()
+                })
+                .await;
 
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
@@ -776,7 +780,7 @@ impl SettingsWindow {
             && event.keystroke.key.eq_ignore_ascii_case(key)
     }
 
-    fn cmd_only(modifiers: gpui::Modifiers) -> bool {
+    fn cmd_only(modifiers: gpui_kit::Modifiers) -> bool {
         modifiers.secondary() && !modifiers.alt && !modifiers.function
     }
 
@@ -1129,13 +1133,13 @@ impl TextInputProvider for SettingsWindow {
     }
 }
 
-impl gpui::EntityInputHandler for SettingsWindow {
+impl gpui_kit::EntityInputHandler for SettingsWindow {
     fn text_for_range(
         &mut self,
         range: std::ops::Range<usize>,
         adjusted_range: &mut Option<std::ops::Range<usize>>,
-        _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
+        _window: &mut gpui_kit::Window,
+        _cx: &mut gpui_kit::Context<Self>,
     ) -> Option<String> {
         let state = TextInputProvider::text_input_state(self)?;
         Some(state.text_for_range(range, adjusted_range))
@@ -1144,23 +1148,23 @@ impl gpui::EntityInputHandler for SettingsWindow {
     fn selected_text_range(
         &mut self,
         _ignore_disabled_input: bool,
-        _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
-    ) -> Option<gpui::UTF16Selection> {
+        _window: &mut gpui_kit::Window,
+        _cx: &mut gpui_kit::Context<Self>,
+    ) -> Option<gpui_kit::UTF16Selection> {
         let state = TextInputProvider::text_input_state(self)?;
         Some(state.selected_text_range())
     }
 
     fn marked_text_range(
         &self,
-        _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
+        _window: &mut gpui_kit::Window,
+        _cx: &mut gpui_kit::Context<Self>,
     ) -> Option<std::ops::Range<usize>> {
         let state = TextInputProvider::text_input_state(self)?;
         state.marked_text_range_utf16()
     }
 
-    fn unmark_text(&mut self, _window: &mut gpui::Window, _cx: &mut gpui::Context<Self>) {
+    fn unmark_text(&mut self, _window: &mut gpui_kit::Window, _cx: &mut gpui_kit::Context<Self>) {
         if let Some(state) = TextInputProvider::text_input_state_mut(self) {
             state.unmark_text();
         }
@@ -1170,8 +1174,8 @@ impl gpui::EntityInputHandler for SettingsWindow {
         &mut self,
         range: Option<std::ops::Range<usize>>,
         text: &str,
-        window: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
+        window: &mut gpui_kit::Window,
+        cx: &mut gpui_kit::Context<Self>,
     ) {
         let mut changed = false;
         if let Some(state) = TextInputProvider::text_input_state_mut(self) {
@@ -1190,8 +1194,8 @@ impl gpui::EntityInputHandler for SettingsWindow {
         range: Option<std::ops::Range<usize>>,
         new_text: &str,
         new_selected_range: Option<std::ops::Range<usize>>,
-        window: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
+        window: &mut gpui_kit::Window,
+        cx: &mut gpui_kit::Context<Self>,
     ) {
         let mut changed = false;
         if let Some(state) = TextInputProvider::text_input_state_mut(self) {
@@ -1208,19 +1212,19 @@ impl gpui::EntityInputHandler for SettingsWindow {
     fn bounds_for_range(
         &mut self,
         range_utf16: std::ops::Range<usize>,
-        element_bounds: gpui::Bounds<gpui::Pixels>,
-        _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
-    ) -> Option<gpui::Bounds<gpui::Pixels>> {
+        element_bounds: gpui_kit::Bounds<gpui_kit::Pixels>,
+        _window: &mut gpui_kit::Window,
+        _cx: &mut gpui_kit::Context<Self>,
+    ) -> Option<gpui_kit::Bounds<gpui_kit::Pixels>> {
         let state = TextInputProvider::text_input_state(self)?;
         Some(state.bounds_for_range(range_utf16, element_bounds))
     }
 
     fn character_index_for_point(
         &mut self,
-        point: gpui::Point<gpui::Pixels>,
-        _window: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
+        point: gpui_kit::Point<gpui_kit::Pixels>,
+        _window: &mut gpui_kit::Window,
+        _cx: &mut gpui_kit::Context<Self>,
     ) -> Option<usize> {
         let state = TextInputProvider::text_input_state(self)?;
         Some(state.character_index_for_point(point))

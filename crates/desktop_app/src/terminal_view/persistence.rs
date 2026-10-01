@@ -1167,7 +1167,9 @@ impl TerminalView {
         let latest_revision = self.native_persist_revision.clone();
         let write_gate = self.native_persist_write_gate.clone();
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(80)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(80))
+                .await;
             if latest_revision.load(std::sync::atomic::Ordering::Acquire) != next_revision {
                 return;
             }
@@ -1193,16 +1195,18 @@ impl TerminalView {
                 return;
             };
 
-            let result = smol::unblock(move || {
-                let _write_guard = write_gate
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                if latest_revision.load(std::sync::atomic::Ordering::Acquire) != next_revision {
-                    return Ok(());
-                }
-                TerminalView::apply_persisted_native_workspace_write_request(request)
-            })
-            .await;
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    let _write_guard = write_gate
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    if latest_revision.load(std::sync::atomic::Ordering::Acquire) != next_revision {
+                        return Ok(());
+                    }
+                    TerminalView::apply_persisted_native_workspace_write_request(request)
+                })
+                .await;
             if let Err(error) = result {
                 log::error!("Failed to persist native tab workspace: {error}");
             }

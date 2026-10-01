@@ -1,4 +1,4 @@
-use gpui::Window;
+use gpui_kit::Window;
 use std::{
     env, fs,
     path::{Path, PathBuf},

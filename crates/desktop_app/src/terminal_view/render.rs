@@ -3,8 +3,8 @@ use super::surface::{terminal_edge_backgrounds, tui_surface_background};
 use super::*;
 use crate::ui::scrollbar::{self as ui_scrollbar, ScrollbarPaintStyle};
 use alacritty_terminal::vte::ansi::{Color as AnsiColor, NamedColor};
-use gpui::prelude::FluentBuilder;
-use gpui::{ElementInputHandler, ObjectFit, StyledImage, canvas};
+use gpui_kit::prelude::FluentBuilder;
+use gpui_kit::{ElementInputHandler, ObjectFit, StyledImage, canvas};
 use std::sync::Arc;
 use std::time::Instant;
 #[cfg(debug_assertions)]
@@ -17,7 +17,7 @@ struct KittyGraphicsSelectionPaint<'a> {
     display_offset: usize,
     selection_range: Option<(SelectionPos, SelectionPos)>,
     explicit: Option<&'a KittyImageSelection>,
-    color: gpui::Rgba,
+    color: gpui_kit::Rgba,
 }
 
 fn kitty_graphics_layers(
@@ -62,18 +62,23 @@ fn kitty_graphics_layers(
             px((placement.source_y as f32 + texture_border) * scale_y
                 + (tile_y as f32 + placement.clip_top_rows as f32) * cell_height),
         );
-        let image_size = gpui::size(
+        let image_size = gpui_kit::size(
             px((placement.image_width as f32 + texture_border * 2.0) * scale_x),
             px((placement.image_height as f32 + texture_border * 2.0) * scale_y),
         );
         let image_element = match image {
-            gpui::ImageSource::Render(image) => canvas(
+            gpui_kit::ImageSource::Render(image) => canvas(
                 |_, _, _| (),
                 move |bounds, (), window, _| {
                     let image_bounds = Bounds::new(bounds.origin - offset, image_size);
-                    if let Err(error) =
-                        window.paint_image(image_bounds, Default::default(), image, 0, false)
-                    {
+                    if let Err(error) = window.paint_image(
+                        image_bounds,
+                        image_bounds,
+                        Default::default(),
+                        image,
+                        0,
+                        false,
+                    ) {
                         log::warn!("unable to paint Kitty image: {error}");
                     }
                 },
@@ -81,7 +86,7 @@ fn kitty_graphics_layers(
             .absolute()
             .size_full()
             .into_any_element(),
-            source => gpui::img(source)
+            source => gpui_kit::img(source)
                 .absolute()
                 .left(-offset.x)
                 .top(-offset.y)
@@ -135,10 +140,10 @@ fn kitty_graphics_layers(
     (below_background, below_text, above_text)
 }
 
-fn blend_rgb_only(base: gpui::Rgba, target: gpui::Rgba, factor: f32) -> gpui::Rgba {
+fn blend_rgb_only(base: gpui_kit::Rgba, target: gpui_kit::Rgba, factor: f32) -> gpui_kit::Rgba {
     let factor = factor.clamp(0.0, 1.0);
     let inv = 1.0 - factor;
-    gpui::Rgba {
+    gpui_kit::Rgba {
         r: (base.r * inv) + (target.r * factor),
         g: (base.g * inv) + (target.g * factor),
         b: (base.b * inv) + (target.b * factor),
@@ -146,14 +151,14 @@ fn blend_rgb_only(base: gpui::Rgba, target: gpui::Rgba, factor: f32) -> gpui::Rg
     }
 }
 
-fn desaturate_rgb(color: gpui::Rgba, amount: f32) -> gpui::Rgba {
+fn desaturate_rgb(color: gpui_kit::Rgba, amount: f32) -> gpui_kit::Rgba {
     let amount = amount.clamp(0.0, 1.0);
     if amount <= f32::EPSILON {
         return color;
     }
     let luma = (color.r * 0.2126) + (color.g * 0.7152) + (color.b * 0.0722);
     let inv = 1.0 - amount;
-    gpui::Rgba {
+    gpui_kit::Rgba {
         r: (color.r * inv) + (luma * amount),
         g: (color.g * inv) + (luma * amount),
         b: (color.b * inv) + (luma * amount),
@@ -506,16 +511,16 @@ struct PaneCellBuildContext<'a> {
     effective_background_opacity: f32,
     background_opacity_cells: bool,
     cell_color_transform: CellColorTransform,
-    pane_focus_target_bg: gpui::Rgba,
-    terminal_surface_bg: gpui::Rgba,
+    pane_focus_target_bg: gpui_kit::Rgba,
+    terminal_surface_bg: gpui_kit::Rgba,
     selection_range: Option<(SelectionPos, SelectionPos)>,
     pane_search_results: Option<&'a termy_core::search_engine::SearchResults>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct ResolvedCellColors {
-    fg: gpui::Rgba,
-    bg: gpui::Rgba,
+    fg: gpui_kit::Rgba,
+    bg: gpui_kit::Rgba,
     uses_terminal_default_bg: bool,
 }
 
@@ -527,8 +532,8 @@ fn resolve_core_color(
     color: termy_core::TerminalRenderColor,
     colors: &TerminalColors,
     palette: Option<&TerminalPalette>,
-) -> gpui::Rgba {
-    let from_core = |color: TerminalColor| gpui::Rgba {
+) -> gpui_kit::Rgba {
+    let from_core = |color: TerminalColor| gpui_kit::Rgba {
         r: f32::from(color.r) / 255.0,
         g: f32::from(color.g) / 255.0,
         b: f32::from(color.b) / 255.0,
@@ -564,7 +569,9 @@ fn uses_block_element_background(c: char) -> bool {
     matches!(c as u32, 0x2580..=0x259F)
 }
 
-fn resolved_default_cell_colors(context: PaneCellBuildContext<'_>) -> (gpui::Rgba, gpui::Rgba) {
+fn resolved_default_cell_colors(
+    context: PaneCellBuildContext<'_>,
+) -> (gpui_kit::Rgba, gpui_kit::Rgba) {
     let mut default_bg = context.colors.background;
     default_bg.a *= context.effective_background_opacity;
     apply_cell_color_transform(
@@ -785,12 +792,12 @@ fn command_palette_backdrop_transform() -> CellColorTransform {
 }
 
 fn apply_cell_color_transform(
-    fg: gpui::Rgba,
-    bg: gpui::Rgba,
+    fg: gpui_kit::Rgba,
+    bg: gpui_kit::Rgba,
     transform: CellColorTransform,
-    fg_blend_target: gpui::Rgba,
-    bg_blend_target: gpui::Rgba,
-) -> (gpui::Rgba, gpui::Rgba) {
+    fg_blend_target: gpui_kit::Rgba,
+    bg_blend_target: gpui_kit::Rgba,
+) -> (gpui_kit::Rgba, gpui_kit::Rgba) {
     if !transform.is_active() {
         return (fg, bg);
     }
@@ -1274,14 +1281,14 @@ impl TerminalView {
         cols: usize,
         rows: usize,
         colors: &TerminalColors,
-        cursor_color: gpui::Rgba,
+        cursor_color: gpui_kit::Rgba,
         hovered_link_range: Option<(usize, usize, usize, usize)>,
         font_family: SharedString,
         font_size: Pixels,
         cursor_style: TerminalCursorStyle,
         cursor_cell: Option<(usize, usize)>,
         cursor_visible: bool,
-        terminal_surface_bg: gpui::Rgba,
+        terminal_surface_bg: gpui_kit::Rgba,
     ) -> TerminalGrid {
         let mut selection_bg = colors.cursor;
         selection_bg.a = SELECTION_BG_ALPHA;
@@ -1297,18 +1304,18 @@ impl TerminalView {
             // The shared terminal surface already owns the translucent default
             // background. Clearing the grid to that same translucent color would
             // composite it twice and darken the viewport rectangle.
-            clear_bg: gpui::Hsla::transparent_black(),
+            clear_bg: gpui_kit::Hsla::transparent_black(),
             terminal_surface_bg: terminal_surface_bg.into(),
             cursor_color: cursor_color.into(),
             selection_bg: selection_bg.into(),
             selection_fg: selection_fg.into(),
-            search_match_bg: gpui::Hsla {
+            search_match_bg: gpui_kit::Hsla {
                 h: 0.14,
                 s: 0.92,
                 l: 0.62,
                 a: 0.62,
             },
-            search_current_bg: gpui::Hsla {
+            search_current_bg: gpui_kit::Hsla {
                 h: 0.09,
                 s: 0.98,
                 l: 0.56,
@@ -1628,8 +1635,8 @@ impl TerminalView {
                                         div().child(frame).into_any_element()
                                     }))
                                     .children(toast.kind.icon_path().map(|path| {
-                                        gpui::svg()
-                                            .path(gpui::SharedString::from(path))
+                                        gpui_kit::svg()
+                                            .path(gpui_kit::SharedString::from(path))
                                             .size(px(13.0))
                                             .text_color(accent)
                                             .into_any_element()
@@ -1721,7 +1728,7 @@ impl TerminalView {
                                                         this.notify_overlay(cx);
                                                         cx.spawn(
                                                             async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-                                                                smol::Timer::after(Duration::from_millis(
+                                                                cx.background_executor().timer(Duration::from_millis(
                                                                     TOAST_COPY_FEEDBACK_MS,
                                                                 ))
                                                                 .await;
@@ -1846,7 +1853,9 @@ impl TerminalView {
 
         self.progress_indicator_animation_scheduled = true;
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-            smol::Timer::after(Duration::from_millis(16)).await;
+            cx.background_executor()
+                .timer(Duration::from_millis(16))
+                .await;
             let _ = cx.update(|cx| {
                 this.update(cx, |view, cx| {
                     view.progress_indicator_animation_scheduled = false;
@@ -1886,8 +1895,8 @@ impl TerminalView {
         track_color.a = self.scaled_chrome_alpha(0.10);
         let mut fill_color = match state {
             ProgressState::InProgress(_) | ProgressState::Indeterminate => self.colors.cursor,
-            ProgressState::Error(_) => gpui::rgb(0xef4444),
-            ProgressState::Warning(_) => gpui::rgb(0xf59e0b),
+            ProgressState::Error(_) => gpui_kit::rgb(0xef4444),
+            ProgressState::Warning(_) => gpui_kit::rgb(0xf59e0b),
             ProgressState::Clear => return None,
         };
         fill_color.a = self.scaled_chrome_alpha(0.92);
@@ -1919,7 +1928,7 @@ impl TerminalView {
     #[cfg(not(target_os = "macos"))]
     fn clamped_context_menu_origin(
         &self,
-        anchor: gpui::Point<Pixels>,
+        anchor: gpui_kit::Point<Pixels>,
         menu_width: f32,
         menu_height: f32,
     ) -> (f32, f32) {
@@ -2309,7 +2318,7 @@ impl TerminalView {
                         .flex()
                         .items_center()
                         .text_size(px(10.0))
-                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .font_weight(gpui_kit::FontWeight::MEDIUM)
                         .text_color(overlay_style.panel_foreground(0.58))
                         .child("SSH HOSTS"),
                 );
@@ -2399,7 +2408,7 @@ impl TerminalView {
             let panel_border = overlay_style.chrome_panel_neutral(0.22);
             let text_active = overlay_style.panel_foreground(0.95);
             let text_disabled = overlay_style.panel_foreground(0.42);
-            let text_danger = gpui::Rgba {
+            let text_danger = gpui_kit::Rgba {
                 r: 0.95,
                 g: 0.4,
                 b: 0.4,
@@ -2625,7 +2634,9 @@ impl TerminalView {
         if self.toast_manager.is_animating() && !self.toast_animation_scheduled {
             self.toast_animation_scheduled = true;
             cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-                smol::Timer::after(Duration::from_millis(16)).await;
+                cx.background_executor()
+                    .timer(Duration::from_millis(16))
+                    .await;
                 let _ = cx.update(|cx| {
                     this.update(cx, |view, cx| {
                         view.toast_animation_scheduled = false;
@@ -2643,7 +2654,7 @@ impl TerminalView {
                 .max(Duration::from_millis(1));
             self.resize_indicator_animation_scheduled = true;
             cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
-                smol::Timer::after(delay).await;
+                cx.background_executor().timer(delay).await;
                 let _ = cx.update(|cx| {
                     this.update(cx, |view, cx| {
                         view.resize_indicator_animation_scheduled = false;
@@ -2907,7 +2918,7 @@ impl Render for TerminalView {
         let divider_rgba = pane_divider_color(terminal_surface_bg, colors.foreground);
         let mut divider_line_rgba = divider_rgba;
         divider_line_rgba.a = self.scaled_chrome_neutral_border_alpha(0.42);
-        let divider_line_color: gpui::Hsla = divider_line_rgba.into();
+        let divider_line_color: gpui_kit::Hsla = divider_line_rgba.into();
         let mut pane_layers = Vec::<AnyElement>::new();
         let mut kitty_animation_deadline: Option<Instant> = None;
         let mut pane_dividers = Vec::<AnyElement>::new();
@@ -3107,7 +3118,7 @@ impl Render for TerminalView {
                     core_palette
                         .as_ref()
                         .and_then(|palette| palette.cursor)
-                        .map_or(colors.cursor, |color| gpui::Rgba {
+                        .map_or(colors.cursor, |color| gpui_kit::Rgba {
                             r: f32::from(color.r) / 255.0,
                             g: f32::from(color.g) / 255.0,
                             b: f32::from(color.b) / 255.0,
@@ -3219,7 +3230,7 @@ impl Render for TerminalView {
                             },
                             |bounds, fills, window, _| {
                                 for fill in fills {
-                                    window.paint_quad(gpui::fill(
+                                    window.paint_quad(gpui_kit::fill(
                                         Bounds::new(
                                             bounds.origin + fill.bounds.origin,
                                             fill.bounds.size,
@@ -3239,7 +3250,7 @@ impl Render for TerminalView {
                 }
 
                 if multi_pane {
-                    let pane_frame_bg: gpui::Hsla = pane_surface_bg.into();
+                    let pane_frame_bg: gpui_kit::Hsla = pane_surface_bg.into();
                     pane_layers.push(
                         div()
                             .absolute()
@@ -3278,7 +3289,7 @@ impl Render for TerminalView {
                     let mut border = blend_rgb_only(colors.cursor, colors.foreground, 0.32);
                     border.a =
                         self.scaled_chrome_alpha((pane_active_border_alpha * 0.72).max(0.16));
-                    let border_hsla: gpui::Hsla = border.into();
+                    let border_hsla: gpui_kit::Hsla = border.into();
                     pane_focus_accents.push(
                         div()
                             .id(pane.cached_element_ids.focus_accent.clone())
@@ -3296,7 +3307,7 @@ impl Render for TerminalView {
                 if pane.degraded {
                     // Hydration degraded panes still function, but this marker makes
                     // the warning state persistent until the next successful snapshot.
-                    let degraded_accent = gpui::Hsla {
+                    let degraded_accent = gpui_kit::Hsla {
                         h: 0.09,
                         s: 0.92,
                         l: 0.58,
@@ -3330,7 +3341,7 @@ impl Render for TerminalView {
                     let idle_grip_color = if is_drag_source {
                         grip_color
                     } else {
-                        gpui::Rgba {
+                        gpui_kit::Rgba {
                             a: 0.0,
                             ..grip_color
                         }
@@ -3348,7 +3359,7 @@ impl Render for TerminalView {
                             .top(px(handle_top))
                             .w(px(handle_width))
                             .h(px(PANE_DRAG_HANDLE_HEIGHT))
-                            .cursor(gpui::CursorStyle::OpenHand)
+                            .cursor(gpui_kit::CursorStyle::OpenHand)
                             .block_mouse_except_scroll()
                             .flex()
                             .items_center()
@@ -3383,7 +3394,7 @@ impl Render for TerminalView {
                                             cx,
                                         );
                                     });
-                                    cx.new(|_| gpui::Empty)
+                                    cx.new(|_| gpui_kit::Empty)
                                 },
                             )
                             .into_any_element(),
@@ -3488,8 +3499,8 @@ impl Render for TerminalView {
                 let pane_id = divider.pane_id.clone();
                 let axis = divider.axis;
                 let edge = divider.edge;
-                let cursor_color_hsla: gpui::Hsla = colors.cursor.into();
-                let blocked_color = gpui::Hsla {
+                let cursor_color_hsla: gpui_kit::Hsla = colors.cursor.into();
+                let blocked_color = gpui_kit::Hsla {
                     h: 0.1,
                     s: 0.88,
                     l: 0.58,
@@ -3567,12 +3578,13 @@ impl Render for TerminalView {
             self.kitty_animation_deadline = kitty_animation_deadline;
             self.kitty_animation_task = kitty_animation_deadline.map(|deadline| {
                 cx.spawn(async move |this, cx| {
-                    smol::Timer::after(
-                        deadline
-                            .saturating_duration_since(Instant::now())
-                            .max(Duration::from_millis(1)),
-                    )
-                    .await;
+                    cx.background_executor()
+                        .timer(
+                            deadline
+                                .saturating_duration_since(Instant::now())
+                                .max(Duration::from_millis(1)),
+                        )
+                        .await;
                     let _ = cx.update(|cx| {
                         this.update(cx, |view, cx| {
                             view.kitty_animation_deadline = None;
@@ -3703,8 +3715,8 @@ impl Render for TerminalView {
                 return None;
             }
             let bounds = self.ime_cursor_bounds()?;
-            let fg_color: gpui::Hsla = self.colors.foreground.into();
-            let bg_color: gpui::Hsla = self.colors.background.into();
+            let fg_color: gpui_kit::Hsla = self.colors.foreground.into();
+            let bg_color: gpui_kit::Hsla = self.colors.background.into();
             Some(
                 div()
                     .absolute()
@@ -4010,7 +4022,7 @@ impl Render for TerminalView {
                                                 },
                                             )
                                             .when(self.pane_move_drag_active(), |s| {
-                                                s.cursor(gpui::CursorStyle::ClosedHand)
+                                                s.cursor(gpui_kit::CursorStyle::ClosedHand)
                                             })
                                             .font_family(font_family)
                                             .text_size(font_size)
@@ -4141,8 +4153,8 @@ mod tests {
             col,
             char: c,
             combining: None,
-            fg: gpui::Hsla::transparent_black(),
-            bg: gpui::Hsla::transparent_black(),
+            fg: gpui_kit::Hsla::transparent_black(),
+            bg: gpui_kit::Hsla::transparent_black(),
             uses_terminal_default_bg: false,
             bold: false,
             italic: false,
@@ -4182,8 +4194,8 @@ mod tests {
     fn test_build_context_with_transform(
         opacity: f32,
         cell_color_transform: CellColorTransform,
-        pane_focus_target_bg: gpui::Rgba,
-        terminal_surface_bg: gpui::Rgba,
+        pane_focus_target_bg: gpui_kit::Rgba,
+        terminal_surface_bg: gpui_kit::Rgba,
     ) -> PaneCellBuildContext<'static> {
         static COLORS: std::sync::LazyLock<TerminalColors> =
             std::sync::LazyLock::new(TerminalColors::default);
@@ -4325,7 +4337,7 @@ mod tests {
         assert_eq!(
             indexed.color,
             Some(
-                gpui::Rgba {
+                gpui_kit::Rgba {
                     r: f32::from(0x12_u8) / 255.0,
                     g: f32::from(0x34_u8) / 255.0,
                     b: f32::from(0x56_u8) / 255.0,
@@ -4345,7 +4357,7 @@ mod tests {
         assert_eq!(
             rgb.color,
             Some(
-                gpui::Rgba {
+                gpui_kit::Rgba {
                     r: f32::from(0xab_u8) / 255.0,
                     g: f32::from(0xcd_u8) / 255.0,
                     b: f32::from(0xef_u8) / 255.0,
@@ -4718,25 +4730,25 @@ mod tests {
 
     #[test]
     fn apply_cell_color_transform_is_noop_for_zero_factors() {
-        let fg = gpui::Rgba {
+        let fg = gpui_kit::Rgba {
             r: 0.72,
             g: 0.64,
             b: 0.35,
             a: 0.91,
         };
-        let bg = gpui::Rgba {
+        let bg = gpui_kit::Rgba {
             r: 0.12,
             g: 0.17,
             b: 0.26,
             a: 0.66,
         };
-        let fg_target = gpui::Rgba {
+        let fg_target = gpui_kit::Rgba {
             r: 0.01,
             g: 0.02,
             b: 0.03,
             a: 1.0,
         };
-        let bg_target = gpui::Rgba {
+        let bg_target = gpui_kit::Rgba {
             r: 0.98,
             g: 0.97,
             b: 0.96,
@@ -4920,7 +4932,7 @@ mod tests {
             background: termy_core::TerminalRenderColor::DefaultBackground,
             ..termy_core::TerminalRenderCell::default()
         };
-        let rgb = |r: u8, g: u8, b: u8| gpui::Rgba {
+        let rgb = |r: u8, g: u8, b: u8| gpui_kit::Rgba {
             r: f32::from(r) / 255.0,
             g: f32::from(g) / 255.0,
             b: f32::from(b) / 255.0,
@@ -5039,13 +5051,13 @@ mod tests {
 
     #[test]
     fn resolve_cell_colors_keeps_transformed_default_background_in_sync_with_default_fill() {
-        let pane_focus_target_bg = gpui::Rgba {
+        let pane_focus_target_bg = gpui_kit::Rgba {
             r: 0.8,
             g: 0.7,
             b: 0.6,
             a: 1.0,
         };
-        let terminal_surface_bg = gpui::Rgba {
+        let terminal_surface_bg = gpui_kit::Rgba {
             r: 0.1,
             g: 0.2,
             b: 0.3,

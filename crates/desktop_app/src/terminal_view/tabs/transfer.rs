@@ -1,10 +1,10 @@
 use super::*;
-use gpui::{App, Global, Point, WindowHandle};
+use gpui_kit::{App, Global, Point, WindowHandle};
 
 #[derive(Clone)]
 struct WindowTabDrag {
     source: WeakEntity<TerminalView>,
-    window: gpui::AnyWindowHandle,
+    window: gpui_kit::AnyWindowHandle,
     tab_id: TabId,
     start: Point<Pixels>,
 }
@@ -129,7 +129,7 @@ impl TerminalView {
             "Releasing tab drag at {:?}; source window: {same_window}",
             event.position
         );
-        let viewport = Bounds::new(gpui::point(px(0.0), px(0.0)), window.viewport_size());
+        let viewport = Bounds::new(gpui_kit::point(px(0.0), px(0.0)), window.viewport_size());
         if same_window && viewport.contains(&event.position) {
             return false;
         }
@@ -144,8 +144,10 @@ impl TerminalView {
             // Wayland's implicit pointer grab ends on release. Let the compositor
             // report the newly hovered surface before choosing the destination;
             // no global window coordinates are available there.
-            smol::Timer::after(Duration::from_millis(80)).await;
-            let _ = cx.update(|cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(80))
+                .await;
+            cx.update(|cx| {
                 let destination = explicit_target.or_else(|| {
                     cx.windows()
                         .into_iter()
@@ -177,7 +179,7 @@ impl TerminalView {
 
     fn transfer_dragged_tab(
         drag: &WindowTabDrag,
-        destination: Option<gpui::AnyWindowHandle>,
+        destination: Option<gpui_kit::AnyWindowHandle>,
         cx: &mut App,
     ) -> Result<(), String> {
         let source = drag
@@ -368,7 +370,7 @@ impl TerminalView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{AppContext, TestAppContext, WindowOptions};
+    use gpui_kit::{AppContext, TestAppContext, WindowOptions};
 
     fn test_window(cx: &mut App, tabs: usize) -> WindowHandle<TerminalView> {
         cx.open_window(WindowOptions::default(), |window, cx| {
@@ -397,7 +399,7 @@ mod tests {
         .unwrap()
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn transfer_preserves_live_tab_state_and_remaps_colliding_ids(cx: &mut TestAppContext) {
         cx.update(|cx| {
             let source = test_window(cx, 2);
@@ -423,7 +425,7 @@ mod tests {
                 source: source_view.downgrade(),
                 window: source.into(),
                 tab_id: 1,
-                start: gpui::point(px(0.0), px(0.0)),
+                start: gpui_kit::point(px(0.0), px(0.0)),
             };
             TerminalView::transfer_dragged_tab(&drag, Some(target.into()), cx).unwrap();
             assert_eq!(source_view.read(cx).session.tabs.len(), 1);
@@ -448,7 +450,7 @@ mod tests {
         });
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn moving_last_tab_closes_source_and_hands_off_persistence(cx: &mut TestAppContext) {
         cx.update(|cx| {
             let source = test_window(cx, 1);
@@ -459,7 +461,7 @@ mod tests {
                 source: source_view.downgrade(),
                 window: source.into(),
                 tab_id: 1,
-                start: gpui::point(px(0.0), px(0.0)),
+                start: gpui_kit::point(px(0.0), px(0.0)),
             };
             TerminalView::transfer_dragged_tab(&drag, Some(target.into()), cx).unwrap();
             target

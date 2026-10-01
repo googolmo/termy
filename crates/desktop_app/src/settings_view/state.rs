@@ -1031,7 +1031,7 @@ impl SettingsWindow {
             field,
             self.editable_field_value(field),
         ));
-        self.focus_handle.focus(window);
+        self.focus_handle.focus(window, cx);
         cx.notify();
     }
 

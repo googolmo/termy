@@ -1,6 +1,6 @@
 //! Status surfaces: badges, banners, toasts, and empty states.
 
-use gpui::{
+use gpui_kit::{
     AnyElement, App, IntoElement, ParentElement, RenderOnce, SharedString, Styled, Window, div, px,
 };
 
@@ -168,7 +168,7 @@ impl RenderOnce for Banner {
                             .flex()
                             .items_center()
                             .gap(px(10.0))
-                            .flex_grow()
+                            .flex_grow(1.0)
                             .min_w(px(0.0))
                             .children(
                                 self.icon

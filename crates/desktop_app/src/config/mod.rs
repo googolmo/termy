@@ -32,12 +32,12 @@ pub use termy_core::config_core::{
     TerminalScrollbarVisibility, WindowsShell, WorkingDirFallback, resolve_active_theme,
 };
 
-pub fn system_appearance_from_window(appearance: gpui::WindowAppearance) -> SystemAppearance {
+pub fn system_appearance_from_window(appearance: gpui_kit::WindowAppearance) -> SystemAppearance {
     match appearance {
-        gpui::WindowAppearance::Light | gpui::WindowAppearance::VibrantLight => {
+        gpui_kit::WindowAppearance::Light | gpui_kit::WindowAppearance::VibrantLight => {
             SystemAppearance::Light
         }
-        gpui::WindowAppearance::Dark | gpui::WindowAppearance::VibrantDark => {
+        gpui_kit::WindowAppearance::Dark | gpui_kit::WindowAppearance::VibrantDark => {
             SystemAppearance::Dark
         }
     }
@@ -330,19 +330,19 @@ mod tests {
     #[test]
     fn gpui_window_appearance_maps_light_and_dark_variants() {
         assert_eq!(
-            system_appearance_from_window(gpui::WindowAppearance::Light),
+            system_appearance_from_window(gpui_kit::WindowAppearance::Light),
             SystemAppearance::Light
         );
         assert_eq!(
-            system_appearance_from_window(gpui::WindowAppearance::VibrantLight),
+            system_appearance_from_window(gpui_kit::WindowAppearance::VibrantLight),
             SystemAppearance::Light
         );
         assert_eq!(
-            system_appearance_from_window(gpui::WindowAppearance::Dark),
+            system_appearance_from_window(gpui_kit::WindowAppearance::Dark),
             SystemAppearance::Dark
         );
         assert_eq!(
-            system_appearance_from_window(gpui::WindowAppearance::VibrantDark),
+            system_appearance_from_window(gpui_kit::WindowAppearance::VibrantDark),
             SystemAppearance::Dark
         );
     }

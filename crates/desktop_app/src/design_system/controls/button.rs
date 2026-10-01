@@ -1,4 +1,4 @@
-use gpui::{
+use gpui_kit::{
     App, ClickEvent, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce,
     Rgba, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
@@ -153,8 +153,8 @@ impl RenderOnce for Button {
         let theme = tokens(cx);
         let colors = self.colors(&theme);
         let weight = match self.variant {
-            ButtonVariant::Primary => gpui::FontWeight::MEDIUM,
-            _ => gpui::FontWeight::NORMAL,
+            ButtonVariant::Primary => gpui_kit::FontWeight::MEDIUM,
+            _ => gpui_kit::FontWeight::NORMAL,
         };
 
         let mut button = div()

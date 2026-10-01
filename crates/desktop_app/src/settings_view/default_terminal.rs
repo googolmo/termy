@@ -8,13 +8,15 @@ impl SettingsWindow {
         self.default_terminal_busy = true;
         cx.notify();
         cx.spawn(async move |view, cx| {
-            let result = smol::unblock(move || {
-                if set_default {
-                    crate::default_terminal::set_default()?;
-                }
-                Ok(crate::default_terminal::is_default())
-            })
-            .await;
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    if set_default {
+                        crate::default_terminal::set_default()?;
+                    }
+                    Ok(crate::default_terminal::is_default())
+                })
+                .await;
             let _ = view.update(cx, |view, cx| {
                 view.default_terminal_state = Some(result);
                 view.default_terminal_busy = false;

@@ -3,7 +3,7 @@ use crate::config;
 use crate::settings_view::{SettingsSection, SettingsWindow};
 use crate::terminal_view::TerminalView;
 use crate::terminal_view::initial_window_background_appearance;
-use gpui::{App, AppContext, Bounds, WindowBounds, WindowOptions, px, size};
+use gpui_kit::{App, AppContext, Bounds, WindowBounds, WindowOptions, px, size};
 
 pub(crate) fn open_config_file() -> Result<(), String> {
     config::open_config_file().map_err(|error| error.to_string())
@@ -48,7 +48,7 @@ pub(crate) fn focus_existing_window<V: 'static>(cx: &mut App) -> bool {
     }
 }
 
-fn preferred_window<V: 'static>(cx: &App) -> Option<gpui::WindowHandle<V>> {
+fn preferred_window<V: 'static>(cx: &App) -> Option<gpui_kit::WindowHandle<V>> {
     cx.active_window()
         .and_then(|handle| handle.downcast::<V>())
         .or_else(|| {
@@ -64,7 +64,7 @@ pub(crate) fn has_window<V: 'static>(cx: &App) -> bool {
         .any(|handle| handle.downcast::<V>().is_some())
 }
 
-pub(crate) fn close_terminal_window<V: 'static>(handle: gpui::AnyWindowHandle, cx: &mut App) {
+pub(crate) fn close_terminal_window<V: 'static>(handle: gpui_kit::AnyWindowHandle, cx: &mut App) {
     let windows = cx.windows();
     if !windows.contains(&handle) {
         return;
@@ -83,7 +83,7 @@ pub(crate) fn close_terminal_window<V: 'static>(handle: gpui::AnyWindowHandle, c
 
 pub(crate) fn update_open_settings_windows(
     cx: &mut App,
-    mut update: impl FnMut(&mut SettingsWindow, &mut gpui::Context<SettingsWindow>),
+    mut update: impl FnMut(&mut SettingsWindow, &mut gpui_kit::Context<SettingsWindow>),
 ) {
     for settings_window in cx
         .windows()
@@ -185,19 +185,19 @@ fn open_settings_window_with_section(
     let window_background = initial_window_background_appearance(&settings_load.config);
 
     #[cfg(target_os = "macos")]
-    let titlebar = Some(gpui::TitlebarOptions {
+    let titlebar = Some(gpui_kit::TitlebarOptions {
         title: Some("Settings".into()),
         appears_transparent: true,
-        traffic_light_position: Some(gpui::point(px(12.0), px(10.0))),
+        traffic_light_position: Some(gpui_kit::point(px(12.0), px(10.0))),
     });
     #[cfg(target_os = "windows")]
-    let titlebar = Some(gpui::TitlebarOptions {
+    let titlebar = Some(gpui_kit::TitlebarOptions {
         title: Some("Settings".into()),
         appears_transparent: false,
         traffic_light_position: None,
     });
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-    let titlebar = Some(gpui::TitlebarOptions {
+    let titlebar = Some(gpui_kit::TitlebarOptions {
         title: Some("Settings".into()),
         appears_transparent: false,
         traffic_light_position: None,
@@ -211,7 +211,7 @@ fn open_settings_window_with_section(
             app_id: Some(APP_ID.to_string()),
             // Match the terminal window: let KDE/the window manager own the frame.
             #[cfg(target_os = "linux")]
-            window_decorations: Some(gpui::WindowDecorations::Server),
+            window_decorations: Some(gpui_kit::WindowDecorations::Server),
             is_resizable: true,
             window_min_size: Some(minimum_window_size),
             ..Default::default()
@@ -237,7 +237,7 @@ fn open_settings_window_with_section(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{AnyWindowHandle, TestAppContext};
+    use gpui_kit::{AnyWindowHandle, TestAppContext};
 
     fn settings_window_count(cx: &TestAppContext) -> usize {
         cx.windows()
@@ -246,7 +246,7 @@ mod tests {
             .count()
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn open_settings_window_reuses_existing_window(cx: &mut TestAppContext) {
         assert_eq!(settings_window_count(cx), 0);
 
@@ -277,7 +277,7 @@ mod tests {
         );
     }
 
-    #[gpui::test]
+    #[gpui_kit::test]
     fn open_settings_window_does_not_duplicate_when_called_from_settings_update(
         cx: &mut TestAppContext,
     ) {

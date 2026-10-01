@@ -374,8 +374,8 @@ fn write_primary(
                     .ok()
                     .map(ClipboardItem::new_string)
             } else {
-                gpui::ImageFormat::from_mime_type(&content.mime_type).map(|format| {
-                    ClipboardItem::new_image(&gpui::Image::from_bytes(format, content.data))
+                gpui_kit::ImageFormat::from_mime_type(&content.mime_type).map(|format| {
+                    ClipboardItem::new_image(&gpui_kit::Image::from_bytes(format, content.data))
                 })
             }
         });

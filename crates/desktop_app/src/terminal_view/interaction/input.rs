@@ -7,7 +7,7 @@ pub(in crate::terminal_view) enum PendingKeyRelease {
     Terminal { pane_id: String },
 }
 
-fn should_defer_key_down_to_ime(keystroke: &gpui::Keystroke) -> bool {
+fn should_defer_key_down_to_ime(keystroke: &gpui_kit::Keystroke) -> bool {
     let key = keystroke.key.as_str();
     keystroke.key_char.is_some()
         && !keystroke.modifiers.control
@@ -69,27 +69,29 @@ fn classify_file_drop_target(
     })
 }
 
-fn image_extension(format: gpui::ImageFormat) -> &'static str {
+fn image_extension(format: gpui_kit::ImageFormat) -> &'static str {
     match format {
-        gpui::ImageFormat::Gif => "gif",
-        gpui::ImageFormat::Png => "png",
-        gpui::ImageFormat::Jpeg => "jpg",
-        gpui::ImageFormat::Webp => "webp",
-        gpui::ImageFormat::Bmp => "bmp",
-        gpui::ImageFormat::Tiff => "tiff",
-        gpui::ImageFormat::Svg => "svg",
+        gpui_kit::ImageFormat::Gif => "gif",
+        gpui_kit::ImageFormat::Png => "png",
+        gpui_kit::ImageFormat::Jpeg => "jpg",
+        gpui_kit::ImageFormat::Webp => "webp",
+        gpui_kit::ImageFormat::Bmp => "bmp",
+        gpui_kit::ImageFormat::Tiff => "tiff",
+        gpui_kit::ImageFormat::Svg => "svg",
+        gpui_kit::ImageFormat::Ico => "ico",
+        gpui_kit::ImageFormat::Pnm => "pnm",
     }
 }
 
 pub(in crate::terminal_view) fn kitty_png_clipboard_item(png: &[u8]) -> ClipboardItem {
-    gpui::Image::from_bytes(gpui::ImageFormat::Png, png.to_vec()).into()
+    gpui_kit::Image::from_bytes(gpui_kit::ImageFormat::Png, png.to_vec()).into()
 }
 
 fn clipboard_image_cache_dir() -> PathBuf {
     env::temp_dir().join("termy-clipboard-images")
 }
 
-fn write_clipboard_image_to_temp_file(image: &gpui::Image) -> std::io::Result<PathBuf> {
+fn write_clipboard_image_to_temp_file(image: &gpui_kit::Image) -> std::io::Result<PathBuf> {
     let dir = clipboard_image_cache_dir();
     std::fs::create_dir_all(&dir)?;
 
@@ -108,6 +110,27 @@ fn write_clipboard_image_to_temp_file(image: &gpui::Image) -> std::io::Result<Pa
 fn clipboard_item_to_terminal_paste_input(
     item: &ClipboardItem,
 ) -> std::io::Result<Option<Vec<u8>>> {
+    // GPUI now exposes file clipboard entries directly. Its text fallback
+    // concatenates paths without separators or shell quoting.
+    if !item
+        .entries()
+        .iter()
+        .any(|entry| matches!(entry, gpui_kit::ClipboardEntry::String(_)))
+    {
+        let paths: Vec<_> = item
+            .entries()
+            .iter()
+            .filter_map(|entry| match entry {
+                gpui_kit::ClipboardEntry::ExternalPaths(paths) => Some(paths.paths()),
+                _ => None,
+            })
+            .flatten()
+            .cloned()
+            .collect();
+        if !paths.is_empty() {
+            return Ok(Some(shell_quote_paths(&paths).into_bytes()));
+        }
+    }
     if let Some(text) = item.text() {
         return Ok(Some(text.into_bytes()));
     }
@@ -115,22 +138,24 @@ fn clipboard_item_to_terminal_paste_input(
     let Some(entry) = item
         .entries()
         .iter()
-        .find(|entry| matches!(entry, gpui::ClipboardEntry::Image(_)))
+        .find(|entry| matches!(entry, gpui_kit::ClipboardEntry::Image(_)))
     else {
         return Ok(None);
     };
 
     match entry {
-        gpui::ClipboardEntry::Image(image) => {
+        gpui_kit::ClipboardEntry::Image(image) => {
             let path = write_clipboard_image_to_temp_file(image)?;
             Ok(Some(shell_quote_path(&path).into_bytes()))
         }
-        gpui::ClipboardEntry::String(_) => Ok(None),
+        gpui_kit::ClipboardEntry::String(_) | gpui_kit::ClipboardEntry::ExternalPaths(_) => {
+            Ok(None)
+        }
     }
 }
 
-fn synthetic_modifier_keystroke(key: &str, modifiers: gpui::Modifiers) -> gpui::Keystroke {
-    gpui::Keystroke {
+fn synthetic_modifier_keystroke(key: &str, modifiers: gpui_kit::Modifiers) -> gpui_kit::Keystroke {
+    gpui_kit::Keystroke {
         modifiers,
         key: key.to_string(),
         key_char: None,
@@ -138,9 +163,9 @@ fn synthetic_modifier_keystroke(key: &str, modifiers: gpui::Modifiers) -> gpui::
 }
 
 fn modifier_transition_events(
-    previous: gpui::Modifiers,
-    current: gpui::Modifiers,
-) -> Vec<(gpui::Keystroke, TerminalKeyEventKind)> {
+    previous: gpui_kit::Modifiers,
+    current: gpui_kit::Modifiers,
+) -> Vec<(gpui_kit::Keystroke, TerminalKeyEventKind)> {
     // GPUI surfaces pure modifier transitions separately from key presses, so
     // synthesize terminal key events here when enhanced keyboard reporting is active.
     let mut events = Vec::with_capacity(4);
@@ -193,10 +218,10 @@ fn overlay_owns_terminal_input_state(
 }
 
 fn terminal_modifier_transition_events(
-    previous: gpui::Modifiers,
-    current: gpui::Modifiers,
+    previous: gpui_kit::Modifiers,
+    current: gpui_kit::Modifiers,
     overlay_owns_terminal_input: bool,
-) -> Vec<(gpui::Keystroke, TerminalKeyEventKind)> {
+) -> Vec<(gpui_kit::Keystroke, TerminalKeyEventKind)> {
     if overlay_owns_terminal_input {
         return Vec::new();
     }
@@ -304,7 +329,7 @@ impl TerminalView {
     fn write_terminal_keystroke_to_pane(
         &mut self,
         pane_id: &str,
-        keystroke: &gpui::Keystroke,
+        keystroke: &gpui_kit::Keystroke,
         event_kind: TerminalKeyEventKind,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -324,7 +349,7 @@ impl TerminalView {
 
     fn write_terminal_keystroke(
         &mut self,
-        keystroke: &gpui::Keystroke,
+        keystroke: &gpui_kit::Keystroke,
         event_kind: TerminalKeyEventKind,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -347,7 +372,7 @@ impl TerminalView {
 
     fn write_forwarded_terminal_key_event(
         &mut self,
-        keystroke: &gpui::Keystroke,
+        keystroke: &gpui_kit::Keystroke,
         event_kind: TerminalKeyEventKind,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -368,7 +393,7 @@ impl TerminalView {
 
     fn write_terminal_key_release(
         &mut self,
-        keystroke: &gpui::Keystroke,
+        keystroke: &gpui_kit::Keystroke,
         cx: &mut Context<Self>,
     ) -> bool {
         // Use the pane that received the press so delayed releases do not drift
@@ -400,7 +425,7 @@ impl TerminalView {
         let mut cleared_selection = false;
 
         for (keystroke, event_kind) in
-            modifier_transition_events(previous, gpui::Modifiers::default())
+            modifier_transition_events(previous, gpui_kit::Modifiers::default())
         {
             let wrote = match event_kind {
                 TerminalKeyEventKind::Press => {
@@ -431,7 +456,7 @@ impl TerminalView {
     fn write_dropped_paths_at_position(
         &mut self,
         paths: &[PathBuf],
-        position: gpui::Point<Pixels>,
+        position: gpui_kit::Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
         if self.overlay_owns_terminal_input() {
@@ -464,7 +489,7 @@ impl TerminalView {
     fn maybe_suppress_tab_switch_hint_for_key_down(
         &mut self,
         key: &str,
-        modifiers: gpui::Modifiers,
+        modifiers: gpui_kit::Modifiers,
         cx: &mut Context<Self>,
     ) {
         if self.tab_strip.switch_hints.suppress_for_key_down(
@@ -944,7 +969,7 @@ mod tests {
         should_write_drop_to_target, take_deferred_ime_key_release,
         take_pending_key_release_action, terminal_modifier_transition_events,
     };
-    use gpui::{Keystroke, Modifiers};
+    use gpui_kit::{Keystroke, Modifiers};
     use std::{
         collections::{HashMap, HashSet},
         path::PathBuf,
@@ -1081,8 +1106,8 @@ mod tests {
 
     #[test]
     fn clipboard_image_paste_materializes_a_quoted_temp_path() {
-        let item = gpui::ClipboardItem::new_image(&gpui::Image::from_bytes(
-            gpui::ImageFormat::Png,
+        let item = gpui_kit::ClipboardItem::new_image(&gpui_kit::Image::from_bytes(
+            gpui_kit::ImageFormat::Png,
             vec![1, 2, 3, 4],
         ));
 
@@ -1097,27 +1122,53 @@ mod tests {
     }
 
     #[test]
+    fn clipboard_file_paths_are_separated_and_shell_quoted() {
+        let paths = gpui_kit::ExternalPaths(
+            [
+                PathBuf::from("/tmp/a b.txt"),
+                PathBuf::from("/tmp/it's.txt"),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        let item = gpui_kit::ClipboardEntry::ExternalPaths(paths).into();
+        assert_eq!(
+            clipboard_item_to_terminal_paste_input(&item).unwrap(),
+            Some(b"'/tmp/a b.txt' '/tmp/it'\\''s.txt'".to_vec())
+        );
+    }
+
+    #[test]
+    fn clipboard_text_is_pasted_without_shell_quoting() {
+        let item = gpui_kit::ClipboardItem::new_string("echo hello\n".into());
+        assert_eq!(
+            clipboard_item_to_terminal_paste_input(&item).unwrap(),
+            Some(b"echo hello\n".to_vec())
+        );
+    }
+
+    #[test]
     fn kitty_png_clipboard_item_preserves_png_bytes_and_format() {
         let png = [137, 80, 78, 71, 13, 10, 26, 10];
         let item = kitty_png_clipboard_item(&png);
 
         assert_eq!(item.entries().len(), 1);
-        let gpui::ClipboardEntry::Image(image) = &item.entries()[0] else {
+        let gpui_kit::ClipboardEntry::Image(image) = &item.entries()[0] else {
             panic!("Kitty clipboard item should contain an image");
         };
-        assert_eq!(image.format(), gpui::ImageFormat::Png);
+        assert_eq!(image.format(), gpui_kit::ImageFormat::Png);
         assert_eq!(image.bytes(), png);
     }
 
     #[test]
     fn image_extension_matches_expected_file_suffixes() {
-        assert_eq!(image_extension(gpui::ImageFormat::Gif), "gif");
-        assert_eq!(image_extension(gpui::ImageFormat::Png), "png");
-        assert_eq!(image_extension(gpui::ImageFormat::Jpeg), "jpg");
-        assert_eq!(image_extension(gpui::ImageFormat::Webp), "webp");
-        assert_eq!(image_extension(gpui::ImageFormat::Bmp), "bmp");
-        assert_eq!(image_extension(gpui::ImageFormat::Tiff), "tiff");
-        assert_eq!(image_extension(gpui::ImageFormat::Svg), "svg");
+        assert_eq!(image_extension(gpui_kit::ImageFormat::Gif), "gif");
+        assert_eq!(image_extension(gpui_kit::ImageFormat::Png), "png");
+        assert_eq!(image_extension(gpui_kit::ImageFormat::Jpeg), "jpg");
+        assert_eq!(image_extension(gpui_kit::ImageFormat::Webp), "webp");
+        assert_eq!(image_extension(gpui_kit::ImageFormat::Bmp), "bmp");
+        assert_eq!(image_extension(gpui_kit::ImageFormat::Tiff), "tiff");
+        assert_eq!(image_extension(gpui_kit::ImageFormat::Svg), "svg");
     }
 
     #[test]

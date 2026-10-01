@@ -1,8 +1,8 @@
 use crate::commands::CommandAction;
 use crate::config::AppConfig;
-use gpui::App;
+use gpui_kit::App;
 #[cfg(debug_assertions)]
-use gpui::Keystroke;
+use gpui_kit::Keystroke;
 use log::warn;
 use termy_core::command_core::{
     CommandId, KeybindDirective, KeybindLineRef, KeybindWarning, ResolvedKeybind,

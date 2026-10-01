@@ -1,4 +1,4 @@
-use gpui::{
+use gpui_kit::{
     App, ClickEvent, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce,
     SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
@@ -96,7 +96,7 @@ impl RenderOnce for Stepper {
             .overflow_hidden()
             .child(
                 div()
-                    .flex_grow()
+                    .flex_grow(1.0)
                     .min_w(px(0.0))
                     .px(CONTROL_TEXT_PADDING)
                     .text_size(BODY_SIZE)
