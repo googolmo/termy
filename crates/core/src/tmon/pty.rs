@@ -614,7 +614,7 @@ impl Drop for WakeReservation {
 
 fn try_reserve_counter(counter: &AtomicUsize, amount: usize, limit: usize) -> bool {
     counter
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
             current
                 .checked_add(amount)
                 .filter(|reserved| *reserved <= limit)

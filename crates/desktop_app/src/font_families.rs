@@ -364,7 +364,7 @@ mod tests {
         // GPUI's test context uses NoopTextSystem, which cannot catch a font
         // fallback regression. Headless Application uses the real Linux backend
         // without requiring an X11/Wayland display or GPU.
-        let app = gpui_kit::Application::headless();
+        let app = gpui_kit::platform::headless();
         let text_system = app.text_system();
         let preferred = system_monospace_family();
         assert_ne!(preferred, "monospace", "install a system monospace font");

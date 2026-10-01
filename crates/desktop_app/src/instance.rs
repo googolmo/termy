@@ -178,7 +178,14 @@ fn read_forwarded_urls(mut stream: TcpStream) -> io::Result<Vec<String>> {
         }
         stream.set_read_timeout(Some(remaining))?;
         let mut chunk = [0u8; 4096];
-        let count = stream.read(&mut chunk)?;
+        // Linux returns EINTR for timed socket reads even with SA_RESTART, and
+        // alacritty_terminal installs a SIGCHLD handler, so a PTY exit must not
+        // abort the handoff.
+        let count = match stream.read(&mut chunk) {
+            Ok(count) => count,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
         if count == 0 {
             break;
         }
