@@ -322,6 +322,19 @@ fn read_formats(
                                 data: image.bytes.clone(),
                             });
                         }
+                        ClipboardEntry::ExternalPaths(paths) if mime_type == "text/uri-list" => {
+                            let uri_list = paths
+                                .paths()
+                                .iter()
+                                .filter_map(|path| url::Url::from_file_path(path).ok())
+                                .map(|url| url.to_string())
+                                .collect::<Vec<_>>()
+                                .join("\r\n");
+                            contents.push(TerminalClipboardContent {
+                                mime_type: mime_type.clone(),
+                                data: uri_list.into_bytes(),
+                            });
+                        }
                         _ => {}
                     }
                 }
@@ -347,6 +360,7 @@ fn primary_item(
                 let mime_type = match entry {
                     ClipboardEntry::String(_) => "text/plain",
                     ClipboardEntry::Image(image) => image.format.mime_type(),
+                    ClipboardEntry::ExternalPaths(_) => "text/uri-list",
                 };
                 if !formats.iter().any(|existing| existing == mime_type) {
                     formats.push(mime_type.to_string());
