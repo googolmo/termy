@@ -251,27 +251,32 @@ export function groupGitHubReleasesByYear(
 }
 
 export async function fetchGitHubReleases(): Promise<GitHubRelease[]> {
-  releasesRequest ??= (async () => {
-    const res = await fetch(
-      `${GITHUB_API}/repos/${gitConfig.user}/${gitConfig.repo}/releases?per_page=100`,
-      { headers: githubHeaders() },
-    );
-    if (!res.ok) {
-      throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
-    }
-    const data = parseGitHubResponse(
-      githubReleaseListResponseSchema,
-      await res.json(),
-      'release list response',
-    );
-    return data
-      .filter((release) => isDesktopReleaseTag(release.tag_name))
-      .map(mapGitHubRelease);
-  })().catch((error) => {
+  // Build-time archive crawling shares one snapshot; runtime requests must see
+  // newly published releases without restarting the server.
+  if (process.env.TSS_PRERENDERING !== 'true') return requestGitHubReleases();
+  releasesRequest ??= requestGitHubReleases().catch((error) => {
     releasesRequest = undefined;
     throw error;
   });
   return releasesRequest;
+}
+
+async function requestGitHubReleases(): Promise<GitHubRelease[]> {
+  const res = await fetch(
+    `${GITHUB_API}/repos/${gitConfig.user}/${gitConfig.repo}/releases?per_page=100`,
+    { headers: githubHeaders() },
+  );
+  if (!res.ok) {
+    throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+  }
+  const data = parseGitHubResponse(
+    githubReleaseListResponseSchema,
+    await res.json(),
+    'release list response',
+  );
+  return data
+    .filter((release) => isDesktopReleaseTag(release.tag_name))
+    .map(mapGitHubRelease);
 }
 
 export async function fetchGitHubReleaseByTag(

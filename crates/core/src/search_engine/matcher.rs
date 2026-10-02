@@ -156,8 +156,9 @@ impl SearchResults {
         let index = self
             .matches
             .iter()
-            .position(|m| m.line >= target_line)
-            .unwrap_or(0);
+            .enumerate()
+            .min_by_key(|(_, m)| m.line.abs_diff(target_line))
+            .map(|(index, _)| index)?;
 
         self.current_index = Some(index);
         self.matches.get(index)
@@ -296,7 +297,7 @@ mod tests {
         assert_eq!(results.current().unwrap().line, 0);
 
         results.jump_to_nearest(100);
-        assert_eq!(results.current().unwrap().line, -10);
+        assert_eq!(results.current().unwrap().line, 5);
     }
 
     #[test]

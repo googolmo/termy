@@ -57,12 +57,25 @@ fn resolve_working_dir(path: &Path) -> Result<PathBuf, String> {
 fn find_termy_app_binary() -> Result<PathBuf, String> {
     let reported_exe_path =
         std::env::current_exe().map_err(|error| format!("Failed to resolve CLI path: {error}"))?;
+    find_app_for_cli(reported_exe_path, sibling_app_binary_names())
+}
+
+fn find_app_for_cli(reported_exe_path: PathBuf, sibling_names: &[&str]) -> Result<PathBuf, String> {
     let exe_path = resolve_executable_path(reported_exe_path);
     let exe_dir = exe_path
         .parent()
         .ok_or_else(|| format!("CLI path {} has no parent directory", exe_path.display()))?;
 
-    for sibling_name in sibling_app_binary_names() {
+    // Debian/RPM put the CLI in lib/termy and the launcher in bin. Prefer
+    // that launcher so its X11/Wayland environment setup is preserved.
+    if exe_dir.ends_with("lib/termy") {
+        let launcher = resolve_executable_path(exe_dir.join("../../bin/termy"));
+        if is_executable_file(&launcher) && launcher != exe_path {
+            return Ok(launcher);
+        }
+    }
+
+    for sibling_name in sibling_names {
         let sibling = exe_dir.join(sibling_name);
         if is_executable_file(&sibling) && sibling != exe_path {
             return Ok(sibling);
@@ -96,9 +109,12 @@ fn sibling_app_binary_names() -> &'static [&'static str] {
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        &["termy"]
+        LINUX_APP_BINARY_NAMES
     }
 }
+
+#[cfg(any(not(any(target_os = "macos", target_os = "windows")), all(test, unix)))]
+const LINUX_APP_BINARY_NAMES: &[&str] = &["termy", "termy-bin"];
 
 fn fallback_termy_app_binary_paths(app_binary_name: &str) -> [PathBuf; 2] {
     [
@@ -114,6 +130,35 @@ fn is_executable_file(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{resolve_executable_path, resolve_working_dir, sibling_app_binary_names};
+
+    #[cfg(unix)]
+    #[test]
+    fn packaged_linux_cli_finds_gui_after_resolving_symlink() {
+        let temp = tempfile::tempdir().unwrap();
+        let bundle = temp.path().join("usr/lib/termy");
+        let bin = temp.path().join("usr/bin");
+        std::fs::create_dir_all(&bundle).unwrap();
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bundle.join("termy-cli"), b"cli").unwrap();
+        std::fs::write(bundle.join("termy-bin"), b"gui").unwrap();
+        std::os::unix::fs::symlink("../lib/termy/termy-cli", bin.join("termy-cli")).unwrap();
+        assert_eq!(
+            super::find_app_for_cli(bin.join("termy-cli"), super::LINUX_APP_BINARY_NAMES).unwrap(),
+            bundle.join("termy-bin").canonicalize().unwrap()
+        );
+        std::fs::write(bin.join("termy"), b"system launcher").unwrap();
+        assert_eq!(
+            super::find_app_for_cli(bin.join("termy-cli"), super::LINUX_APP_BINARY_NAMES).unwrap(),
+            bin.join("termy").canonicalize().unwrap()
+        );
+        std::fs::remove_file(bin.join("termy")).unwrap();
+        // Tarball installations should keep using the launcher when available.
+        std::fs::write(bundle.join("termy"), b"launcher").unwrap();
+        assert_eq!(
+            super::find_app_for_cli(bin.join("termy-cli"), super::LINUX_APP_BINARY_NAMES).unwrap(),
+            bundle.join("termy").canonicalize().unwrap()
+        );
+    }
 
     #[test]
     fn open_resolves_existing_directory() {

@@ -36,7 +36,7 @@ pub fn run() -> Result<(), String> {
 }
 
 fn launch_editor(path: &Path, editor: Option<OsString>) -> Result<(), String> {
-    let launchers = editor_launchers(path, editor);
+    let launchers = editor_launchers(path, editor)?;
     try_launchers(&launchers, |launcher| {
         Command::new(&launcher.program)
             .args(&launcher.args)
@@ -45,13 +45,27 @@ fn launch_editor(path: &Path, editor: Option<OsString>) -> Result<(), String> {
     })
 }
 
-fn editor_launchers(path: &Path, editor: Option<OsString>) -> Vec<EditorLauncher> {
+fn editor_launchers(path: &Path, editor: Option<OsString>) -> Result<Vec<EditorLauncher>, String> {
     let path = path.as_os_str().to_os_string();
     let mut launchers = Vec::new();
 
     // Try $EDITOR first, then platform-specific fallbacks
     if let Some(editor) = editor {
-        launchers.push(EditorLauncher::new(editor, vec![path.clone()]));
+        // Preserve literal executable paths, including spaces and non-UTF-8 paths.
+        let launcher = if Path::new(&editor).is_file() {
+            EditorLauncher::new(editor, vec![path.clone()])
+        } else {
+            let command = editor.to_str().ok_or("EDITOR is not valid UTF-8")?;
+            let words = shlex::split(command).ok_or("EDITOR has unmatched quotes or escapes")?;
+            let (program, arguments) = words.split_first().ok_or("EDITOR is empty")?;
+            if program.is_empty() {
+                return Err("EDITOR has an empty executable name".to_string());
+            }
+            let mut args: Vec<OsString> = arguments.iter().map(OsString::from).collect();
+            args.push(path.clone());
+            EditorLauncher::new(program, args)
+        };
+        launchers.push(launcher);
     }
 
     #[cfg(target_os = "macos")]
@@ -71,7 +85,7 @@ fn editor_launchers(path: &Path, editor: Option<OsString>) -> Vec<EditorLauncher
     #[cfg(target_os = "windows")]
     launchers.push(EditorLauncher::new("notepad", vec![path]));
 
-    launchers
+    Ok(launchers)
 }
 
 fn try_launchers<F>(launchers: &[EditorLauncher], mut launch: F) -> Result<(), String>
@@ -98,6 +112,52 @@ where
 mod tests {
     use super::*;
     use std::{collections::VecDeque, io};
+
+    #[test]
+    fn editor_arguments_and_quoted_paths_are_preserved() {
+        let path = Path::new("config with spaces.toml");
+        for (command, program, args) in [
+            (
+                "code --wait",
+                "code",
+                vec!["--wait", "config with spaces.toml"],
+            ),
+            (
+                "'/opt/My Editor/bin/editor' --wait",
+                "/opt/My Editor/bin/editor",
+                vec!["--wait", "config with spaces.toml"],
+            ),
+            (
+                "editor '$HOME; echo nope'",
+                "editor",
+                vec!["$HOME; echo nope", "config with spaces.toml"],
+            ),
+        ] {
+            let launchers = editor_launchers(path, Some(command.into())).unwrap();
+            assert_eq!(launchers[0].program, OsString::from(program));
+            assert_eq!(
+                launchers[0].args,
+                args.into_iter().map(OsString::from).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn literal_editor_path_with_spaces_still_works() {
+        let temp = tempfile::tempdir().unwrap();
+        let editor = temp.path().join("My Editor");
+        std::fs::write(&editor, b"").unwrap();
+        let launchers =
+            editor_launchers(Path::new("config"), Some(editor.clone().into_os_string())).unwrap();
+        assert_eq!(launchers[0].program, editor.into_os_string());
+    }
+
+    #[test]
+    fn malformed_editor_commands_are_reported() {
+        for command in ["", "''", "editor 'unterminated"] {
+            assert!(editor_launchers(Path::new("config"), Some(command.into())).is_err());
+        }
+    }
 
     #[test]
     fn launcher_failures_fall_through_until_one_succeeds() {
@@ -143,7 +203,7 @@ mod tests {
     #[test]
     fn macos_launchers_prefer_editor_then_open() {
         let path = Path::new("config.toml");
-        let launchers = editor_launchers(path, Some(OsString::from("nvim")));
+        let launchers = editor_launchers(path, Some(OsString::from("nvim"))).unwrap();
 
         assert_eq!(launchers.len(), 2);
         assert_eq!(launchers[0].program, OsString::from("nvim"));
@@ -159,7 +219,7 @@ mod tests {
     #[test]
     fn macos_launchers_use_open_when_editor_is_unset() {
         let path = Path::new("config.toml");
-        let launchers = editor_launchers(path, None);
+        let launchers = editor_launchers(path, None).unwrap();
 
         assert_eq!(launchers.len(), 1);
         assert_eq!(launchers[0].program, OsString::from("open"));

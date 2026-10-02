@@ -29,6 +29,7 @@ pub struct SearchEngine {
     config: SearchConfig,
     compiled_regex: Option<Regex>,
     pattern: String,
+    pattern_error: Option<String>,
 }
 
 impl SearchEngine {
@@ -37,15 +38,17 @@ impl SearchEngine {
             config,
             compiled_regex: None,
             pattern: String::new(),
+            pattern_error: None,
         }
     }
 
     pub fn set_pattern(&mut self, pattern: &str) -> Result<(), String> {
         if pattern == self.pattern {
-            return Ok(());
+            return self.pattern_error.clone().map_or(Ok(()), Err);
         }
 
         self.pattern = pattern.to_string();
+        self.pattern_error = None;
 
         if pattern.is_empty() {
             self.compiled_regex = None;
@@ -67,7 +70,9 @@ impl SearchEngine {
             }
             Err(e) => {
                 self.compiled_regex = None;
-                Err(e.to_string())
+                let error = e.to_string();
+                self.pattern_error = Some(error.clone());
+                Err(error)
             }
         }
     }

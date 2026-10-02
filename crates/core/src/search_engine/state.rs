@@ -94,6 +94,8 @@ impl SearchState {
         let mut config = self.config();
         config.case_sensitive = !config.case_sensitive;
         self.engine.set_config(config);
+        let query = self.query.clone();
+        self.set_query(&query);
     }
 
     pub fn toggle_regex_mode(&mut self) {
@@ -155,6 +157,36 @@ impl SearchState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn invalid_regex_error_survives_rescans_and_config_changes() {
+        let mut state = SearchState::new();
+        state.set_query("[");
+        state.toggle_regex_mode();
+        let error = state.error().expect("invalid regex error").to_string();
+        assert!(!state.has_valid_pattern());
+        state.set_query("[");
+        assert_eq!(state.error(), Some(error.as_str()));
+        state.toggle_case_sensitive();
+        assert_eq!(state.error(), Some(error.as_str()));
+        state.toggle_regex_mode();
+        assert!(state.has_valid_pattern());
+        assert!(state.error().is_none());
+    }
+
+    #[test]
+    fn nearest_match_uses_engine_result_order() {
+        let mut state = SearchState::new();
+        state.set_query("match");
+        state.search(0, 100, |line| match line {
+            0 | 50 | 100 => Some("match"),
+            _ => None,
+        });
+        for (target, expected) in [(50, 50), (49, 50), (-10, 0), (110, 100)] {
+            state.jump_to_nearest(target);
+            assert_eq!(state.results().current().unwrap().line, expected);
+        }
+    }
 
     #[test]
     fn results_revision_changes_on_search_and_clear() {

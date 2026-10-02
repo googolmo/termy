@@ -16,6 +16,22 @@ Release packaging is rooted in `scripts/`. GitHub release workflows should call 
 
 The app version used by packaging scripts comes from `crates/desktop_app/Cargo.toml` unless an explicit version is passed.
 
+## Update installation
+
+The macOS updater stages the new app bundle on the destination filesystem before
+replacing the installed bundle. Installation failures restore the previous bundle;
+if restoration also fails, the error identifies the retained recovery files.
+
+The Linux tarball installer in the updater replaces all three executable entries:
+the `termy` launcher, `termy-bin`, and `termy-cli`. It rejects incomplete archives
+before changing the installation and stages replacements before publishing them
+by rename. Linux in-app update availability remains controlled by the platform gate.
+
+Run the installer regression tests with
+`cargo test -p termy --lib auto_update`. On Unix hosts these also exercise
+Linux archive installation using temporary directories, without updating the
+host's installed application.
+
 ## Artifact Paths
 
 - macOS DMG: `dist/Termy-<version>-macos-<arch>[-signed].dmg` (GitHub releases require `-signed`)

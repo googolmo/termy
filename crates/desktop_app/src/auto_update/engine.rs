@@ -288,41 +288,25 @@ pub fn do_install(dmg_path: &PathBuf) -> Result<InstallOutcome> {
         }
 
         let app_path = app_path.context("No .app bundle found inside mounted DMG")?;
-        let target_app = PathBuf::from("/Applications").join(
-            app_path
-                .file_name()
-                .context("Mounted app bundle is missing file name")?,
-        );
-
-        if target_app.exists() {
-            let rm_result = Command::new("rm")
-                .arg("-rf")
-                .arg(&target_app)
+        let app_name = app_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .context("Mounted app bundle is missing a valid file name")?;
+        super::staged_install::install_staged(Path::new("/Applications"), &[app_name], |stage| {
+            // ditto preserves bundle metadata; only a complete copy is published.
+            let copy_result = Command::new("ditto")
+                .arg(&app_path)
+                .arg(stage.join(app_name))
                 .output()
-                .context("Failed to remove old app bundle in /Applications")?;
-            if !rm_result.status.success() {
+                .context("Failed to stage app bundle in /Applications")?;
+            if !copy_result.status.success() {
                 anyhow::bail!(
-                    "failed removing existing app: {}",
-                    String::from_utf8_lossy(&rm_result.stderr)
+                    "ditto failed: {}",
+                    String::from_utf8_lossy(&copy_result.stderr)
                 );
             }
-        }
-
-        // Use ditto for macOS app bundles to preserve metadata and avoid nested .app copies.
-        let copy_result = Command::new("ditto")
-            .arg(&app_path)
-            .arg(&target_app)
-            .output()
-            .context("Failed to copy app bundle to /Applications")?;
-
-        if !copy_result.status.success() {
-            anyhow::bail!(
-                "ditto failed: {}",
-                String::from_utf8_lossy(&copy_result.stderr)
-            );
-        }
-
-        Ok(())
+            Ok(())
+        })
     })();
 
     // Always try to detach, even if install failed.
@@ -459,80 +443,8 @@ fn quote_windows_arg(arg: &str) -> String {
 
 #[cfg(target_os = "linux")]
 pub fn do_install(tarball_path: &PathBuf) -> Result<InstallOutcome> {
-    use std::process::Command;
-
-    let home = std::env::var("HOME").context("HOME environment variable not set")?;
-    let home_path = PathBuf::from(&home);
-
-    let install_dir = if home_path.join(".local/bin").exists() {
-        home_path.join(".local/bin")
-    } else {
-        let local_bin = home_path.join(".local/bin");
-        std::fs::create_dir_all(&local_bin).context("Failed to create ~/.local/bin")?;
-        local_bin
-    };
-
-    let temp_dir = std::env::temp_dir().join("termy-update-extract");
-    let _ = std::fs::remove_dir_all(&temp_dir);
-    std::fs::create_dir_all(&temp_dir).context("Failed to create temp extraction directory")?;
-
-    let tar_result = Command::new("tar")
-        .args([
-            "-xzf",
-            &tarball_path.to_string_lossy(),
-            "-C",
-            &temp_dir.to_string_lossy(),
-        ])
-        .output()
-        .context("Failed to extract tarball")?;
-
-    if !tar_result.status.success() {
-        anyhow::bail!(
-            "tar extraction failed: {}",
-            String::from_utf8_lossy(&tar_result.stderr)
-        );
-    }
-
-    // Find the termy binary in the extracted contents
-    let binary_path = temp_dir.join("termy/termy");
-    let alt_binary_path = temp_dir.join("termy");
-
-    let source_binary = if binary_path.exists() {
-        binary_path
-    } else if alt_binary_path.is_file() {
-        alt_binary_path
-    } else {
-        // Search for the binary
-        let mut found = None;
-        for entry in std::fs::read_dir(&temp_dir).context("Failed to read temp directory")? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                let potential = path.join("termy");
-                if potential.exists() {
-                    found = Some(potential);
-                    break;
-                }
-            }
-        }
-        found.context("Could not find termy binary in extracted tarball")?
-    };
-
-    let target_binary = install_dir.join("termy");
-    std::fs::copy(&source_binary, &target_binary)
-        .context("Failed to copy binary to install directory")?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&target_binary)?.permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&target_binary, perms)?;
-    }
-
-    // Cleanup
-    let _ = std::fs::remove_dir_all(&temp_dir);
-
+    let home = std::env::var_os("HOME").context("HOME environment variable not set")?;
+    super::linux_install::install_archive(tarball_path, &PathBuf::from(home).join(".local/bin"))?;
     Ok(InstallOutcome::Installed)
 }
 

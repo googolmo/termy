@@ -1,6 +1,10 @@
 use gpui_kit::{App, AsyncApp, WeakEntity};
 
 mod engine;
+#[cfg(any(target_os = "linux", all(test, unix)))]
+mod linux_install;
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+mod staged_install;
 
 pub use engine::{InstallOutcome, ReleaseInfo, UpdateCheck, UpdateState};
 
