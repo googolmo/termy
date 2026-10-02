@@ -168,18 +168,20 @@ mod tests {
     #[test]
     fn marker_top_for_line_matches_current_after_jump_to_nearest() {
         let mut results = SearchResults::from_matches(vec![
-            SearchMatch::new(-40, 0, 1),
-            SearchMatch::new(-8, 0, 1),
-            SearchMatch::new(-5, 0, 1),
             SearchMatch::new(6, 0, 1),
+            SearchMatch::new(-5, 0, 1),
+            SearchMatch::new(-8, 0, 1),
+            SearchMatch::new(-40, 0, 1),
         ]);
         results.jump_to_nearest(-7);
         let current = results.current().expect("current match expected");
+        // Engine results are newest-first; -8 is closer to -7 than -5.
+        assert_eq!(current.line, -8);
 
         let history_size = 80;
         let viewport_rows = 24;
         let marker_top_limit = 240.0;
-        let expected = marker_top_for_line(-5, history_size, viewport_rows, marker_top_limit);
+        let expected = marker_top_for_line(-8, history_size, viewport_rows, marker_top_limit);
         let current_top =
             marker_top_for_line(current.line, history_size, viewport_rows, marker_top_limit);
 
