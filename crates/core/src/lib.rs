@@ -23,7 +23,9 @@ pub use crate::config_core::{
     AppConfig, ConfigDiagnostic, ConfigDiagnosticKind, ConfigParseReport,
     CursorStyle as AppConfigCursorStyle, SystemAppearance, config_path,
 };
-pub use crate::tmon::{GraphicsImage, graphics_display_size};
+pub use crate::tmon::{
+    GraphicsDisplayLayout, GraphicsImage, graphics_display_layout, graphics_display_size,
+};
 pub use cell_metrics::{TerminalCellMetrics, measure_cell, measure_cell_from_config};
 pub use config::{
     LoadedTermyConfig, ResolvedThemeColors, TermyConfigError, load_config_from_contents,

@@ -39,7 +39,7 @@ fn kitty_graphics_layers(
             continue;
         }
 
-        let (image_width, image_height) = termy_core::graphics_display_size(
+        let layout = termy_core::graphics_display_layout(
             placement.source_width,
             placement.source_height,
             placement.display_cols,
@@ -48,6 +48,7 @@ fn kitty_graphics_layers(
             (placement.x_offset, placement.y_offset),
             placement.virtual_cell.is_some(),
         );
+        let (image_width, image_height) = layout.image_size;
         let scale_x = image_width / placement.source_width.max(1) as f32;
         let scale_y = image_height / placement.source_height.max(1) as f32;
         let (tile_x, tile_y) = placement.virtual_cell.unwrap_or((0, 0));
@@ -58,9 +59,8 @@ fn kitty_graphics_layers(
             0.0
         };
         let offset = point(
-            px((placement.source_x as f32 + texture_border) * scale_x + tile_x as f32 * cell_width),
-            px((placement.source_y as f32 + texture_border) * scale_y
-                + (tile_y as f32 + placement.clip_top_rows as f32) * cell_height),
+            px((placement.source_x as f32 + texture_border) * scale_x),
+            px((placement.source_y as f32 + texture_border) * scale_y),
         );
         let image_size = gpui_kit::size(
             px((placement.image_width as f32 + texture_border * 2.0) * scale_x),
@@ -95,6 +95,18 @@ fn kitty_graphics_layers(
                 .object_fit(ObjectFit::Fill)
                 .into_any_element(),
         };
+        // Clip to the fitted source rectangle before clipping to the placement
+        // or placeholder cell, so cropped pixels cannot bleed into the letterbox.
+        let image_element = div()
+            .absolute()
+            .left(px(layout.image_offset.0 - tile_x as f32 * cell_width))
+            .top(px(layout.image_offset.1
+                - (tile_y as f32 + placement.clip_top_rows as f32)
+                    * cell_height))
+            .w(px(image_width))
+            .h(px(image_height))
+            .overflow_hidden()
+            .child(image_element);
         let selected = selection
             .explicit
             .is_some_and(|selected| selected.matches(selection.pane_id, placement))

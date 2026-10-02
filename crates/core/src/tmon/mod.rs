@@ -11,7 +11,9 @@ mod grid;
 mod inflate;
 #[doc(hidden)]
 pub mod kitty_graphics_unicode;
-pub use graphics_geometry::{GraphicsRowSpan, graphics_display_size};
+pub use graphics_geometry::{
+    GraphicsDisplayLayout, GraphicsRowSpan, graphics_display_layout, graphics_display_size,
+};
 mod graphics_animation;
 pub use graphics_animation::{
     GraphicsAnimation, GraphicsAnimationControl, GraphicsComposition, GraphicsFrameUpdate,

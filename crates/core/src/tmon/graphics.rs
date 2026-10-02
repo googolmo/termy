@@ -178,7 +178,7 @@ impl GraphicsState {
     pub(crate) fn resize(&mut self, size: Size) {
         self.viewport_rows = size.rows;
         for placement in &mut self.placements {
-            let (width, height) = crate::tmon::graphics_display_size(
+            let (width, height) = crate::tmon::graphics_display_layout(
                 placement.source_width,
                 placement.source_height,
                 placement.display_cols,
@@ -186,7 +186,8 @@ impl GraphicsState {
                 (size.cell_width.max(1.0), size.cell_height.max(1.0)),
                 (placement.x_offset, placement.y_offset),
                 matches!(placement.location, PlacementLocation::Virtual),
-            );
+            )
+            .placement_size;
             placement.occupied_cols = ((width + placement.x_offset as f32)
                 / size.cell_width.max(1.0))
             .ceil()
@@ -622,7 +623,7 @@ impl GraphicsState {
                 .max(1.0);
             placed_source_width = source_width.min(available.floor() as u32);
         }
-        let (width, height) = crate::tmon::graphics_display_size(
+        let (width, height) = crate::tmon::graphics_display_layout(
             placed_source_width,
             source_height,
             display_cols,
@@ -630,7 +631,8 @@ impl GraphicsState {
             (cell_width, cell_height),
             (x_offset, y_offset),
             virtual_placement,
-        );
+        )
+        .placement_size;
         let occupied_cols = ((width + x_offset as f32) / cell_width).ceil().max(1.0) as u32;
         let occupied_rows = ((height + y_offset as f32) / cell_height).ceil().max(1.0) as u32;
         let placement_id = command.u32_value('p').unwrap_or(0);
@@ -1255,10 +1257,13 @@ fn response(
     if (successful && quiet >= 1) || (!successful && quiet >= 2) {
         return None;
     }
-    let image_id = resolved_image_id
-        .or_else(|| command.u32_value('i'))
-        .filter(|image_id| *image_id != 0);
+    let requested_image_id = command.u32_value('i').filter(|id| *id != 0);
     let image_number = command.u32_value('I').filter(|number| *number != 0);
+    // Internal IDs allocated for anonymous uploads are not requests for replies.
+    if requested_image_id.is_none() && image_number.is_none() {
+        return None;
+    }
+    let image_id = resolved_image_id.or(requested_image_id);
     let mut control = match (image_id, image_number) {
         (Some(image_id), Some(image_number)) => format!("i={image_id},I={image_number}"),
         (Some(image_id), None) => format!("i={image_id}"),

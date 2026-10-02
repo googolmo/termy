@@ -307,7 +307,7 @@ impl KittyGraphicsState {
     pub fn resize(&mut self, size: TerminalSize) {
         self.viewport_rows = size.rows;
         for placement in &mut self.placements {
-            let (width, height) = crate::tmon::graphics_display_size(
+            let (width, height) = crate::tmon::graphics_display_layout(
                 placement.source_width,
                 placement.source_height,
                 placement.display_cols,
@@ -315,7 +315,8 @@ impl KittyGraphicsState {
                 (size.cell_width.max(1.0), size.cell_height.max(1.0)),
                 (placement.x_offset, placement.y_offset),
                 matches!(placement.location, PlacementLocation::Virtual),
-            );
+            )
+            .placement_size;
             placement.occupied_cols = ((width + placement.x_offset as f32)
                 / size.cell_width.max(1.0))
             .ceil()
@@ -1081,7 +1082,7 @@ impl KittyGraphicsState {
                 .max(1.0);
             placed_source_width = source_width.min(available.floor() as u32);
         }
-        let (width, height) = crate::tmon::graphics_display_size(
+        let (width, height) = crate::tmon::graphics_display_layout(
             placed_source_width,
             source_height,
             display_cols,
@@ -1089,7 +1090,8 @@ impl KittyGraphicsState {
             (cell_width, cell_height),
             (x_offset, y_offset),
             virtual_placement,
-        );
+        )
+        .placement_size;
         let occupied_cols = ((width + x_offset as f32) / cell_width).ceil().max(1.0) as u32;
         let occupied_rows = ((height + y_offset as f32) / cell_height).ceil().max(1.0) as u32;
         let placement_id = command.u32_value('p').unwrap_or(0);

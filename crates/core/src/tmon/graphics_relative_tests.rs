@@ -119,4 +119,32 @@ fn grok_deleting_parent_removes_relative_descendants() {
     );
 }
 
-
+#[test]
+fn wildcard_parent_cycles_reply_with_ecycle() {
+    for parent in ["P=1", "P=1,Q=0", "P=1,Q=1", "P=2,Q=1"] {
+        let mut state = GraphicsState::default();
+        let mut grid = Grid::new(80, 24, 100, CursorStyle::Block);
+        state.apply(
+            command("a=T,i=1,p=1,f=32,s=1,v=1,C=1", &[255; 4]),
+            &mut grid,
+            test_size(),
+        );
+        state.apply(
+            command("a=T,i=2,p=1,P=1,f=32,s=1,v=1", &[255; 4]),
+            &mut grid,
+            test_size(),
+        );
+        let result = state.apply(
+            command(&format!("a=p,i=1,p=1,{parent}"), &[]),
+            &mut grid,
+            test_size(),
+        );
+        assert!(!result.changed);
+        assert!(
+            String::from_utf8(result.replies)
+                .unwrap()
+                .contains("ECYCLE")
+        );
+        assert_eq!(state.render_placements(&grid).len(), 2);
+    }
+}

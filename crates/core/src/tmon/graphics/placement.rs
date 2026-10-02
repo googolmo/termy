@@ -26,13 +26,18 @@ impl GraphicsState {
         parent_image_id: u32,
         parent_placement_id: u32,
     ) -> Result<(), String> {
-        if image_id == parent_image_id && placement_id == parent_placement_id {
-            return Err("ECYCLE:a placement cannot be relative to itself".into());
-        }
         let mut parent = self
             .placement_by_key(alternate, parent_image_id, parent_placement_id)
             .ok_or_else(|| "ENOPARENT:relative placement parent not found".to_string())?;
         for depth in 1..=MAX_RELATIVE_DEPTH {
+            // Q=0 selects an existing placement. Compare its resolved identity,
+            // not the wildcard, before accepting a replacement of that placement.
+            if placement_id != 0
+                && parent.image_id == image_id
+                && parent.placement_id == placement_id
+            {
+                return Err("ECYCLE:relative placement cycle".into());
+            }
             let PlacementLocation::Relative {
                 parent_image_id,
                 parent_placement_id,
@@ -41,9 +46,6 @@ impl GraphicsState {
             else {
                 return Ok(());
             };
-            if parent_image_id == image_id && parent_placement_id == placement_id {
-                return Err("ECYCLE:relative placement cycle".into());
-            }
             parent = self
                 .placement_by_key(alternate, parent_image_id, parent_placement_id)
                 .ok_or_else(|| "ENOPARENT:relative placement parent not found".to_string())?;

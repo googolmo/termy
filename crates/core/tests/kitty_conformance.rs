@@ -108,3 +108,104 @@ fn deleting_at_a_virtual_parents_position_removes_its_relative_child_only() {
     assert_eq!(placements.len(), 1);
     assert_eq!(placements[0].image_id, 1);
 }
+
+#[test]
+fn relative_cycles_preserve_the_previous_placements() {
+    for parent in ["P=1", "P=1,Q=0", "P=1,Q=1", "P=2,Q=1"] {
+        let terminal = terminal();
+        terminal.feed_output(b"\x1b_Ga=T,i=1,p=1,f=32,s=1,v=1,C=1;AQID/w==\x1b\\");
+        terminal.feed_output(b"\x1b_Ga=T,i=2,p=1,P=1,f=32,s=1,v=1;AQID/w==\x1b\\");
+        let before = terminal.kitty_graphics_placements();
+        assert_eq!(before.len(), 2);
+        terminal.feed_output(format!("\x1b_Ga=p,i=1,p=1,{parent}\x1b\\").as_bytes());
+        let after = terminal.kitty_graphics_placements();
+        assert_eq!(after.len(), before.len(), "parent: {parent}");
+        for (before, after) in before.iter().zip(&after) {
+            assert_eq!(before.placement_serial, after.placement_serial);
+            assert_eq!(
+                (before.col, before.viewport_row),
+                (after.col, after.viewport_row)
+            );
+        }
+    }
+}
+
+#[test]
+fn unnumbered_relative_placement_is_new_even_for_the_same_image() {
+    let terminal = terminal();
+    terminal.feed_output(b"\x1b_Ga=T,i=1,f=32,s=1,v=1,C=1;AQID/w==\x1b\\");
+    terminal.feed_output(b"\x1b_Ga=p,i=1,P=1,H=2\x1b\\");
+    let placements = terminal.kitty_graphics_placements();
+    assert_eq!(placements.len(), 2);
+    assert_eq!((placements[0].col, placements[1].col), (0, 2));
+}
+
+#[test]
+fn letterboxed_image_keeps_requested_cursor_occupancy_after_resize() {
+    let mut terminal = terminal();
+    terminal.feed_output(b"\x1b_Ga=T,i=1,f=32,s=1,v=1,c=2,r=3;AQID/w==\x1b\\");
+    assert_eq!(terminal.cursor_position(), (2, 3));
+    terminal.resize(TerminalSize {
+        cols: 80,
+        rows: 24,
+        cell_width: 15.0,
+        cell_height: 25.0,
+    });
+    let placements = terminal.kitty_graphics_placements();
+    assert_eq!(
+        (placements[0].occupied_cols, placements[0].occupied_rows),
+        (2, 3)
+    );
+    let layout = termy_core::graphics_display_layout(
+        1,
+        1,
+        placements[0].display_cols,
+        placements[0].display_rows,
+        (15.0, 25.0),
+        (0, 0),
+        false,
+    );
+    assert_eq!(layout.image_size, (30.0, 30.0));
+    assert_eq!(layout.image_offset, (0.0, 22.5));
+    // The bottom row remains inside the requested box, including its letterbox.
+    terminal.feed_output(b"\x1b_Ga=d,d=p,x=1,y=3\x1b\\");
+    assert!(terminal.kitty_graphics_placements().is_empty());
+}
+
+#[test]
+fn tmon_anonymous_uploads_stay_silent_and_numbered_uploads_reply() {
+    let terminal = termy_core::tmon::Terminal::new_display(
+        termy_core::tmon::Size::default(),
+        Default::default(),
+    );
+    for controls in ["", ",i=0", ",I=0", ",q=1", ",q=2"] {
+        terminal
+            .feed_output(format!("\x1b_Ga=T,f=32,s=1,v=1,C=1,m=1{controls};AQID\x1b\\").as_bytes());
+        assert!(terminal.drain_protocol_replies().is_empty());
+        terminal.feed_output(b"\x1b_Gm=0;/w==\x1b\\");
+        assert!(
+            terminal.drain_protocol_replies().is_empty(),
+            "controls: {controls}"
+        );
+    }
+    assert_eq!(terminal.kitty_graphics_placements().len(), 5);
+    terminal.feed_output(b"\x1b_Ga=t,i=7,f=32,s=1,v=1;AQID/w==\x1b\\");
+    assert_eq!(terminal.drain_protocol_replies(), b"\x1b_Gi=7;OK\x1b\\");
+    terminal.feed_output(b"\x1b_Ga=T,I=13,p=9,f=32,s=1,v=1,C=1;AQID/w==\x1b\\");
+    let placements = terminal.kitty_graphics_placements();
+    let id = placements
+        .iter()
+        .find(|p| p.placement_id == 9)
+        .unwrap()
+        .image_id;
+    assert_eq!(
+        terminal.drain_protocol_replies(),
+        format!("\x1b_Gi={id},I=13,p=9;OK\x1b\\").as_bytes()
+    );
+    terminal.feed_output(b"\x1b_Ga=p,i=99\x1b\\");
+    assert!(
+        String::from_utf8(terminal.drain_protocol_replies())
+            .unwrap()
+            .contains("ENOENT")
+    );
+}

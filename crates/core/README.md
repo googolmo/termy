@@ -94,11 +94,15 @@ once. `image.png()` is an explicit lazy export for clipboard and C hosts.
 
 `KittyGraphicsRenderPlacement` includes signed column offsets, optional Unicode
 placeholder cell coordinates, clipped margin rows, and an animation deadline.
-Use `graphics_display_size` with the current cell metrics and pixel offsets;
-`occupied_cols/rows` describe cursor occupancy, not stretched image dimensions.
-For a virtual cell, fit the full prototype with preserved aspect ratio and clip
-to that cell. Paint z values below -1073741824 below non-default backgrounds,
-other negative values below text, and nonnegative values above text.
+Use `graphics_display_layout` with the current cell metrics and pixel offsets.
+Its `image_size` preserves aspect ratio, `placement_size` retains the requested
+box, and `image_offset` centers the image within that box. `graphics_display_size`
+returns only the fitted image dimensions; `occupied_cols/rows` describe the full
+cursor occupancy. Clip the scaled source rectangle before clipping to the box,
+so cropped pixels cannot appear in its letterbox area. For a virtual cell, lay
+out the full prototype and clip to that cell. Paint z values below -1073741824
+below non-default backgrounds, other negative values below text, and nonnegative
+values above text.
 
 Run protocol regressions with `cargo test -p termy_core kitty_graphics` and run
 native-wrapper tests for both engines using `TERMY_CORE_TEST_BACKEND=alacritty`

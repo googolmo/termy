@@ -1,5 +1,14 @@
-/// Kitty display dimensions in the same pixel coordinate system as cell metrics.
-/// Cell occupancy rounds up, but the actual image must retain fractional dimensions.
+/// Fitted image and placement box in the same pixel coordinate system as cell metrics.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GraphicsDisplayLayout {
+    pub image_size: (f32, f32),
+    pub placement_size: (f32, f32),
+    /// Letterbox/pillarbox offset within the placement, after the cell offsets.
+    pub image_offset: (f32, f32),
+}
+
+/// Kitty image dimensions, preserving aspect ratio even when both c and r are set.
+/// Use `graphics_display_layout` for the placement box and centering offsets.
 pub fn graphics_display_size(
     source_width: u32,
     source_height: u32,
@@ -7,29 +16,44 @@ pub fn graphics_display_size(
     rows: Option<u32>,
     cell_size: (f32, f32),
     offsets: (u32, u32),
-    preserve_aspect: bool,
+    virtual_placement: bool,
 ) -> (f32, f32) {
+    graphics_display_layout(
+        source_width,
+        source_height,
+        cols,
+        rows,
+        cell_size,
+        offsets,
+        virtual_placement,
+    )
+    .image_size
+}
+
+/// Keep the requested box for cursor movement and clipping while fitting the image inside it.
+/// Virtual placements ignore pixel offsets, as required by the protocol.
+pub fn graphics_display_layout(
+    source_width: u32,
+    source_height: u32,
+    cols: Option<u32>,
+    rows: Option<u32>,
+    cell_size: (f32, f32),
+    offsets: (u32, u32),
+    virtual_placement: bool,
+) -> GraphicsDisplayLayout {
     let (cell_width, cell_height) = cell_size;
-    let (x_offset, y_offset) = if preserve_aspect {
+    let (x_offset, y_offset) = if virtual_placement {
         (0.0, 0.0)
     } else {
         (offsets.0 as f32, offsets.1 as f32)
     };
     let natural_width = source_width as f32;
     let natural_height = source_height as f32;
-    match (cols, rows) {
-        (Some(cols), Some(rows)) => {
-            let (width, height) = (
-                (cols as f32 * cell_width - x_offset).max(0.0),
-                (rows as f32 * cell_height - y_offset).max(0.0),
-            );
-            if preserve_aspect {
-                let scale = (width / natural_width.max(1.0)).min(height / natural_height.max(1.0));
-                (natural_width * scale, natural_height * scale)
-            } else {
-                (width, height)
-            }
-        }
+    let placement_size = match (cols, rows) {
+        (Some(cols), Some(rows)) => (
+            (cols as f32 * cell_width - x_offset).max(0.0),
+            (rows as f32 * cell_height - y_offset).max(0.0),
+        ),
         (Some(cols), None) => {
             let width = (cols as f32 * cell_width - x_offset).max(0.0);
             (width, width * natural_height / natural_width.max(1.0))
@@ -39,6 +63,21 @@ pub fn graphics_display_size(
             (height * natural_width / natural_height.max(1.0), height)
         }
         (None, None) => (natural_width, natural_height),
+    };
+    let image_size = if cols.is_some() && rows.is_some() {
+        let scale = (placement_size.0 / natural_width.max(1.0))
+            .min(placement_size.1 / natural_height.max(1.0));
+        (natural_width * scale, natural_height * scale)
+    } else {
+        placement_size
+    };
+    GraphicsDisplayLayout {
+        image_size,
+        placement_size,
+        image_offset: (
+            (placement_size.0 - image_size.0) / 2.0,
+            (placement_size.1 - image_size.1) / 2.0,
+        ),
     }
 }
 
@@ -84,11 +123,44 @@ impl GraphicsRowSpan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_boxes_center_images_without_distorting_or_shrinking_the_box() {
+        for virtual_placement in [false, true] {
+            let wide = graphics_display_layout(
+                40,
+                10,
+                Some(2),
+                Some(2),
+                (10.0, 20.0),
+                (0, 0),
+                virtual_placement,
+            );
+            assert_eq!(wide.image_size, (20.0, 5.0));
+            assert_eq!(wide.placement_size, (20.0, 40.0));
+            assert_eq!(wide.image_offset, (0.0, 17.5));
+            let tall = graphics_display_layout(
+                10,
+                40,
+                Some(2),
+                Some(2),
+                (10.0, 20.0),
+                (0, 0),
+                virtual_placement,
+            );
+            assert_eq!(tall.image_size, (10.0, 40.0));
+            assert_eq!(tall.image_offset, (5.0, 0.0));
+        }
+        let offset = graphics_display_layout(40, 10, Some(2), Some(2), (10.0, 20.0), (3, 4), false);
+        assert_eq!(offset.placement_size, (17.0, 36.0));
+        assert_eq!(offset.image_size, (17.0, 4.25));
+        assert_eq!(offset.image_offset, (0.0, 15.875));
+    }
     #[test]
     fn fractional_cells_do_not_stretch_images() {
         assert_eq!(
             graphics_display_size(40, 10, Some(2), Some(2), (10.0, 20.0), (3, 4), false),
-            (17.0, 36.0)
+            (17.0, 4.25)
         );
         assert_eq!(
             graphics_display_size(40, 10, Some(2), None, (10.0, 20.0), (3, 4), false),

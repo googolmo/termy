@@ -17,6 +17,16 @@ explicit paint bounds so magnified one-pixel images have solid edges.
 
 ## Automated checks
 
+The protocol regressions also cover omitted/zero parent placement IDs in cycle
+detection, silent anonymous uploads, and aspect-preserving explicit placement
+boxes. Letterboxing retains the full requested cursor occupancy across resize
+and deletion. Run the public conformance suite with each backend:
+
+```sh
+TERMY_CORE_TEST_BACKEND=tmon cargo test --locked -p termy_core --test kitty_conformance
+TERMY_CORE_TEST_BACKEND=alacritty cargo test --locked -p termy_core --test kitty_conformance
+```
+
 The affected crates have **1,591 passing tests**, with nine existing integration
 tests ignored because they require a live tmux environment. The public runtime
 regressions also pass with the Alacritty backend explicitly selected. Checks:

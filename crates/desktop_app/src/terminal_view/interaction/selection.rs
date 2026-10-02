@@ -58,7 +58,7 @@ pub(in crate::terminal_view) fn kitty_graphics_placement_bounds(
     let (width, height) = if placement.virtual_cell.is_some() {
         (cell_width, cell_height)
     } else {
-        termy_core::graphics_display_size(
+        termy_core::graphics_display_layout(
             placement.source_width,
             placement.source_height,
             placement.display_cols,
@@ -67,6 +67,7 @@ pub(in crate::terminal_view) fn kitty_graphics_placement_bounds(
             (placement.x_offset, placement.y_offset),
             false,
         )
+        .placement_size
     };
     KittyGraphicsPlacementBounds {
         left: (placement.col as f32 + placement.col_offset as f32) * cell_width

@@ -379,3 +379,38 @@ fn measure_raw_upload_cost() {
         start.elapsed()
     );
 }
+
+#[test]
+fn wildcard_parent_cycles_reply_with_ecycle() {
+    for parent in ["P=1", "P=1,Q=0", "P=1,Q=1", "P=2,Q=1"] {
+        let mut state = KittyGraphicsState::default();
+        state.apply(
+            command("a=T,i=1,p=1,f=32,s=1,v=1,C=1", &[255; 4]),
+            0,
+            0,
+            0,
+            size(),
+        );
+        state.apply(
+            command("a=T,i=2,p=1,P=1,f=32,s=1,v=1", &[255; 4]),
+            0,
+            0,
+            0,
+            size(),
+        );
+        let result = state.apply(
+            command(&format!("a=p,i=1,p=1,{parent}"), &[]),
+            0,
+            0,
+            0,
+            size(),
+        );
+        assert!(!result.changed);
+        assert!(
+            String::from_utf8(result.response.unwrap())
+                .unwrap()
+                .contains("ECYCLE")
+        );
+        assert_eq!(state.render_placements(0, 0, 24, 80).len(), 2);
+    }
+}
