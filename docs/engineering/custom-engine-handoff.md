@@ -1,9 +1,9 @@
 # Custom terminal engine: cloud handoff
 
 Continue on `feat/custom-terminal-engine` in
-[PR #400](https://github.com/lassejlv/termy/pull/400). The PR is intentionally a
-draft. The user requested this checkpoint so implementation can continue in the
-cloud; the remaining validation below is not complete.
+[PR #400](https://github.com/lassejlv/termy/pull/400). The user requested this
+checkpoint so implementation can continue in the cloud; the remaining
+validation below is not complete.
 
 ## Scope and constraints
 
@@ -81,7 +81,7 @@ limits and measured regressions as well as improvements.
    substantial throughput and retained-memory differences from the former
    native Alacritty backend; do not describe native gains as universal gains.
 5. Update the report and PR description around the final measured implementation.
-   Mark the PR ready when the remaining work and final checks are complete.
+   Confirm review readiness when the remaining work and final checks are complete.
 
 Local raw measurements, saved binaries and experimental scripts under
 `target/custom-engine-2026-10-05/` are ignored build artifacts and are not part of
