@@ -69,6 +69,99 @@ fn scrolling_recycles_a_bounded_set_of_cell_buffers() {
 }
 
 #[test]
+fn short_composed_lines_recycle_only_the_occupied_prefix() {
+    let mut grid = grid(120, 2, 2);
+    for _ in 0..32 {
+        grid.write_ascii(b"e");
+        grid.put_char('\u{301}');
+        grid.write_ascii(b" a");
+        grid.put_char('\u{308}');
+        grid.carriage_return();
+        grid.linefeed();
+    }
+    for row in grid.history.iter().chain(&grid.primary.rows) {
+        assert!(row.occupied <= 3);
+        assert!(row.cells[3..].iter().all(|cell| cell == &Cell::default()));
+        if row.occupied != 0 {
+            assert_eq!(row.cells[0].combining(), "\u{301}");
+            assert_eq!(row.cells[2].combining(), "\u{308}");
+        }
+    }
+    assert_eq!(grid.primary.rows[1].occupied, 0);
+    assert_eq!(grid.history_size(), 2);
+}
+
+#[test]
+fn recycled_rows_clear_metadata_and_repaint_the_entire_background() {
+    use std::sync::Arc;
+
+    use crate::terminal_engine::{CellExtra, Hyperlink};
+
+    let mut grid = grid(8, 1, 0);
+    grid.pen.extra = Some(Arc::new(CellExtra {
+        combining: String::new(),
+        hyperlink: Some(Arc::new(Hyperlink {
+            id: "retained snapshot".into(),
+            uri: "https://example.test".into(),
+        })),
+    }));
+    grid.write_ascii(b"e");
+    grid.put_char('\u{301}');
+    let snapshot = grid.primary.rows[0].cells[0].clone();
+    grid.pen.extra = None;
+
+    // Changing the erase background invalidates even the untouched suffix.
+    for background in [Color::indexed(4), Color::indexed(4), Color::DEFAULT] {
+        grid.pen.style.background = background;
+        grid.carriage_return();
+        grid.linefeed();
+        let row = &grid.primary.rows[0];
+        let blank = Cell {
+            style: Style {
+                background,
+                ..Style::default()
+            },
+            ..Cell::default()
+        };
+        assert!(row.cells.iter().all(|cell| cell == &blank));
+        assert_eq!(row.occupied, 0);
+        assert!(!row.wrapped);
+    }
+    assert_eq!(snapshot.character, 'e');
+    assert_eq!(snapshot.combining(), "\u{301}");
+    assert_eq!(snapshot.hyperlink().unwrap().id, "retained snapshot");
+}
+
+#[test]
+fn combining_on_blank_cells_and_selective_erases_survive_until_recycling() {
+    let mut grid = grid(12, 1, 0);
+    grid.pen.style.set(Style::PROTECTED, true);
+    grid.put_char('p');
+    grid.pen.style.set(Style::PROTECTED, false);
+    grid.goto(0, 7);
+    grid.put_char('\u{301}');
+    assert_eq!(grid.primary.rows[0].cells[6].combining(), "\u{301}");
+
+    grid.pen.style.background = Color::indexed(5);
+    grid.goto(0, 9);
+    grid.erase_line(1, true);
+    assert_eq!(grid.primary.rows[0].cells[0].character, 'p');
+    assert_eq!(
+        grid.primary.rows[0].cells[9].style.background,
+        Color::indexed(5)
+    );
+
+    grid.pen.style.background = Color::DEFAULT;
+    grid.linefeed();
+    assert!(
+        grid.primary.rows[0]
+            .cells
+            .iter()
+            .all(|cell| cell == &Cell::default())
+    );
+}
+
+#[test]
 fn viewport_remains_anchored_while_new_output_enters_history() {
     let mut grid = grid(5, 2, 10);
     print(&mut grid, "one\r\ntwo\r\nthree\r\n");
@@ -119,6 +212,93 @@ fn wide_character_overwrite_cleans_both_halves() {
     grid.goto(0, 3);
     grid.erase_chars(1);
     assert_eq!(text(&grid, 0), "a x   ");
+}
+
+#[test]
+fn scalar_overwrites_repair_wide_boundaries_and_damage() {
+    for (column, character, expected, start, end) in [
+        (1, 'é', "aé 界 z  ", 1, 3),
+        (2, 'é', "a é界 z  ", 1, 4),
+        (0, '語', "語  界 z  ", 0, 3),
+        (1, '語', "a語 界 z  ", 1, 4),
+        (2, '語', "a 語  z  ", 1, 5),
+    ] {
+        let mut grid = grid(8, 2, 0);
+        print(&mut grid, "a界界z");
+        grid.goto(0, column);
+        grid.take_damage();
+        grid.put_char(character);
+        assert_eq!(text(&grid, 0), expected, "{character} at {column}");
+        assert_eq!(
+            grid.take_damage(),
+            Damage::Partial(vec![DirtySpan { row: 0, start, end }]),
+            "{character} at {column}"
+        );
+        let cells = grid.row(0).unwrap().cells();
+        for (column, cell) in cells.iter().enumerate() {
+            if cell.flags & Cell::WIDE != 0 {
+                assert_eq!(cells[column + 1].flags, Cell::WIDE_SPACER);
+            } else if cell.flags & Cell::WIDE_SPACER != 0 {
+                assert!(column > 0);
+                assert_eq!(cells[column - 1].flags, Cell::WIDE);
+            }
+        }
+    }
+}
+
+#[test]
+fn wide_overwrite_preserves_styles_and_owns_only_its_base_metadata() {
+    use super::super::types::{CellExtra, Hyperlink};
+    use std::sync::Arc;
+
+    let mut grid = grid(8, 2, 0);
+    grid.pen.style.foreground = Color::indexed(1);
+    grid.pen.style.background = Color::indexed(2);
+    grid.pen.style.attributes = Style::BOLD;
+    grid.pen.extra = Some(Arc::new(CellExtra {
+        hyperlink: Some(Arc::new(Hyperlink {
+            id: "old".into(),
+            uri: "https://old.test".into(),
+        })),
+        ..CellExtra::default()
+    }));
+    print(&mut grid, "a界\u{301}界\u{308}z");
+    let before = grid.row(0).unwrap().cells().to_vec();
+    let extra = Arc::new(CellExtra {
+        hyperlink: Some(Arc::new(Hyperlink {
+            id: "new".into(),
+            uri: "https://new.test".into(),
+        })),
+        ..CellExtra::default()
+    });
+    grid.pen.style.foreground = Color::indexed(3);
+    grid.pen.style.background = Color::indexed(4);
+    grid.pen.style.attributes = Style::ITALIC;
+    grid.pen.extra = Some(Arc::clone(&extra));
+    grid.goto(0, 2);
+    grid.put_char('語');
+
+    let cells = grid.row(0).unwrap().cells();
+    let blank = Cell {
+        style: Style {
+            background: Color::indexed(4),
+            ..Style::default()
+        },
+        ..Cell::default()
+    };
+    assert_eq!(cells[1], blank);
+    assert_eq!(cells[4], blank);
+    assert_eq!(cells[2].style, grid.pen.style);
+    assert_eq!(cells[3].style, grid.pen.style);
+    assert!(Arc::ptr_eq(cells[2].extra.as_ref().unwrap(), &extra));
+    assert!(cells[3].extra.is_none());
+    assert_eq!(Arc::strong_count(&extra), 3);
+    for column in [0, 5, 6, 7] {
+        assert_eq!(cells[column], before[column]);
+    }
+    assert_eq!(before[1].combining(), "\u{301}");
+    assert_eq!(before[3].combining(), "\u{308}");
+    assert_eq!(before[1].hyperlink().unwrap().id, "old");
 }
 
 #[test]
@@ -266,6 +446,48 @@ fn damage_spans_cover_cursor_motion_and_changed_glyph_halves() {
         ])
     );
     assert_eq!(grid.take_damage(), Damage::Partial(vec![]));
+}
+
+#[test]
+fn scalar_damage_tracks_visible_cursors_and_wraps_between_rows() {
+    for (character, width) in [('é', 1), ('界', 2)] {
+        for visible in [false, true] {
+            let mut grid = grid(6, 2, 0);
+            grid.cursor.visible = visible;
+            grid.goto(0, 2);
+            grid.take_damage();
+            grid.put_char(character);
+            assert_eq!(
+                grid.take_damage(),
+                Damage::Partial(vec![DirtySpan {
+                    row: 0,
+                    start: 2,
+                    end: 2 + width + usize::from(visible),
+                }])
+            );
+        }
+    }
+
+    let mut grid = grid(4, 2, 0);
+    print(&mut grid, "abcd");
+    grid.take_damage();
+    grid.put_char('é');
+    assert_eq!(
+        grid.take_damage(),
+        Damage::Partial(vec![
+            DirtySpan {
+                row: 0,
+                start: 0,
+                end: 4,
+            },
+            DirtySpan {
+                row: 1,
+                start: 0,
+                end: 2,
+            },
+        ])
+    );
+    assert!(grid.row(0).unwrap().wrapped);
 }
 
 #[test]
@@ -442,6 +664,11 @@ fn mixed_edit_resize_and_scroll_sequences_preserve_grid_invariants() {
         seed ^= seed >> 17;
         seed ^= seed << 5;
         let count = (seed >> 8) as usize % 8 + 1;
+        grid.pen.style.background = if seed & 0x80 != 0 {
+            Color::indexed((seed >> 16) as u8)
+        } else {
+            Color::DEFAULT
+        };
         match seed % 15 {
             0 => grid.put_char('界'),
             1 => grid.put_char('\u{301}'),
@@ -475,6 +702,15 @@ fn mixed_edit_resize_and_scroll_sequences_preserve_grid_invariants() {
             .chain(grid.alternate.iter().flat_map(|screen| &screen.rows))
         {
             assert_eq!(row.cells.len(), grid.size.cols);
+            assert!(row.occupied <= row.cells.len());
+            let blank = Cell {
+                style: Style {
+                    background: row.clear_background,
+                    ..Style::default()
+                },
+                ..Cell::default()
+            };
+            assert!(row.cells[row.occupied..].iter().all(|cell| cell == &blank));
             for (col, cell) in row.cells.iter().enumerate() {
                 if cell.flags & Cell::WIDE != 0 {
                     assert!(col + 1 < row.cells.len());

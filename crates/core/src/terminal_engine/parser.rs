@@ -186,6 +186,20 @@ impl Parser {
                     }
                     continue;
                 }
+                // A complete scalar in this chunk needs one dispatch, rather
+                // than revisiting the VT state machine for each continuation.
+                // Invalid and fragmented sequences keep the streaming path's
+                // replacement/reconsumption behavior below.
+                if bytes[offset] >= 0xc2
+                    && let Some((character, len)) = complete_utf8(&bytes[offset..])
+                {
+                    handler.print(character);
+                    offset += len;
+                    if PAUSABLE && handler.pause_requested() {
+                        break;
+                    }
+                    continue;
+                }
             } else if let State::String(kind) = self.state {
                 let start = offset;
                 while offset < bytes.len() && !Self::string_control(kind, bytes[offset]) {
@@ -447,6 +461,49 @@ impl Parser {
         self.discarded = false;
         self.state = State::Ground;
     }
+}
+
+/// Decode only a complete, valid non-ASCII scalar. The caller retains the
+/// streaming decoder for all other input, including incomplete chunk tails.
+#[inline]
+fn complete_utf8(bytes: &[u8]) -> Option<(char, usize)> {
+    let (&first, rest) = bytes.split_first()?;
+    let continuation = |byte: u8| byte & 0xc0 == 0x80;
+    let (value, len) = match (first, rest) {
+        (0xc2..=0xdf, &[second, ..]) if continuation(second) => {
+            ((u32::from(first & 0x1f) << 6) | u32::from(second & 0x3f), 2)
+        }
+        (0xe0..=0xef, &[second, third, ..])
+            if continuation(second)
+                && continuation(third)
+                && (first != 0xe0 || second >= 0xa0)
+                && (first != 0xed || second < 0xa0) =>
+        {
+            (
+                (u32::from(first & 0x0f) << 12)
+                    | (u32::from(second & 0x3f) << 6)
+                    | u32::from(third & 0x3f),
+                3,
+            )
+        }
+        (0xf0..=0xf4, &[second, third, fourth, ..])
+            if continuation(second)
+                && continuation(third)
+                && continuation(fourth)
+                && (first != 0xf0 || second >= 0x90)
+                && (first != 0xf4 || second < 0x90) =>
+        {
+            (
+                (u32::from(first & 7) << 18)
+                    | (u32::from(second & 0x3f) << 12)
+                    | (u32::from(third & 0x3f) << 6)
+                    | u32::from(fourth & 0x3f),
+                4,
+            )
+        }
+        _ => return None,
+    };
+    char::from_u32(value).map(|character| (character, len))
 }
 
 #[cfg(test)]

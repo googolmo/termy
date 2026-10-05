@@ -86,12 +86,27 @@ limits and measured regressions as well as improvements.
   evidence, preserving the former Tmon display comparison and its substantial
   retained-memory/throughput tradeoffs.
 
+## Performance follow-up
+
+The subsequent performance work replaces repeated Unicode dispatch, redundant
+wide-cell writes, full-row recycling clears and tiny combining-key library
+comparisons. The [throughput follow-up](custom-engine-throughput-2026-10-05.md)
+records six alternating Linux pairs against Alacritty: all seven workloads are
+ahead by median, with 1.36–4.80× feed throughput and 1.20–4.95× with damage
+consumption. All six warmed allocation gates still allocate zero times, and
+six paired real-PTY runs show no median latency regression in that probe.
+
+Identical-source, uninstrumented facade comparisons now run in PR CI on Linux
+and macOS. Preserve the raw measurements and inspect the actual baseline engine;
+future custom-to-custom comparisons do not prove an Alacritty comparison.
+The PR description records the final verified CI revision and results.
+
 ## Measurement limits and future performance work
 
-The replacement does not establish a universal performance improvement. Mixed
-Unicode and compact history remain optimization opportunities; the tested width
-cache is not a proven fix. The original native gains must not be presented as
-gains over the former Tmon display facade.
+The replacement does not establish a universal performance improvement. The
+measured Unicode throughput gap is addressed; compact history remains an
+optimization opportunity, and the tested width cache is still rejected. Native
+Alacritty gains must not be presented as gains over the former Tmon display facade.
 
 The hosted echo run recorded 40 samples and zero missed echoes per binary, but
 its displayed-frame samples are unavailable. Render callbacks do not establish

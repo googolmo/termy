@@ -1,5 +1,10 @@
 # Native terminal engine performance — 2026-10-05
 
+This report records earlier revisions. The later
+[throughput follow-up](custom-engine-throughput-2026-10-05.md) resolves the
+measured Alacritty Unicode/combining gaps with new uninstrumented paired probes.
+Its results do not replace the historical Tmon comparison or presentation limits.
+
 The replacement improves several measured paths relative to the former native
 Alacritty runtime, but it is **not a uniform performance improvement**. Mixed
 Unicode is slower, and the old compact Tmon display backend is substantially

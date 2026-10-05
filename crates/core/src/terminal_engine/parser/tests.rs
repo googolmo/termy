@@ -190,6 +190,48 @@ fn incomplete_utf8_waits_for_another_chunk() {
 }
 
 #[test]
+fn complete_utf8_matches_every_scalar_and_rejects_incomplete_prefixes() {
+    let mut buffer = [0; 4];
+    for character in (128..=0x10ffff).filter_map(char::from_u32) {
+        let bytes = character.encode_utf8(&mut buffer).as_bytes();
+        assert_eq!(super::complete_utf8(bytes), Some((character, bytes.len())));
+        for len in 0..bytes.len() {
+            assert_eq!(super::complete_utf8(&bytes[..len]), None);
+        }
+    }
+}
+
+#[test]
+fn complete_utf8_rejects_invalid_leads_and_continuation_positions() {
+    for lead in 0..=u8::MAX {
+        for next in 0..=u8::MAX {
+            // Invalid lead/second-byte combinations cover overlong encodings,
+            // surrogates, and out-of-range scalars; later bytes test reconsumption.
+            for bytes in [
+                [lead, next, 0x80, 0x80],
+                [lead, 0x80, next, 0x80],
+                [lead, 0x80, 0x80, next],
+            ] {
+                let len = match lead {
+                    0xc2..=0xdf => 2,
+                    0xe0..=0xef => 3,
+                    0xf0..=0xf4 => 4,
+                    _ => {
+                        assert_eq!(super::complete_utf8(&bytes), None);
+                        continue;
+                    }
+                };
+                let expected = std::str::from_utf8(&bytes[..len])
+                    .ok()
+                    .and_then(|text| text.chars().next())
+                    .map(|character| (character, len));
+                assert_eq!(super::complete_utf8(&bytes), expected, "{bytes:?}");
+            }
+        }
+    }
+}
+
+#[test]
 fn control_bytes_do_not_reset_escape_or_csi_parameters() {
     assert_eq!(
         parse(b"\x1b\n(\x7f0\x1b[1\t;2\r\x7fH"),

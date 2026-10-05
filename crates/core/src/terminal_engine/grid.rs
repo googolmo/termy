@@ -4,7 +4,9 @@ use std::collections::VecDeque;
 
 use unicode_width::UnicodeWidthChar;
 
-use super::types::{Cell, Cursor, Damage, DirtySpan, GridEffect, Size, Style, ViewportScroll};
+use super::types::{
+    Cell, Color, Cursor, Damage, DirtySpan, GridEffect, Size, Style, ViewportScroll,
+};
 
 mod combining;
 use combining::CombiningCache;
@@ -15,13 +17,22 @@ const MAX_SCROLL_DAMAGE: usize = 32;
 #[derive(Clone, Debug)]
 pub(super) struct Row {
     cells: Vec<Cell>,
+    // Cells after this prefix still equal the blank used by the last clear.
+    // Keeping a conservative upper bound avoids rewriting an entire row when
+    // short output lines recycle it through scrollback.
+    occupied: usize,
+    clear_background: Color,
     pub(super) wrapped: bool,
 }
 
 impl Row {
+    // The suffix tracked below contains erase blanks: only their background
+    // varies. Text, attributes, wide flags and metadata belong in `occupied`.
     fn new(cols: usize, blank: &Cell) -> Self {
         Self {
             cells: vec![blank.clone(); cols],
+            occupied: 0,
+            clear_background: blank.style.background,
             wrapped: false,
         }
     }
@@ -31,8 +42,15 @@ impl Row {
     }
 
     fn clear(&mut self, cols: usize, blank: &Cell) {
+        let end = if self.clear_background == blank.style.background {
+            self.occupied.min(cols)
+        } else {
+            cols
+        };
         self.cells.resize(cols, blank.clone());
-        self.cells.fill(blank.clone());
+        self.cells[..end].fill(blank.clone());
+        self.occupied = 0;
+        self.clear_background = blank.style.background;
         self.wrapped = false;
     }
 
@@ -460,6 +478,7 @@ impl Grid {
             end += 1;
         }
         row.cells[col] = blank.clone();
+        row.occupied = row.occupied.max(end);
         (start, end)
     }
 
@@ -482,16 +501,17 @@ impl Grid {
             if self.screen().rows[row].cells[col].flags & Cell::WIDE_SPACER != 0 && col > 0 {
                 col -= 1;
             }
-            let cell = if self.alternate_active {
+            let active = if self.alternate_active {
                 &mut self
                     .alternate
                     .as_mut()
                     .expect("active alternate screen")
                     .rows[row]
-                    .cells[col]
             } else {
-                &mut self.primary.rows[row].cells[col]
+                &mut self.primary.rows[row]
             };
+            active.occupied = active.occupied.max(col + 1);
+            let cell = &mut active.cells[col];
             self.combining_cache.append(cell, character);
             self.mark(row, col, col + 1);
             return;
@@ -533,27 +553,48 @@ impl Grid {
         cell.character = character;
         cell.flags = if width == 2 { Cell::WIDE } else { 0 };
         let active = &mut self.screen_mut().rows[row];
-        let (mut start, mut end) = Self::clear_wide_at(active, col, &blank);
+        let mut start = col;
+        let mut end = col + width;
+        // Only the outside halves of overwritten wide glyphs need erasing.
+        // The destination cells are replaced below, so blanking them first
+        // would write/drop each cell twice on ordinary Unicode output.
+        if active.cells[col].flags & Cell::WIDE_SPACER != 0 && col > 0 {
+            start -= 1;
+            active.cells[start] = blank.clone();
+        }
+        if active.cells[end - 1].flags & Cell::WIDE != 0 && end < active.cells.len() {
+            active.cells[end] = blank;
+            end += 1;
+        }
         if width == 2 {
-            let (next_start, next_end) = Self::clear_wide_at(active, col + 1, &blank);
-            start = start.min(next_start);
-            end = end.max(next_end);
-            let mut spacer = cell.clone();
-            spacer.character = ' ';
-            spacer.flags = Cell::WIDE_SPACER;
-            spacer.extra = None;
-            active.cells[col + 1] = spacer;
+            active.cells[col + 1] = Cell {
+                character: ' ',
+                style: cell.style,
+                flags: Cell::WIDE_SPACER,
+                extra: None,
+            };
         }
         active.cells[col] = cell;
+        active.occupied = active.occupied.max(end);
         if col + width >= self.size.cols {
             self.cursor.col = self.size.cols - 1;
             self.pending_wrap = self.autowrap;
         } else {
             self.cursor.col += width;
         }
+        if self.full_damage {
+            return;
+        }
+        if self.cursor.visible {
+            end = end.max(self.cursor.col + 1);
+            if old.row == row {
+                start = start.min(old.col);
+                end = end.max(old.col + 1);
+            } else {
+                self.mark_cursor(old);
+            }
+        }
         self.mark(row, start, end);
-        self.mark_cursor(old);
-        self.mark_cursor(self.cursor);
     }
 
     /// Ordinary ASCII uses one bounds/damage update per row-local run.
@@ -588,6 +629,7 @@ impl Grid {
                 cell.character = char::from(byte);
                 cell.flags = 0;
             }
+            active.occupied = active.occupied.max(col + count);
             self.cursor.col += count;
             if self.cursor.col == self.size.cols {
                 self.cursor.col -= 1;
@@ -796,6 +838,9 @@ impl Grid {
     }
 
     fn repair_wide(row: &mut Row, blank: &Cell) {
+        // Editing and alternate-screen resize can move or replace any cell.
+        // Those uncommon paths conservatively invalidate the entire prefix.
+        row.occupied = row.cells.len();
         for col in 0..row.cells.len() {
             let flags = row.cells[col].flags;
             let invalid = (flags & Cell::WIDE != 0
@@ -1328,6 +1373,7 @@ impl Grid {
                 if col < cols {
                     row.cells[col].flags = Cell::LEADING_WIDE_SPACER;
                 }
+                row.occupied = cols;
                 row.wrapped = true;
                 output.push(row);
                 row = output.new_row();
@@ -1377,6 +1423,7 @@ impl Grid {
             }
             row.cells[col] = cell;
             col += if expanded_wide { 2 } else { 1 };
+            row.occupied = col;
         }
         if !cursor_mapped && cursor.is_some() {
             if col == cols && cursor_pending {
