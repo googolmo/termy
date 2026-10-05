@@ -19,6 +19,10 @@ const DEFAULT_DURATION_SECS: u64 = 13;
 // Give launched apps enough room to finish the benchmark command, flush metrics,
 // and quit before xctrace force-terminates them at the trace time limit.
 const TRACE_PADDING_SECS: u64 = 5;
+// On hosted macOS runners, xctrace can take 30-45 seconds to launch a
+// recording before its time limit begins. Budget startup separately so it does
+// not consume the trace finalization allowance.
+const XCTRACE_STARTUP_GRACE_SECS: u64 = 60;
 // xctrace occasionally ignores its own time limit while finalizing a trace.
 // Keep a hard outer deadline so one wedged recording cannot consume the job.
 const XCTRACE_FINALIZATION_GRACE_SECS: u64 = 45;
@@ -2371,7 +2375,11 @@ fn run_xctrace_record_command(
 }
 
 fn xctrace_timeout(time_limit_secs: u64) -> Duration {
-    Duration::from_secs(time_limit_secs.saturating_add(XCTRACE_FINALIZATION_GRACE_SECS))
+    Duration::from_secs(
+        time_limit_secs
+            .saturating_add(XCTRACE_STARTUP_GRACE_SECS)
+            .saturating_add(XCTRACE_FINALIZATION_GRACE_SECS),
+    )
 }
 
 fn read_ndjson<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>> {
