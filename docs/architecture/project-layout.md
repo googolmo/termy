@@ -22,7 +22,7 @@ at the library root. Supporting modules are grouped by responsibility:
 
 - `multiplexer/`: persistent session host, authenticated IPC, clients, and layout operations.
 - `session_model/`: saved windows, workspaces, tabs, panes, and split geometry.
-- `tmon/`: terminal engine and native PTY/ConPTY runtime.
+- `terminal_engine/`: terminal engine and native PTY/ConPTY runtime.
 - `tmux_control_core/`: tmux control-mode protocol and transport.
 - `config_core/`, `command_core/`, `theme_core/`, `themes/`, and `search_engine/`: shared configuration, commands, themes, and search.
 - `plugin_runtime/` and `ssh_core/`: plugin execution and SSH host management.
@@ -37,7 +37,6 @@ C exports and header contracts are unchanged.
 
 - `src/commands/`: terminal launch, plugin and config commands, and JSON multiplexer controls.
 - `src/xtask/`: repository automation, generated documentation, dependency checks, and performance tooling.
-- `examples/engine_compare.rs`: terminal engine comparison benchmark.
 
 The default binary is `termy-cli`. Run repository tooling with
 `cargo run -p termy_cli --bin xtask -- <command>`.

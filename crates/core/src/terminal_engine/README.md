@@ -1,9 +1,7 @@
 # Terminal engine replacement
 
 This directory owns the parser, screen storage, and platform PTY transport used
-by native, display-only, tmux and persistent Termy sessions. The legacy tmon
-engine implementation stays in its original folder outside the compiled module
-tree; its obsolete external-oracle test glue has been removed.
+by native, display-only, tmux and persistent Termy sessions.
 
 ## Design
 
@@ -29,6 +27,10 @@ tree; its obsolete external-oracle test glue has been removed.
   pointer equality decide a hit. Fixed-width comparisons handle keys up to four
   bytes, and longer prefixes use ordinary slice equality. Collisions never
   increase lookup work beyond four entries or change immutable cell metadata.
+- `grid/print.rs` joins streaming emoji/grapheme sequences and adjusts their
+  column width, including right-margin promotion and one-column reflow.
+  `grid/row.rs` packs cold history into scalar/flag arrays, style runs, and shared
+  metadata while leaving active rows dense.
 - `dispatch.rs` applies control sequences and owns modes, palette changes,
   hyperlinks and bounded event/reply queues. Clipboard controls share the parser
   and synchronized commits, avoiding a second scan and filtered input copy.
@@ -38,15 +40,17 @@ tree; its obsolete external-oracle test glue has been removed.
 - `graphics.rs` applies image commands and ordered scroll/clear effects inside
   the same parser commits as text. Animation revision polling allocates nothing.
 - `transport/` provides bounded native PTY input/output on Unix and Windows.
-  The runtime watchdog sleeps while idle and wakes only for pending synchronized
-  output deadlines.
+  The runtime maintenance thread sleeps until a synchronized-output deadline or
+  a pending history-compaction step. History compaction starts 250 ms after the
+  last added history row and processes at most 256 rows per step.
 - `Engine` is single-owner state. Transport/runtime synchronization belongs
-  outside it. Viewport and history reads borrow row slices rather than building
-  intermediate cell vectors.
+  outside it. Active viewport reads borrow row slices. Cold history is expanded
+  on demand for borrowed reads; search and bulk visitors reuse scratch storage.
 
-The initial history representation is dense. It prioritizes predictable access
-and row reuse. Allocation benchmarks report retained heap as well as throughput;
-compact history is a remaining optimization to assess against real workloads.
+Sustained output retains the dense scrolling fast path. Quiet history compacts
+without changing damage or generation. Direct engine hosts can explicitly call
+`compact_history()` after a burst. Allocation benchmarks report active and
+settled retained heap separately from parsing throughput.
 Grid dimensions are clamped to 4,096 per axis and 1,048,576 cells in total.
 History retains at most 20,000 rows and 1,048,576 cells, so wide grids can retain
 fewer rows than the configured history count. Combining suffixes, CSI parameters,
@@ -63,6 +67,9 @@ Tests use explicit expected states, malformed-input fixtures and all-boundary
 fragmentation checks, without an Alacritty test oracle.
 
 ## Verification
+
+The Unicode, CJK rendering, memory, and native presented-frame measurements are
+documented in the [follow-up report](../../../../docs/engineering/unicode-history-performance-2026-10-05.md).
 
 ```sh
 cargo test -p termy_core terminal_engine
@@ -105,7 +112,7 @@ The runner alternates baseline/candidate order, records raw samples and binary
 hashes, and reports median paired throughput ratios. Finish builds before timing;
 run no concurrent benchmark or build. The runner requests the historical Alacritty
 backend and verifies the helper's reported engine. Baselines may report Alacritty
-or the custom engine; Tmon and missing or changing labels are rejected. Candidates
+or the custom engine; unsupported, missing or changing labels are rejected. Candidates
 must report the custom engine. Check the recorded baseline engine before making
 an Alacritty comparison.
 
@@ -132,10 +139,8 @@ Keep these checks green when changing the engine:
   are covered by expected-state regression tests. DCS/APC handlers and
   synchronized-output commit/timeout behavior must pass fragmentation and native
   transport tests.
-- All active Alacritty imports, adapters and Cargo dependencies
-  are removed. The legacy tmon engine implementation remains outside the
-  compiled module tree; fixed expected-byte tests replace its old external-oracle
-  assertions.
+- All active Alacritty imports, adapters and Cargo dependencies are removed.
+  The former experimental display engine and its tests and tooling are removed.
 - Core, desktop, FFI, IPC and tmux integration suites pass, along with workspace
   checks, formatting, Clippy and repository architecture gates.
 - A real shell and tmux pane are exercised in the app. Parser throughput,

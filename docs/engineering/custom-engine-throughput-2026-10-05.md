@@ -8,8 +8,9 @@ throughput gaps; they do not establish universal application or rendering parity
 
 This is the performance follow-up to `fed48fda`, superseding the earlier
 revision's throughput conclusions in the [original report](custom-engine-2026-10-05.md).
-That report's historical Tmon comparison, dense-history tradeoff and native
-macOS smoke evidence remain relevant. Tmon has not been changed or remeasured.
+That report's historical display backend comparison, dense-history tradeoff and
+native macOS smoke evidence remain relevant. The former experimental display
+backend was not changed or remeasured by this follow-up and was later removed.
 
 ## Changes and correctness
 
@@ -43,8 +44,8 @@ window accepts keyboard input and executes a command through a real PTY shell.
 
 - Baseline: `64945371249fb123db92dc0ce55f32970c7536e1`, built in an isolated worktree.
   `TERMY_CORE_TEST_BACKEND=alacritty` selects its historical native engine;
-  otherwise the old display facade defaults to Tmon. Every process reports its
-  engine, and the runner verifies the labels.
+  otherwise the old display facade defaults to the experimental engine. Every
+  process reports its engine, and the runner verifies the labels.
 - Candidate runtime: `6b3613b27519f015673ad8ed429a80c901432618`, the performance
   follow-up to `fed48fda`. Saved binary hashes below identify the measured builds.
   Both use release `termy_core` libraries and the

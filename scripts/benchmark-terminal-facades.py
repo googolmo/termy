@@ -5,7 +5,7 @@ Build both executables from identical source before running this script. Each
 case runs in a separate process; no builds or other benchmarks should overlap.
 The optional threshold applies to each case's median candidate/baseline paired
 throughput ratio. Damage consumption exercises tracking, not presentation.
-The baseline must report Alacritty or the custom engine; Tmon is rejected.
+The baseline must report Alacritty or the custom engine; other labels are rejected.
 """
 
 import argparse

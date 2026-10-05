@@ -47,7 +47,7 @@ fn scrolling_recycles_a_bounded_set_of_cell_buffers() {
         .history
         .iter()
         .chain(&grid.primary.rows)
-        .map(|row| row.cells.as_ptr())
+        .map(|row| row.cells().as_ptr())
         .collect::<Vec<_>>();
     pointers.sort();
     assert_eq!(pointers.len(), 7);
@@ -58,7 +58,7 @@ fn scrolling_recycles_a_bounded_set_of_cell_buffers() {
         .history
         .iter()
         .chain(&grid.primary.rows)
-        .map(|row| row.cells.as_ptr())
+        .map(|row| row.cells().as_ptr())
         .collect::<Vec<_>>();
     after.sort();
     assert_eq!(
@@ -81,10 +81,10 @@ fn short_composed_lines_recycle_only_the_occupied_prefix() {
     }
     for row in grid.history.iter().chain(&grid.primary.rows) {
         assert!(row.occupied <= 3);
-        assert!(row.cells[3..].iter().all(|cell| cell == &Cell::default()));
+        assert!(row.cells()[3..].iter().all(|cell| cell == &Cell::default()));
         if row.occupied != 0 {
-            assert_eq!(row.cells[0].combining(), "\u{301}");
-            assert_eq!(row.cells[2].combining(), "\u{308}");
+            assert_eq!(row.cells()[0].combining(), "\u{301}");
+            assert_eq!(row.cells()[2].combining(), "\u{308}");
         }
     }
     assert_eq!(grid.primary.rows[1].occupied, 0);
@@ -123,7 +123,7 @@ fn recycled_rows_clear_metadata_and_repaint_the_entire_background() {
             },
             ..Cell::default()
         };
-        assert!(row.cells.iter().all(|cell| cell == &blank));
+        assert!(row.cells().iter().all(|cell| cell == &blank));
         assert_eq!(row.occupied, 0);
         assert!(!row.wrapped);
     }
@@ -701,8 +701,8 @@ fn mixed_edit_resize_and_scroll_sequences_preserve_grid_invariants() {
             .chain(&grid.primary.rows)
             .chain(grid.alternate.iter().flat_map(|screen| &screen.rows))
         {
-            assert_eq!(row.cells.len(), grid.size.cols);
-            assert!(row.occupied <= row.cells.len());
+            assert_eq!(row.cells().len(), grid.size.cols);
+            assert!(row.occupied <= row.cells().len());
             let blank = Cell {
                 style: Style {
                     background: row.clear_background,
@@ -710,18 +710,22 @@ fn mixed_edit_resize_and_scroll_sequences_preserve_grid_invariants() {
                 },
                 ..Cell::default()
             };
-            assert!(row.cells[row.occupied..].iter().all(|cell| cell == &blank));
-            for (col, cell) in row.cells.iter().enumerate() {
+            assert!(
+                row.cells()[row.occupied..]
+                    .iter()
+                    .all(|cell| cell == &blank)
+            );
+            for (col, cell) in row.cells().iter().enumerate() {
                 if cell.flags & Cell::WIDE != 0 {
-                    assert!(col + 1 < row.cells.len());
-                    assert_ne!(row.cells[col + 1].flags & Cell::WIDE_SPACER, 0);
+                    assert!(col + 1 < row.cells().len());
+                    assert_ne!(row.cells()[col + 1].flags & Cell::WIDE_SPACER, 0);
                 }
                 if cell.flags & Cell::WIDE_SPACER != 0 {
                     assert!(col > 0);
-                    assert_ne!(row.cells[col - 1].flags & Cell::WIDE, 0);
+                    assert_ne!(row.cells()[col - 1].flags & Cell::WIDE, 0);
                 }
                 if cell.flags & Cell::LEADING_WIDE_SPACER != 0 {
-                    assert_eq!(col + 1, row.cells.len());
+                    assert_eq!(col + 1, row.cells().len());
                     assert!(row.wrapped);
                 }
             }
@@ -920,7 +924,7 @@ fn rendered_rows(grid: &Grid) -> Vec<Vec<(Cell, bool)>> {
     (0..grid.size.rows)
         .map(|row| {
             let row = grid.visible_row(row).unwrap();
-            row.cells
+            row.cells()
                 .iter()
                 .cloned()
                 .enumerate()
@@ -1084,11 +1088,11 @@ fn widening_history_bounds_intermediate_rows_and_clamps_evicted_viewport_anchor(
     assert_eq!(grid.display_offset(), limit);
     assert!(grid.last_reflow_row_allocations <= limit + 3 + 1);
     assert_eq!(
-        grid.row(-1).unwrap().cells[0].character,
+        grid.row(-1).unwrap().cells()[0].character,
         char::from(b'a' + (1021 % 26) as u8)
     );
     assert_eq!(
-        grid.visible_row(0).unwrap().cells[0].character,
+        grid.visible_row(0).unwrap().cells()[0].character,
         char::from(b'a' + (766 % 26) as u8)
     );
     assert_eq!((grid.cursor.row, grid.cursor.col), (2, 0));
@@ -1109,7 +1113,7 @@ fn narrowing_one_long_logical_line_recycles_rows_and_preserves_its_tail() {
     assert_eq!(text(&grid, 2), "z");
     assert_eq!((grid.cursor.row, grid.cursor.col), (2, 0));
     assert!(grid.pending_wrap);
-    assert_eq!(grid.row(-1).unwrap().cells[0].character, 'w');
+    assert_eq!(grid.row(-1).unwrap().cells()[0].character, 'w');
 }
 
 #[test]

@@ -26,6 +26,27 @@ fn facade_preserves_wide_combining_and_history_cells() {
 }
 
 #[test]
+fn quiet_history_compacts_without_changing_the_frame_or_generation() {
+    let terminal = display(120, 4);
+    for _ in 0..40 {
+        terminal.feed_output("你好 👩🏽‍💻 a short history line\r\n".as_bytes());
+    }
+    let generation = terminal.shared.state().generation;
+    assert!(terminal.shared.state().engine.needs_history_compaction());
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while terminal.shared.state().engine.needs_history_compaction() {
+        assert!(Instant::now() < deadline, "idle history timer did not run");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(terminal.shared.state().generation, generation);
+    let mut cells = Vec::new();
+    terminal.visit_line_cells(-1, -1, |_, _, _, cell| cells.push(cell.clone()));
+    assert_eq!(cells[5].text.as_str(), "👩🏽‍💻");
+    terminal.feed_output(b"another line\r\n");
+    assert!(terminal.shared.state().engine.needs_history_compaction());
+}
+
+#[test]
 fn generation_rejects_cells_changed_since_damage_read() {
     let terminal = display(6, 2);
     terminal.take_render_damage_snapshot();

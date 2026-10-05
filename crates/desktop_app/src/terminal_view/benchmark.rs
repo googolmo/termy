@@ -125,6 +125,7 @@ pub(super) struct BenchmarkSession {
     system: System,
     pid: Option<sysinfo::Pid>,
     finished: bool,
+    last_resize_step: u64,
 }
 
 impl BenchmarkSession {
@@ -144,7 +145,24 @@ impl BenchmarkSession {
             system: System::new(),
             pid: get_current_pid().ok(),
             finished: false,
+            last_resize_step: 0,
         }
+    }
+
+    pub fn resize_for_frame(&mut self, now: Instant) -> Option<gpui_kit::Size<gpui_kit::Pixels>> {
+        if self.config.scenario != "resize" || self.finished {
+            return None;
+        }
+        let step = (now.saturating_duration_since(self.start_at).as_millis() / 100) as u64;
+        if step == self.last_resize_step {
+            return None;
+        }
+        self.last_resize_step = step;
+        let phase = (step % 20).min(20 - step % 20) as f32;
+        Some(gpui_kit::size(
+            gpui_kit::px(900.0 + phase * 30.0),
+            gpui_kit::px(600.0 + phase * 15.0),
+        ))
     }
 
     pub fn record_frame(&mut self, now: Instant) {

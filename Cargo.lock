@@ -7788,6 +7788,7 @@ name = "termy_cli"
 version = "0.2.81"
 dependencies = [
  "anyhow",
+ "base64",
  "clap",
  "core-foundation 0.10.0",
  "core-text",
@@ -7835,6 +7836,7 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "ttf-parser",
+ "unicode-segmentation",
  "unicode-width 0.2.0",
  "ureq",
  "url",

@@ -34,6 +34,8 @@ use std::{
     time::Instant,
 };
 
+mod maintenance;
+
 const EVENT_BATCH: usize = 2048;
 const MAX_EVENTS: usize = 65_536;
 // Count limits alone allow multi-gigabyte backlogs of maximum-size OSC strings.
@@ -93,6 +95,7 @@ struct State {
     palette_epoch: u64,
     force_full_damage: bool,
     last_damage_cursor: Option<TerminalCursorState>,
+    history_deadline: Option<Instant>,
 }
 
 enum PendingEvent {
@@ -156,110 +159,33 @@ impl Shared {
             state.append_replies(&replies);
             replies.clear();
         }
+        if state.engine.take_history_activity() {
+            state.history_deadline = state
+                .engine
+                .needs_history_compaction()
+                .then(|| Instant::now() + std::time::Duration::from_millis(250));
+        }
         let should_notify = !state.engine.modes().synchronized_update || !state.events.is_empty();
         // Publish while the engine lock still protects this deadline: a later
         // feed must not have its timer replaced by an earlier feed's deadline.
-        self.schedule_sync_timeout(&state);
+        self.schedule_maintenance(&state);
         drop(state);
         if should_notify {
             self.notify();
         }
         replies
     }
-    fn schedule_sync_timeout(self: &Arc<Self>, state: &State) {
-        let deadline = state.engine.synchronized_update_deadline();
-        let mut signal = self
-            .sync_signal
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if signal.deadline == deadline {
-            return;
-        }
-        signal.deadline = deadline;
-        self.sync_signal.changed.notify_one();
-        drop(signal);
-        if deadline.is_none() || self.sync_watchdog_started.swap(true, Ordering::AcqRel) {
-            return;
-        }
-        let shared = Arc::downgrade(self);
-        let signal = self.sync_signal.clone();
-        if let Err(error) = std::thread::Builder::new()
-            .name("termy-sync-watchdog".into())
-            .spawn(move || {
-                loop {
-                    let mut pending = signal
-                        .state
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    loop {
-                        if pending.shutdown {
-                            return;
-                        }
-                        let Some(deadline) = pending.deadline else {
-                            pending = signal
-                                .changed
-                                .wait(pending)
-                                .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            continue;
-                        };
-                        let now = Instant::now();
-                        if now < deadline {
-                            let (next, _) = signal
-                                .changed
-                                .wait_timeout(pending, deadline - now)
-                                .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            pending = next;
-                            continue;
-                        }
-                        pending.deadline = None;
-                        drop(pending);
-                        let Some(shared) = shared.upgrade() else {
-                            return;
-                        };
-                        let mut state = shared.state();
-                        if state.engine.synchronized_update_deadline() != Some(deadline) {
-                            break;
-                        }
-                        let committed = state.engine.stop_synchronized_update();
-                        let mut replies = Vec::new();
-                        if committed {
-                            while let Some(event) = state.engine.pop_event() {
-                                state.engine_event(event);
-                            }
-                            state.engine.drain_replies(&mut replies);
-                            state.generation = state.generation.wrapping_add(1);
-                        }
-                        drop(state);
-                        if !replies.is_empty() {
-                            let transport = shared
-                                .transport
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                                .upgrade();
-                            if let Some(transport) = transport {
-                                if let Err(error) = transport.write_protocol_reply_owned(replies) {
-                                    log::warn!("terminal timeout reply failed: {error}");
-                                }
-                            } else {
-                                shared.state().append_replies(&replies);
-                            }
-                        }
-                        if committed {
-                            shared.notify();
-                        }
-                        break;
-                    }
-                }
-            })
-        {
-            self.sync_watchdog_started.store(false, Ordering::Release);
-            log::warn!("could not start terminal synchronization watchdog: {error}");
-        }
-    }
 }
 
 impl State {
+    fn maintenance_deadline(&self) -> Option<Instant> {
+        self.engine
+            .synchronized_update_deadline()
+            .into_iter()
+            .chain(self.history_deadline)
+            .min()
+    }
+
     fn new(size: TerminalSize, config: &TerminalRuntimeConfig) -> Self {
         let mut engine = Engine::new(
             engine_size(size.clamped()),
@@ -289,6 +215,7 @@ impl State {
             palette_epoch: 0,
             force_full_damage: true,
             last_damage_cursor: None,
+            history_deadline: None,
         }
     }
 
@@ -793,7 +720,7 @@ impl CustomBackend {
         }
         let mut replies = Vec::new();
         state.engine.drain_replies(&mut replies);
-        self.shared.schedule_sync_timeout(&state);
+        self.shared.schedule_maintenance(&state);
         drop(state);
         self.send_reply(replies);
         if let Some(transport) = &self.transport
@@ -1133,9 +1060,10 @@ impl CustomBackend {
             i32::from(state.size.rows) - 1,
             usize::from(state.size.cols),
         );
+        let mut scratch = Vec::new();
         for line in requested_first.max(range.0)..=requested_last.min(range.1) {
             let wrapped = state.engine.line_wrapped(line);
-            if let Some(cells) = state.engine.line(line) {
+            state.engine.with_line(line, &mut scratch, |cells| {
                 for (col, cell) in cells.iter().enumerate() {
                     visitor(
                         range,
@@ -1144,7 +1072,7 @@ impl CustomBackend {
                         &render_cell(cell, wrapped && col + 1 == cells.len()),
                     );
                 }
-            }
+            });
         }
         range
     }
@@ -1174,9 +1102,10 @@ impl CustomBackend {
         }
         let state = self.shared.state();
         let history = state.engine.history_size() as i32;
+        let mut scratch = Vec::new();
         search_lines_shared(
             (-history..i32::from(state.size.rows)).filter_map(|line| {
-                state.engine.line(line).map(|cells| {
+                state.engine.with_line(line, &mut scratch, |cells| {
                     let mut text: String = cells.iter().map(search_character).collect();
                     text.truncate(text.trim_end().len());
                     ((line + history) as usize, text)

@@ -253,6 +253,8 @@ fn sextant_geometry(character: char) -> Option<TerminalGlyphPlan> {
 
 #[derive(Clone)]
 struct TextBatch {
+    cell_offsets: Vec<(usize, usize)>,
+    positioned: bool,
     start_col: usize,
     #[allow(dead_code)]
     row: usize,
@@ -557,93 +559,8 @@ fn row_after_scroll(row: usize, scroll: &TerminalViewportScroll) -> Option<usize
     }
 }
 
-#[derive(Clone, Copy)]
-struct TextBatchKey {
-    bold: bool,
-    italic: bool,
-    strikethrough: bool,
-    fg: Hsla,
-}
-
-/// Temporary mutable builder for a text batch. Collects chars into a String,
-/// then converts to the immutable `TextBatch` (with `SharedString`) on finalize.
-struct TextBatchBuilder {
-    start_col: usize,
-    row: usize,
-    text: String,
-    bold: bool,
-    italic: bool,
-    strikethrough: bool,
-    fg: Hsla,
-    underline: Option<TerminalUnderline>,
-    cell_len: usize,
-}
-
-impl TextBatchBuilder {
-    fn new(
-        start_col: usize,
-        row: usize,
-        initial_char: char,
-        initial_combining: Option<&str>,
-        key: TextBatchKey,
-        underline: Option<TerminalUnderline>,
-    ) -> Self {
-        let mut text = String::with_capacity(16);
-        text.push(initial_char);
-        if let Some(combining) = initial_combining {
-            text.push_str(combining);
-        }
-        Self {
-            start_col,
-            row,
-            text,
-            bold: key.bold,
-            italic: key.italic,
-            strikethrough: key.strikethrough,
-            fg: key.fg,
-            underline,
-            cell_len: 1,
-        }
-    }
-
-    fn can_append(
-        &self,
-        col: usize,
-        row: usize,
-        key: TextBatchKey,
-        underline: &Option<TerminalUnderline>,
-    ) -> bool {
-        self.row == row
-            && self.start_col + self.cell_len == col
-            && self.bold == key.bold
-            && self.italic == key.italic
-            && self.strikethrough == key.strikethrough
-            && self.fg == key.fg
-            && self.underline == *underline
-    }
-
-    fn append_cell(&mut self, c: char, combining: Option<&str>) {
-        self.text.push(c);
-        if let Some(combining) = combining {
-            self.text.push_str(combining);
-        }
-        self.cell_len += 1;
-    }
-
-    fn finalize(self) -> TextBatch {
-        TextBatch {
-            start_col: self.start_col,
-            row: self.row,
-            text: SharedString::from(self.text),
-            bold: self.bold,
-            italic: self.italic,
-            strikethrough: self.strikethrough,
-            fg: self.fg,
-            underline: self.underline,
-            cell_len: self.cell_len,
-        }
-    }
-}
+mod text;
+use text::{TextBatchBuilder, TextBatchKey, position_terminal_cells};
 
 fn snapped_block_rect_bounds(
     cell_bounds: Bounds<Pixels>,
@@ -1351,6 +1268,17 @@ impl TerminalGrid {
         };
 
         for (index, cell) in row_cells.iter().enumerate() {
+            if cell.wide_character_spacer
+                && current
+                    .as_ref()
+                    .is_some_and(|batch| batch.ends_at(cell.col))
+            {
+                current
+                    .as_mut()
+                    .expect("wide glyph batch")
+                    .add_wide_spacer();
+                continue;
+            }
             if !Self::cell_is_drawable_text(cell) {
                 Self::push_pending_text_batch(&mut current, ops);
                 continue;
@@ -1587,13 +1515,16 @@ impl TerminalGrid {
                             }),
                         };
                         let t_shape = terminal_ui_render_metrics_enabled().then(Instant::now);
-                        row_ops.shaped_lines[index] =
-                            Some(Rc::new(window.text_system().shape_line(
-                                batch.text.clone(),
-                                self.font_size,
-                                &[run],
-                                Some(self.cell_size.width),
-                            )));
+                        let mut shaped = window.text_system().shape_line(
+                            batch.text.clone(),
+                            self.font_size,
+                            &[run],
+                            (!batch.positioned).then_some(self.cell_size.width),
+                        );
+                        if batch.positioned {
+                            shaped = position_terminal_cells(shaped, batch, self.cell_size.width);
+                        }
+                        row_ops.shaped_lines[index] = Some(Rc::new(shaped));
                         if let Some(t_shape) = t_shape {
                             add_span_text_shaping_us(t_shape.elapsed().as_micros() as u64);
                         }
@@ -3278,14 +3209,16 @@ mod tests {
     }
 
     #[test]
-    fn batches_break_around_wide_char_spacer_boundaries() {
+    fn batches_span_wide_char_spacers_without_collapsing_columns() {
         let mut spacer = test_cell(1, ' ');
         spacer.render_text = false;
+        spacer.wide_character_spacer = true;
         let grid = test_grid(vec![test_cell(0, '你'), spacer, test_cell(2, 'x')], None);
         let batches = collect_batches(&grid);
-        assert_eq!(batches.len(), 2);
-        assert_eq!(batches[0].text, "你");
-        assert_eq!(batches[1].text, "x");
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].text, "你x");
+        assert_eq!(batches[0].cell_len, 3);
+        assert_eq!(batches[0].cell_offsets, vec![(0, 0), (3, 2)]);
     }
 
     #[test]

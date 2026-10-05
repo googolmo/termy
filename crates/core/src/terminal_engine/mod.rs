@@ -14,6 +14,8 @@ mod queries;
 mod sync;
 pub(crate) mod transport;
 mod types;
+#[cfg(test)]
+mod unicode_tests;
 
 use std::{collections::VecDeque, time::Instant};
 
@@ -113,6 +115,7 @@ impl Engine {
     }
 
     fn feed_at(&mut self, bytes: &[u8], now: Instant) {
+        self.state.grid.prepare_output(bytes.len());
         if self
             .synchronized_update_deadline()
             .is_some_and(|deadline| deadline <= now)
@@ -149,6 +152,7 @@ impl Engine {
     /// Commit pending output atomically through the existing parser and grid.
     /// Returns false when there is no pending batch (including stale watchdogs).
     pub fn stop_synchronized_update(&mut self) -> bool {
+        self.state.grid.release_history_read_cache();
         let Some(bytes) = self.synchronized_update.take_buffer() else {
             return false;
         };
@@ -175,6 +179,24 @@ impl Engine {
     pub fn generation(&self) -> u64 {
         self.generation
     }
+    /// Compact cold scrollback after an output burst. This preserves all cells
+    /// and damage; borrowed row views remain available on demand. The native
+    /// runtime schedules bounded steps after 250 ms without output.
+    pub fn compact_history(&mut self) {
+        self.state.grid.compact_history(usize::MAX);
+    }
+
+    pub(crate) fn take_history_activity(&mut self) -> bool {
+        std::mem::take(&mut self.state.grid.history_activity)
+    }
+
+    pub(crate) fn needs_history_compaction(&self) -> bool {
+        self.state.grid.needs_compaction()
+    }
+    pub(crate) fn compact_history_step(&mut self, rows: usize) {
+        self.state.grid.compact_history(rows);
+    }
+
     pub fn history_size(&self) -> usize {
         self.state.grid.history_size()
     }
@@ -195,6 +217,12 @@ impl Engine {
 
     /// The lifetime of the slice prevents mutation while the renderer reads it.
     pub fn viewport_row(&self, row: usize) -> Option<&[Cell]> {
+        if self.display_offset() != 0 {
+            self.state
+                .grid
+                .history_read_cache
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+        }
         self.state.grid.visible_row(row).map(|row| row.cells())
     }
 
@@ -206,8 +234,31 @@ impl Engine {
     }
 
     /// Lines before the live screen are negative, with -1 the newest history row.
+    /// A cold history row is expanded on demand. Expanded history is released
+    /// on the next output, resize, or scroll; the borrowed slice remains valid
+    /// until that exclusive mutation.
     pub fn line(&self, line: i32) -> Option<&[Cell]> {
+        if line < 0 {
+            self.state
+                .grid
+                .history_read_cache
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+        }
         self.state.grid.row(line).map(|row| row.cells())
+    }
+
+    /// Visit a line without retaining a dense copy of cold history. Scratch
+    /// capacity is reused across calls, including full-buffer search/copy.
+    pub(crate) fn with_line<T>(
+        &self,
+        line: i32,
+        scratch: &mut Vec<Cell>,
+        read: impl FnOnce(&[Cell]) -> T,
+    ) -> Option<T> {
+        self.state
+            .grid
+            .row(line)
+            .map(|row| row.with_cells(scratch, read))
     }
 
     pub fn line_wrapped(&self, line: i32) -> bool {

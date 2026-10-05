@@ -2835,6 +2835,13 @@ impl Render for TerminalView {
         self.record_debug_overlay_frame();
         let view_build_started_at =
             (self.show_debug_overlay || self.inspector_collects_render_stats()).then(Instant::now);
+        if let Some(size) = self
+            .benchmark_session
+            .as_mut()
+            .and_then(|session| session.resize_for_frame(frame_now))
+        {
+            window.resize(size);
+        }
         self.record_benchmark_frame(frame_now);
 
         // Process pending OSC 52 clipboard writes

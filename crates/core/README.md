@@ -20,7 +20,6 @@ cargo run --release -p termy_core --example terminal_engine_bench -- 32
 
 Native, display-only, tmux, and persistent sessions use the custom engine in
 `src/terminal_engine`. There is one runtime engine and no environment selector.
-The legacy `src/tmon` implementation is retained outside the compiled module tree.
 
 ## Forbidden Dependencies
 
