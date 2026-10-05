@@ -27,6 +27,7 @@ impl State {
                 1016 => Some(self.modes.mouse_encoding == MouseEncoding::SgrPixels),
                 2004 => Some(self.modes.bracketed_paste),
                 2026 => Some(self.modes.synchronized_update),
+                5522 => Some(self.modes.clipboard_paste_events),
                 _ => None,
             }
         } else {

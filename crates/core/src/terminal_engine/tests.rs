@@ -30,6 +30,87 @@ fn replies(engine: &mut Engine) -> Vec<u8> {
 }
 
 #[test]
+fn clipboard_events_commit_in_stream_order_with_original_terminators() {
+    let mut engine = engine(30, 3, 0);
+    let input = b"\x1b[?2026h\x1b[?5522h\x1b]5522;type=read:id=a;Lg==\x07\x1b]5522;type=read:id=b;Lg==\x1b\\";
+    for byte in input {
+        engine.feed(&[*byte]);
+    }
+    assert!(engine.pop_event().is_none());
+    assert!(!engine.modes().clipboard_paste_events);
+    engine.feed(b"\x1b[?2026l");
+    assert!(engine.modes().clipboard_paste_events);
+    assert_eq!(
+        engine.pop_event(),
+        Some(Event::KittyClipboardControl(
+            crate::KittyClipboardControl::Set(true)
+        ))
+    );
+    for (body, terminator) in [
+        (
+            b"type=read:id=a;Lg==".as_slice(),
+            crate::KittyClipboardOscTerminator::Bell,
+        ),
+        (
+            b"type=read:id=b;Lg==".as_slice(),
+            crate::KittyClipboardOscTerminator::StringTerminator,
+        ),
+    ] {
+        assert_eq!(
+            engine.pop_event(),
+            Some(Event::KittyClipboard(crate::KittyClipboardOsc::from_body(
+                body, terminator
+            )))
+        );
+    }
+    assert!(engine.pop_event().is_none());
+}
+
+#[test]
+fn unicode_continuation_bytes_do_not_start_clipboard_protocols() {
+    let mut engine = engine(30, 3, 0);
+    for byte in "ŝ5522;ordinary".as_bytes() {
+        engine.feed(&[*byte]);
+    }
+    assert_eq!(text(&engine, 0).trim_end(), "ŝ5522;ordinary");
+    assert!(engine.pop_event().is_none());
+}
+
+#[test]
+fn event_pressure_keeps_clipboard_resets_and_aborts_incomplete_writes() {
+    let mut engine = engine(30, 3, 0);
+    engine.feed(b"\x1b[?5522h");
+    while engine.pop_event().is_some() {}
+    engine.feed(&[7; MAX_EVENTS]);
+    engine.feed(b"\x1b]5522;type=wdata;\x07");
+    assert_eq!(
+        engine.pop_event(),
+        Some(Event::KittyClipboardControl(
+            crate::KittyClipboardControl::Reset
+        ))
+    );
+    assert_eq!(
+        engine.pop_event(),
+        Some(Event::KittyClipboardControl(
+            crate::KittyClipboardControl::Set(true)
+        ))
+    );
+    assert!(matches!(engine.pop_event(), Some(Event::KittyClipboard(_))));
+    assert!(engine.pop_event().is_none());
+
+    engine.feed(&[7; MAX_EVENTS]);
+    engine.feed(b"\x1bc");
+    assert_eq!(
+        engine.pop_event(),
+        Some(Event::KittyClipboardControl(
+            crate::KittyClipboardControl::Reset
+        ))
+    );
+    assert!(!engine.modes().clipboard_paste_events);
+    assert!(engine.dropped_events() >= MAX_EVENTS as u64);
+}
+
+#[test]
 fn cell_layout_and_screen_dimensions_stay_bounded() {
     assert!(
         size_of::<Cell>() <= 32,

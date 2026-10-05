@@ -322,4 +322,22 @@ mod tests {
         engine.feed(b"\x1bc\x1b_Gm=0;/w==\x1b\\");
         assert!(engine.graphics_placements().is_empty());
     }
+
+    #[test]
+    fn large_direct_feeds_bound_ordered_graphics_effect_storage() {
+        let mut engine = Engine::new(
+            Size { cols: 10, rows: 4 },
+            Options {
+                scrollback_history: 0,
+            },
+        );
+        engine.feed(b"\x1b[3;1H\x1b_Ga=T,f=32,s=1,v=1,i=1,c=1,r=1,C=1;AQID/w==\x1b\\");
+        let input = b"\x1b[S\x1b[T".repeat(128 * 1024);
+        engine.feed(&input);
+        assert_eq!(engine.graphics_placements()[0].viewport_row, 2);
+        assert!(
+            engine.state.graphics.effects.capacity() * size_of::<super::GridEffect>()
+                < 4 * 1024 * 1024
+        );
+    }
 }

@@ -66,6 +66,9 @@ pub(super) trait Handler {
     fn escape(&mut self, intermediates: &[u8], final_byte: u8);
     fn csi(&mut self, params: &[Param], private: Option<u8>, intermediates: &[u8], final_byte: u8);
     fn osc(&mut self, bytes: &[u8]);
+    fn osc_terminated(&mut self, bytes: &[u8], _bell: bool) {
+        self.osc(bytes);
+    }
     fn dcs(&mut self, bytes: &[u8]);
     fn apc(&mut self, bytes: &[u8]);
 
@@ -209,13 +212,13 @@ impl Parser {
             State::String(kind) => match byte {
                 0x18 | 0x1a => self.cancel(),
                 0x1b => self.state = State::StringEscape(kind),
-                0x07 if kind == StringKind::Osc => self.finish_string(handler, kind),
+                0x07 if kind == StringKind::Osc => self.finish_string(handler, kind, true),
                 0x00..=0x1f | 0x7f if kind == StringKind::Osc => {}
                 _ => self.append_string(kind, &[byte]),
             },
             State::StringEscape(kind) => {
                 if byte == b'\\' {
-                    self.finish_string(handler, kind);
+                    self.finish_string(handler, kind, false);
                 } else if self.discarded {
                     // Keep oversized payloads isolated until termination or
                     // explicit cancellation, including embedded escapes.
@@ -425,10 +428,10 @@ impl Parser {
         self.string.extend_from_slice(bytes);
     }
 
-    fn finish_string(&mut self, handler: &mut impl Handler, kind: StringKind) {
+    fn finish_string(&mut self, handler: &mut impl Handler, kind: StringKind, bell: bool) {
         if !self.discarded {
             match kind {
-                StringKind::Osc => handler.osc(&self.string),
+                StringKind::Osc => handler.osc_terminated(&self.string, bell),
                 StringKind::Dcs => handler.dcs(&self.string),
                 StringKind::Apc => handler.apc(&self.string),
                 StringKind::Ignore => {}

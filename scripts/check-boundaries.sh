@@ -267,6 +267,7 @@ require_pattern 'file-manager' \
   "scripts/install-linux.sh" \
   "Linux install helper must install file-manager Open new Termy tab here entries"
 # Only core, desktop and CLI are Cargo packages; helpers are ordinary modules.
+check_forbidden_all_target_dep "termy_core" "alacritty_terminal"
 check_forbidden_all_target_dep "termy_core" "gpui(-kit|-pre)?"
 check_forbidden_all_target_dep "termy_core" "termy"
 check_forbidden_all_target_dep "termy_cli" "gpui(-kit|-pre)?"
@@ -274,6 +275,9 @@ check_forbidden_all_target_dep "termy_cli" "termy"
 forbid_pattern 'termy_core::|crate::(multiplexer|ffi|runtime|config_core|plugin_runtime)' \
   "crates/core/src/tmon" \
   "the terminal engine must remain independent of its host modules"
+forbid_pattern 'termy_core::|crate::(multiplexer|ffi|runtime|config_core|plugin_runtime)|alacritty_terminal' \
+  "crates/core/src/terminal_engine" \
+  "the custom terminal engine must remain independent of host modules and external engines"
 forbid_pattern 'crate::(config_core|runtime|multiplexer)|gpui(_kit)?::' \
   "crates/core/src/command_core" \
   "the command catalog must remain independent of configuration and runtime"

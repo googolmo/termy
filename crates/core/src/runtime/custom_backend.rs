@@ -9,13 +9,13 @@ use super::{
 };
 use crate::{
     DetectedLink, DetectedViewportLink, KittyClipboardControl, KittyClipboardHostState,
-    KittyClipboardInput, KittyClipboardInterceptor, KittyClipboardOsc,
-    KittyGraphicsRenderPlacement, TerminalClipboardLocation, TerminalClipboardTarget,
-    TerminalColor, TerminalKeyboardMode, TerminalMouseMode, TerminalPalette, TerminalQueryColors,
-    TerminalRenderCell, TerminalRenderColor, TerminalRenderDamageSnapshot, TerminalRenderRead,
-    TerminalRenderText, TerminalReplyHost, TerminalUnderlineStyle, TerminalViewportMetadata,
-    TermyCell, TermyColor, TermyFrame, TermyFrameUpdate, TermySearchMatch, TermySearchOptions,
-    TermySharedSearchMatch,
+    KittyClipboardOsc, KittyGraphicsRenderPlacement, TerminalClipboardLocation,
+    TerminalClipboardTarget, TerminalColor, TerminalKeyboardMode, TerminalMouseMode,
+    TerminalPalette, TerminalQueryColors, TerminalRenderCell, TerminalRenderColor,
+    TerminalRenderDamageSnapshot, TerminalRenderRead, TerminalRenderText, TerminalReplyHost,
+    TerminalUnderlineStyle, TerminalViewportMetadata, TerminalViewportScroll,
+    TerminalViewportScrollDirection, TermyCell, TermyColor, TermyFrame, TermyFrameUpdate,
+    TermySearchMatch, TermySearchOptions, TermySharedSearchMatch,
     search::search_lines_shared,
     terminal_engine::transport::{PtySize, SpawnConfig, Transport},
     terminal_engine::{self as engine, Engine},
@@ -36,6 +36,9 @@ use std::{
 
 const EVENT_BATCH: usize = 2048;
 const MAX_EVENTS: usize = 65_536;
+// Count limits alone allow multi-gigabyte backlogs of maximum-size OSC strings.
+// Track retained heap capacity independently of the fixed-size queue slots.
+const MAX_EVENT_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PENDING_REPLIES: usize = 2 * 1024 * 1024;
 const PARSE_BATCH: usize = 4096;
 
@@ -80,12 +83,11 @@ impl Drop for Shared {
 
 struct State {
     engine: Engine,
-    clipboard_interceptor: KittyClipboardInterceptor,
-    clipboard_paste_events: bool,
     size: TerminalSize,
     query_colors: TerminalQueryColors,
     default_cursor_style: TerminalCursorStyle,
     events: VecDeque<PendingEvent>,
+    event_payload_bytes: usize,
     replies: Vec<u8>,
     generation: u64,
     palette_epoch: u64,
@@ -98,6 +100,31 @@ enum PendingEvent {
     ClipboardLoad(String),
     Kitty(KittyClipboardOsc),
     KittyControl(KittyClipboardControl),
+    KittyOverflow,
+}
+
+impl PendingEvent {
+    fn payload_bytes(&self) -> usize {
+        match self {
+            Self::Terminal(
+                TerminalEvent::Title(text)
+                | TerminalEvent::WorkingDirectory(text)
+                | TerminalEvent::ClipboardStore(text),
+            )
+            | Self::ClipboardLoad(text) => text.capacity(),
+            Self::Kitty(packet) => packet.payload_capacity(),
+            Self::Terminal(_) | Self::KittyControl(_) | Self::KittyOverflow => 0,
+        }
+    }
+
+    fn must_deliver(&self) -> bool {
+        matches!(
+            self,
+            Self::Terminal(TerminalEvent::Exit)
+                | Self::KittyOverflow
+                | Self::KittyControl(KittyClipboardControl::Set(_) | KittyClipboardControl::Reset)
+        )
+    }
 }
 
 impl Shared {
@@ -119,22 +146,28 @@ impl Shared {
         }
     }
 
-    fn feed(self: &Arc<Self>, bytes: &[u8], hydrate: bool) -> Vec<u8> {
+    fn feed(self: &Arc<Self>, bytes: &[u8], hydrate: bool, buffer_replies: bool) -> Vec<u8> {
         if bytes.is_empty() {
             return Vec::new();
         }
         let mut state = self.state();
-        let replies = state.feed(bytes, hydrate);
+        let mut replies = state.feed(bytes, hydrate);
+        if buffer_replies {
+            state.append_replies(&replies);
+            replies.clear();
+        }
         let should_notify = !state.engine.modes().synchronized_update || !state.events.is_empty();
-        let deadline = state.engine.synchronized_update_deadline();
+        // Publish while the engine lock still protects this deadline: a later
+        // feed must not have its timer replaced by an earlier feed's deadline.
+        self.schedule_sync_timeout(&state);
         drop(state);
-        self.schedule_sync_timeout(deadline);
         if should_notify {
             self.notify();
         }
         replies
     }
-    fn schedule_sync_timeout(self: &Arc<Self>, deadline: Option<Instant>) {
+    fn schedule_sync_timeout(self: &Arc<Self>, state: &State) {
+        let deadline = state.engine.synchronized_update_deadline();
         let mut signal = self
             .sync_signal
             .state
@@ -242,8 +275,6 @@ impl State {
         let actual = engine.size();
         Self {
             engine,
-            clipboard_interceptor: KittyClipboardInterceptor::default(),
-            clipboard_paste_events: false,
             size: TerminalSize {
                 cols: actual.cols as u16,
                 rows: actual.rows as u16,
@@ -252,6 +283,7 @@ impl State {
             query_colors: config.query_colors,
             default_cursor_style: config.default_cursor_style,
             events: VecDeque::new(),
+            event_payload_bytes: 0,
             replies: Vec::new(),
             generation: 0,
             palette_epoch: 0,
@@ -261,11 +293,77 @@ impl State {
     }
 
     fn queue(&mut self, event: PendingEvent) {
-        if self.events.len() < MAX_EVENTS {
-            self.events.push_back(event);
-        } else if matches!(event, PendingEvent::Terminal(TerminalEvent::Exit)) {
-            self.events.pop_front();
-            self.events.push_back(event);
+        let bytes = event.payload_bytes();
+        if bytes > MAX_EVENT_PAYLOAD_BYTES.saturating_sub(self.event_payload_bytes) {
+            self.discard_event(event);
+            return;
+        }
+        if self.events.len() == MAX_EVENTS {
+            if !event.must_deliver() {
+                self.discard_event(event);
+                return;
+            }
+            self.compact_saturated_events();
+        }
+        self.event_payload_bytes += bytes;
+        self.events.push_back(event);
+    }
+
+    fn discard_event(&mut self, event: PendingEvent) {
+        if matches!(event, PendingEvent::Kitty(_)) {
+            // A missing chunk must not allow a later terminator to commit a
+            // truncated clipboard write. Keep this abort ordered with packets.
+            self.queue(PendingEvent::KittyOverflow);
+        }
+    }
+
+    fn pop_event(&mut self) -> Option<PendingEvent> {
+        let event = self.events.pop_front()?;
+        self.event_payload_bytes -= event.payload_bytes();
+        Some(event)
+    }
+
+    // A critical event must survive even a queue filled entirely with controls.
+    // Discard the saturated ordinary backlog and retain cumulative clipboard
+    // invalidation, final paste mode, and process exit. All pending clipboard
+    // packets are discarded together, so compression cannot move them across a
+    // permission reset. This O(n) pass occurs only after MAX_EVENTS enqueues.
+    fn compact_saturated_events(&mut self) {
+        let mut reset = false;
+        let mut revoke_grants = false;
+        let mut clipboard_overflow = false;
+        let mut paste_mode = None;
+        let mut exit = false;
+        while let Some(event) = self.pop_event() {
+            match event {
+                PendingEvent::KittyControl(KittyClipboardControl::Reset) => {
+                    reset = true;
+                    paste_mode = Some(false);
+                }
+                PendingEvent::KittyControl(KittyClipboardControl::Set(enabled)) => {
+                    revoke_grants |= !enabled;
+                    paste_mode = Some(enabled);
+                }
+                PendingEvent::Terminal(TerminalEvent::Exit) => exit = true,
+                PendingEvent::Kitty(_) | PendingEvent::KittyOverflow => clipboard_overflow = true,
+                _ => {}
+            }
+        }
+        if reset {
+            self.queue(PendingEvent::KittyControl(KittyClipboardControl::Reset));
+        } else if clipboard_overflow {
+            self.queue(PendingEvent::KittyOverflow);
+        }
+        if revoke_grants && !reset {
+            self.queue(PendingEvent::KittyControl(KittyClipboardControl::Set(
+                false,
+            )));
+        }
+        if paste_mode == Some(true) {
+            self.queue(PendingEvent::KittyControl(KittyClipboardControl::Set(true)));
+        }
+        if exit {
+            self.queue(PendingEvent::Terminal(TerminalEvent::Exit));
         }
     }
 
@@ -273,36 +371,7 @@ impl State {
         let before_generation = self.engine.generation();
         let mut replies = Vec::new();
         for bytes in bytes.chunks(PARSE_BATCH) {
-            let (filtered, clipboard) = self.clipboard_interceptor.process(bytes);
-            for event in clipboard {
-                match event {
-                    KittyClipboardInput::Packet(packet) => {
-                        if !hydrate {
-                            self.queue(PendingEvent::Kitty(packet));
-                        }
-                    }
-                    KittyClipboardInput::Control(control) => {
-                        match control {
-                            KittyClipboardControl::Set(enabled) => {
-                                self.clipboard_paste_events = enabled;
-                            }
-                            KittyClipboardControl::Reset => self.clipboard_paste_events = false,
-                            KittyClipboardControl::Query => {
-                                if !hydrate {
-                                    let enabled = if self.clipboard_paste_events { 1 } else { 2 };
-                                    replies.extend_from_slice(
-                                        format!("\x1b[?5522;{enabled}$y").as_bytes(),
-                                    );
-                                }
-                            }
-                        }
-                        if !hydrate {
-                            self.queue(PendingEvent::KittyControl(control));
-                        }
-                    }
-                }
-            }
-            self.engine.feed(&filtered);
+            self.engine.feed(bytes);
             while let Some(event) = self.engine.pop_event() {
                 if !hydrate {
                     self.engine_event(event);
@@ -327,6 +396,14 @@ impl State {
 
     fn engine_event(&mut self, event: engine::Event) {
         let event = match event {
+            engine::Event::KittyClipboard(packet) => {
+                self.queue(PendingEvent::Kitty(packet));
+                return;
+            }
+            engine::Event::KittyClipboardControl(control) => {
+                self.queue(PendingEvent::KittyControl(control));
+                return;
+            }
             engine::Event::Bell => TerminalEvent::Bell,
             engine::Event::Title(title) => TerminalEvent::Title(title),
             engine::Event::ResetTitle => TerminalEvent::ResetTitle,
@@ -417,7 +494,7 @@ impl State {
     }
 
     fn take_damage(&mut self, force_full: bool) -> TerminalRenderDamageSnapshot {
-        let source = self.engine.take_damage();
+        let (source, source_scrolls) = self.engine.take_render_damage();
         let pending_full = std::mem::take(&mut self.force_full_damage);
         let full = force_full || pending_full;
         let mut damage = if full {
@@ -438,10 +515,44 @@ impl State {
                 ),
             }
         };
+        let scrolls: Vec<_> = if matches!(damage, TerminalDamageSnapshot::Full) {
+            Vec::new()
+        } else {
+            source_scrolls
+                .into_iter()
+                .map(|scroll| TerminalViewportScroll {
+                    top: scroll.top,
+                    bottom: scroll.bottom - 1,
+                    count: scroll.lines.unsigned_abs() as usize,
+                    direction: if scroll.lines > 0 {
+                        TerminalViewportScrollDirection::Up
+                    } else {
+                        TerminalViewportScrollDirection::Down
+                    },
+                })
+                .collect()
+        };
+        let previous_cursor = self.last_damage_cursor.and_then(|mut cursor| {
+            for scroll in &scrolls {
+                if !(scroll.top..=scroll.bottom).contains(&cursor.row) {
+                    continue;
+                }
+                cursor.row = match scroll.direction {
+                    TerminalViewportScrollDirection::Up => cursor.row.checked_sub(scroll.count)?,
+                    TerminalViewportScrollDirection::Down => {
+                        cursor.row.checked_add(scroll.count)?
+                    }
+                };
+                if !(scroll.top..=scroll.bottom).contains(&cursor.row) {
+                    return None;
+                }
+            }
+            Some(cursor)
+        });
         let cursor = self.cursor();
-        if cursor != self.last_damage_cursor {
+        if cursor != self.last_damage_cursor || !scrolls.is_empty() {
             if let TerminalDamageSnapshot::Partial(spans) = &mut damage {
-                for cursor in self.last_damage_cursor.into_iter().chain(cursor) {
+                for cursor in previous_cursor.into_iter().chain(cursor) {
                     if cursor.row < self.engine.size().rows {
                         spans.push(TerminalDirtySpan {
                             row: cursor.row,
@@ -459,7 +570,7 @@ impl State {
         }
         TerminalRenderDamageSnapshot {
             damage,
-            scrolls: Vec::new(),
+            scrolls,
             generation: self.generation,
             palette_revision: self.metadata().palette_revision,
         }
@@ -559,7 +670,7 @@ impl CustomBackend {
         terminal.transport = Some(Arc::new(Transport::spawn(
             spawn,
             pty_size(terminal.size()),
-            move |bytes| shared.feed(bytes, false),
+            move |bytes| shared.feed(bytes, false, false),
             move || {
                 let mut state = exit.state();
                 if state.engine.stop_synchronized_update() {
@@ -610,11 +721,11 @@ impl CustomBackend {
     }
 
     pub(super) fn feed_output(&self, bytes: &[u8]) {
-        let replies = self.shared.feed(bytes, false);
+        let replies = self.shared.feed(bytes, false, self.transport.is_none());
         self.send_reply(replies);
     }
     pub(super) fn hydrate_output(&self, bytes: &[u8]) {
-        self.shared.feed(bytes, true);
+        self.shared.feed(bytes, true, false);
     }
     pub(super) fn child_pid(&self) -> Option<u32> {
         self.transport
@@ -682,8 +793,8 @@ impl CustomBackend {
         }
         let mut replies = Vec::new();
         state.engine.drain_replies(&mut replies);
+        self.shared.schedule_sync_timeout(&state);
         drop(state);
-        self.shared.schedule_sync_timeout(None);
         self.send_reply(replies);
         if let Some(transport) = &self.transport
             && let Err(error) = transport.resize(pty_size(size))
@@ -714,7 +825,7 @@ impl CustomBackend {
         self.shared.state().engine.poll_graphics_revision()
     }
     pub(super) fn kitty_clipboard_paste_events_enabled(&self) -> bool {
-        self.shared.state().clipboard_paste_events
+        self.shared.state().engine.modes().clipboard_paste_events
     }
     pub(super) fn kitty_clipboard_paste_notification(
         &self,
@@ -750,7 +861,7 @@ impl CustomBackend {
         let (batch, has_more) = {
             let mut state = self.shared.state();
             let count = state.events.len().min(EVENT_BATCH);
-            let batch: Vec<_> = state.events.drain(..count).collect();
+            let batch: Vec<_> = (0..count).filter_map(|_| state.pop_event()).collect();
             (batch, !state.events.is_empty())
         };
         let mut events = Vec::with_capacity(batch.len() + usize::from(wakeup));
@@ -783,6 +894,13 @@ impl CustomBackend {
                     for reply in replies {
                         self.send_reply(reply);
                     }
+                }
+                PendingEvent::KittyOverflow => {
+                    self.shared
+                        .clipboard
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .reset_preserving_paste_mode();
                 }
                 PendingEvent::KittyControl(control) => {
                     let mut clipboard = self
@@ -854,7 +972,8 @@ impl CustomBackend {
     }
     pub(super) fn frame_update(&self, force_full: bool) -> TermyFrameUpdate {
         let mut state = self.shared.state();
-        let update = state.take_damage(force_full);
+        let mut update = state.take_damage(force_full);
+        expand_legacy_scroll_damage(&mut update, usize::from(state.size.cols));
         let palette = state.palette();
         let spans = match &update.damage {
             TerminalDamageSnapshot::Full => (0..usize::from(state.size.rows))
@@ -895,7 +1014,10 @@ impl CustomBackend {
         self.shared.state().take_damage(false)
     }
     pub(super) fn take_damage_snapshot(&self) -> TerminalDamageSnapshot {
-        self.take_render_damage_snapshot().damage
+        let mut state = self.shared.state();
+        let mut update = state.take_damage(false);
+        expand_legacy_scroll_damage(&mut update, usize::from(state.size.cols));
+        update.damage
     }
     pub(super) fn render_read(&self, force_full: bool) -> TerminalRenderRead {
         self.shared.state().render_read(force_full)
@@ -1308,6 +1430,22 @@ fn search_character(cell: &engine::Cell) -> char {
         cell.character
     }
 }
+// Legacy frame consumers replay only cell patches, so include the rows moved
+// by scroll operations rather than silently dropping that part of the update.
+fn expand_legacy_scroll_damage(update: &mut TerminalRenderDamageSnapshot, cols: usize) {
+    if let TerminalDamageSnapshot::Partial(spans) = &mut update.damage {
+        for scroll in &update.scrolls {
+            spans.extend((scroll.top..=scroll.bottom).map(|row| TerminalDirtySpan {
+                row,
+                left_col: 0,
+                right_col: cols.saturating_sub(1),
+            }));
+        }
+        normalize_spans(spans);
+    }
+    update.scrolls.clear();
+}
+
 fn normalize_spans(spans: &mut Vec<TerminalDirtySpan>) {
     spans.sort_unstable_by_key(|span| (span.row, span.left_col));
     let mut len = 0;
@@ -1327,148 +1465,4 @@ fn normalize_spans(spans: &mut Vec<TerminalDirtySpan>) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-
-    fn display(cols: u16, rows: u16) -> CustomBackend {
-        CustomBackend::new_display(
-            TerminalSize {
-                cols,
-                rows,
-                ..TerminalSize::default()
-            },
-            None,
-        )
-    }
-
-    #[test]
-    fn facade_preserves_wide_combining_and_history_cells() {
-        let terminal = display(6, 2);
-        terminal.feed_output("a界e\u{301}\r\nsecond\r\nlast".as_bytes());
-        assert_eq!(terminal.scroll_state().1, 1);
-        let mut observed = Vec::new();
-        terminal.visit_line_cells(-1, -1, |_, _, _, cell| observed.push(cell.clone()));
-        assert_eq!(observed[1].text.as_str(), "界");
-        assert!(observed[2].wide_character_spacer);
-        assert_eq!(observed[3].text.as_str(), "e\u{301}");
-        assert_eq!(terminal.search("last")[0].row, 2);
-    }
-
-    #[test]
-    fn generation_rejects_cells_changed_since_damage_read() {
-        let terminal = display(6, 2);
-        terminal.take_render_damage_snapshot();
-        terminal.feed_output(b"x");
-        let update = terminal.take_render_damage_snapshot();
-        let TerminalDamageSnapshot::Partial(spans) = update.damage else {
-            panic!("incremental damage");
-        };
-        let mut visited = 0;
-        assert!(terminal.visit_viewport_ranges_at_generation(
-            update.generation,
-            &spans,
-            |_, _, _, _, _| visited += 1
-        ));
-        assert!(visited > 0);
-        terminal.feed_output(b"y");
-        assert!(!terminal.visit_viewport_ranges_at_generation(
-            update.generation,
-            &spans,
-            |_, _, _, _, _| panic!("stale read")
-        ));
-    }
-
-    #[test]
-    fn forced_read_consumes_full_damage_once() {
-        let terminal = display(6, 2);
-        assert!(matches!(
-            terminal.render_read(true).update.damage,
-            TerminalDamageSnapshot::Full
-        ));
-        assert_eq!(
-            terminal.take_damage_snapshot(),
-            TerminalDamageSnapshot::Partial(Vec::new())
-        );
-    }
-
-    #[test]
-    fn display_routes_cursor_and_clipboard_queries() {
-        struct Host {
-            replies: Vec<u8>,
-        }
-        impl TerminalReplyHost for Host {
-            fn load_clipboard(&mut self, _: TerminalClipboardTarget) -> Option<String> {
-                Some("hello".to_owned())
-            }
-            fn protocol_reply(&mut self, bytes: &[u8]) {
-                self.replies.extend_from_slice(bytes);
-            }
-        }
-        let terminal = display(6, 2);
-        terminal.feed_output(b"hi\x1b[6n\x1b]52;c;?\x1b\\");
-        let mut host = Host {
-            replies: Vec::new(),
-        };
-        terminal.drain_events(&mut host);
-        assert_eq!(host.replies, b"\x1b[1;3R\x1b]52;c;aGVsbG8=\x1b\\");
-    }
-
-    #[test]
-    fn synchronized_output_commits_after_deadline_without_more_input() {
-        let (send, receive) = flume::unbounded();
-        let terminal = CustomBackend::new_display_with_wakeup_notifier(
-            TerminalSize::default(),
-            None,
-            Some(TerminalWakeupNotifier::new(move || {
-                let _ = send.send(());
-            })),
-        );
-        terminal.render_read(true);
-        terminal.feed_output(b"\x1b[?2026hdeadline");
-        assert_eq!(terminal.snapshot().cells[0].char, ' ');
-        receive
-            .recv_timeout(Duration::from_secs(2))
-            .expect("watchdog commits output");
-        assert_eq!(terminal.snapshot().cells[0].char, 'd');
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn native_exit_commits_synchronized_tail_before_exit_event() {
-        let terminal = CustomBackend::new_with_launch_and_wakeup_notifier(
-            TerminalSize::default(),
-            None,
-            None,
-            None,
-            None,
-            Some(&TerminalLaunch::Program {
-                program: "/bin/sh".to_owned(),
-                args: vec![
-                    "-c".to_owned(),
-                    "printf '\\033[?2026hfinal-tail'".to_owned(),
-                ],
-            }),
-        )
-        .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            let (events, _) = terminal.drain_events(&mut |_| None);
-            if events
-                .iter()
-                .any(|event| matches!(event, TerminalEvent::Exit))
-            {
-                let text: String = terminal
-                    .snapshot()
-                    .cells
-                    .into_iter()
-                    .map(|cell| cell.char)
-                    .collect();
-                assert!(text.starts_with("final-tail"));
-                break;
-            }
-            assert!(Instant::now() < deadline, "child exited");
-            std::thread::sleep(Duration::from_millis(5));
-        }
-    }
-}
+mod tests;

@@ -4,12 +4,13 @@ use std::collections::VecDeque;
 
 use unicode_width::UnicodeWidthChar;
 
-use super::types::{Cell, Cursor, Damage, DirtySpan, GridEffect, Size, Style};
+use super::types::{Cell, Cursor, Damage, DirtySpan, GridEffect, Size, Style, ViewportScroll};
 
 mod combining;
 use combining::CombiningCache;
 
 const MAX_HISTORY_ROWS: usize = 20_000;
+const MAX_SCROLL_DAMAGE: usize = 32;
 
 #[derive(Clone, Debug)]
 pub(super) struct Row {
@@ -62,11 +63,71 @@ struct Screen {
     pending_wrap: bool,
 }
 
-struct ReflowedLine {
+/// Keep only the rows a resized viewport and its bounded history can retain.
+/// Row positions remain absolute while old rows are evicted, so cursor and
+/// viewport anchors can be remapped without materializing the entire result.
+struct ReflowWindow {
     rows: VecDeque<Row>,
+    spare: Option<Row>,
+    size: Size,
+    limit: usize,
+    first: usize,
+    produced: usize,
     cursor: Option<(usize, usize, bool)>,
     boundary: Option<usize>,
     viewport: Option<usize>,
+    #[cfg(test)]
+    row_allocations: usize,
+}
+
+impl ReflowWindow {
+    fn new(size: Size, history_limit: usize) -> Self {
+        Self {
+            rows: VecDeque::new(),
+            spare: None,
+            size,
+            limit: history_limit + size.rows,
+            first: 0,
+            produced: 0,
+            cursor: None,
+            boundary: None,
+            viewport: None,
+            #[cfg(test)]
+            row_allocations: 0,
+        }
+    }
+
+    fn new_row(&mut self) -> Row {
+        if let Some(mut row) = self.spare.take() {
+            row.clear(self.size.cols, &Cell::default());
+            row
+        } else {
+            #[cfg(test)]
+            {
+                self.row_allocations += 1;
+            }
+            Row::new(self.size.cols, &Cell::default())
+        }
+    }
+
+    fn push(&mut self, row: Row) {
+        let index = self.produced;
+        self.produced += 1;
+        if self
+            .cursor
+            .is_some_and(|(cursor, _, _)| index >= cursor + self.size.rows)
+        {
+            // Resize discards rows below the cursor's final visible screen.
+            // Continue counting them, but reuse their single scratch buffer.
+            self.spare = Some(row);
+            return;
+        }
+        if self.rows.len() == self.limit {
+            self.spare = self.rows.pop_front();
+            self.first += 1;
+        }
+        self.rows.push_back(row);
+    }
 }
 
 impl Screen {
@@ -103,9 +164,12 @@ pub(super) struct Grid {
     clear_anchor: bool,
     full_damage: bool,
     dirty: Vec<Option<(usize, usize)>>,
+    pending_scrolls: Vec<ViewportScroll>,
     combining_cache: CombiningCache,
     track_effects: bool,
     effects: Vec<GridEffect>,
+    #[cfg(test)]
+    last_reflow_row_allocations: usize,
     pub(super) cursor: Cursor,
     pub(super) pen: Cell,
     pub(super) autowrap: bool,
@@ -133,9 +197,12 @@ impl Grid {
             clear_anchor: false,
             full_damage: true,
             dirty: vec![None; size.rows],
+            pending_scrolls: Vec::with_capacity(MAX_SCROLL_DAMAGE),
             combining_cache: CombiningCache::default(),
             track_effects: false,
             effects: Vec::new(),
+            #[cfg(test)]
+            last_reflow_row_allocations: 0,
             cursor: Cursor::default(),
             pen: Cell::default(),
             autowrap: true,
@@ -215,6 +282,48 @@ impl Grid {
 
     pub(super) fn mark_full_damage(&mut self) {
         self.full_damage = true;
+        self.pending_scrolls.clear();
+    }
+
+    fn mark_scroll_damage(&mut self, top: usize, bottom: usize, lines: i32) {
+        if self.full_damage {
+            return;
+        }
+        // While browsing history, scrolling can change both history and live
+        // rows in the viewport. A full refresh also covers eviction at its top.
+        if self.display_offset() != 0 {
+            self.mark_full_damage();
+            return;
+        }
+        let count = lines.unsigned_abs() as usize;
+        debug_assert!(count != 0 && count <= bottom - top);
+        // The renderer may have painted the old cursor into a cached row. Its
+        // old mark must travel with that row before marking its new position.
+        self.mark_cursor(self.cursor);
+        let exposed = Some((0, self.size.cols));
+        if lines > 0 {
+            self.dirty[top..bottom].rotate_left(count);
+            self.dirty[bottom - count..bottom].fill(exposed);
+        } else {
+            self.dirty[top..bottom].rotate_right(count);
+            self.dirty[top..top + count].fill(exposed);
+        }
+        self.mark_cursor(self.cursor);
+        if let Some(previous) = self.pending_scrolls.last_mut()
+            && previous.top == top
+            && previous.bottom == bottom
+            && previous.lines.signum() == lines.signum()
+        {
+            // Once the entire region was exposed, every cell is dirty, so a
+            // full rotation plus those patches represents any further scroll.
+            let count = (previous.lines.unsigned_abs() as usize + count).min(bottom - top);
+            previous.lines = count as i32 * lines.signum();
+        } else if self.pending_scrolls.len() < MAX_SCROLL_DAMAGE {
+            self.pending_scrolls
+                .push(ViewportScroll { top, bottom, lines });
+        } else {
+            self.mark_full_damage();
+        }
     }
 
     pub(super) fn set_effect_tracking(&mut self, enabled: bool) {
@@ -296,6 +405,22 @@ impl Grid {
     }
 
     pub(super) fn take_damage(&mut self) -> Damage {
+        // Cell-only consumers cannot replay row rotations. Expand the affected
+        // regions so their usual span patching still reconstructs the viewport.
+        for scroll in &self.pending_scrolls {
+            self.dirty[scroll.top..scroll.bottom].fill(Some((0, self.size.cols)));
+        }
+        self.pending_scrolls.clear();
+        self.take_cell_damage()
+    }
+
+    pub(super) fn take_render_damage(&mut self) -> (Damage, Vec<ViewportScroll>) {
+        let scrolls = self.pending_scrolls.clone();
+        self.pending_scrolls.clear();
+        (self.take_cell_damage(), scrolls)
+    }
+
+    fn take_cell_damage(&mut self) -> Damage {
         if std::mem::take(&mut self.full_damage) {
             self.dirty.fill(None);
             return Damage::Full;
@@ -757,7 +882,7 @@ impl Grid {
             self.screen_mut().rows.insert(bottom - 1, recycled);
         }
         if count != 0 {
-            self.mark_full_damage();
+            self.mark_scroll_damage(top, bottom, count as i32);
             self.effect(GridEffect::Scroll {
                 alternate: self.alternate_active,
                 top,
@@ -785,7 +910,7 @@ impl Grid {
             self.screen_mut().rows.insert(top, row);
         }
         if count != 0 {
-            self.mark_full_damage();
+            self.mark_scroll_damage(top, bottom, -(count as i32));
             self.effect(GridEffect::Scroll {
                 alternate: self.alternate_active,
                 top,
@@ -999,6 +1124,9 @@ impl Grid {
             if let Some(alternate) = &mut self.alternate {
                 // Alternate-screen applications repaint after SIGWINCH. Keep
                 // absolute cell positions rather than manufacturing history.
+                // Discard shrinking height before widening the remaining rows
+                // so the intermediate viewport obeys the same cell budget.
+                alternate.rows.truncate(size.rows);
                 for row in &mut alternate.rows {
                     row.cells.resize(size.cols, Cell::default());
                     row.wrapped = false;
@@ -1094,14 +1222,14 @@ impl Grid {
             self.primary.rows.pop_back();
         }
         let source = self.history.drain(..).chain(self.primary.rows.drain(..));
-        let mut output = VecDeque::new();
+        let mut output = ReflowWindow::new(
+            size,
+            Self::bounded_history(size, self.requested_history_limit),
+        );
         let mut logical = Vec::new();
         let mut logical_cursor = None;
         let mut logical_boundary = None;
         let mut logical_viewport = None;
-        let mut cursor_output = (0, 0, false);
-        let mut boundary_output = 0;
-        let mut viewport_output = None;
         for (index, row) in source.enumerate() {
             if index == old_history {
                 logical_boundary = Some(logical.len());
@@ -1130,25 +1258,14 @@ impl Grid {
                     .filter(|cell| cell.flags & Cell::LEADING_WIDE_SPACER == 0),
             );
             if !row.wrapped {
-                let start = output.len();
-                let result = Self::wrap_logical(
+                Self::wrap_logical(
                     std::mem::take(&mut logical),
-                    size.cols,
+                    &mut output,
                     logical_cursor.take(),
                     logical_boundary.take(),
                     logical_viewport.take(),
                     cursor_pending,
                 );
-                if let Some((row, col, wrap)) = result.cursor {
-                    cursor_output = (start + row, col, wrap);
-                }
-                if let Some(row) = result.boundary {
-                    boundary_output = start + row;
-                }
-                if let Some(row) = result.viewport {
-                    viewport_output = Some(start + row);
-                }
-                output.extend(result.rows);
             }
         }
         if !logical.is_empty()
@@ -1156,54 +1273,48 @@ impl Grid {
             || logical_boundary.is_some()
             || logical_viewport.is_some()
         {
-            let start = output.len();
-            let result = Self::wrap_logical(
+            Self::wrap_logical(
                 logical,
-                size.cols,
+                &mut output,
                 logical_cursor,
                 logical_boundary,
                 logical_viewport,
                 cursor_pending,
             );
-            if let Some((row, col, wrap)) = result.cursor {
-                cursor_output = (start + row, col, wrap);
-            }
-            if let Some(row) = result.boundary {
-                boundary_output = start + row;
-            }
-            if let Some(row) = result.viewport {
-                viewport_output = Some(start + row);
-            }
-            output.extend(result.rows);
         }
-        let mut split = output.len().saturating_sub(size.rows).min(cursor_output.0);
+        let cursor = output.cursor.expect("reflow maps the live cursor");
+        let mut split = output.produced.saturating_sub(size.rows).min(cursor.0);
         if self.clear_anchor {
-            split = split.max(boundary_output.min(cursor_output.0));
+            split = split.max(output.boundary.unwrap_or(0).min(cursor.0));
         }
-        self.primary.rows = output.split_off(split);
-        self.history = output;
-        self.primary.cursor.row = cursor_output.0.saturating_sub(split);
-        self.primary.cursor.col = cursor_output.1;
-        self.primary.pending_wrap = cursor_output.2;
-        if let Some(viewport) = viewport_output {
-            self.display_offset = split.saturating_sub(viewport);
+        #[cfg(test)]
+        {
+            self.last_reflow_row_allocations = output.row_allocations;
+        }
+        self.primary.rows = output.rows.split_off(split - output.first);
+        self.history = output.rows;
+        self.primary.cursor.row = cursor.0 - split;
+        self.primary.cursor.col = cursor.1;
+        self.primary.pending_wrap = cursor.2;
+        if let Some(viewport) = output.viewport {
+            self.display_offset = split.saturating_sub(viewport.max(output.first));
         }
     }
 
     fn wrap_logical(
         cells: Vec<Cell>,
-        cols: usize,
+        output: &mut ReflowWindow,
         cursor: Option<usize>,
         boundary: Option<usize>,
         viewport: Option<usize>,
         cursor_pending: bool,
-    ) -> ReflowedLine {
-        let mut rows = VecDeque::new();
-        let mut row = Row::new(cols, &Cell::default());
+    ) {
+        let cols = output.size.cols;
+        let mut row = output.new_row();
         let mut col = 0;
-        let mut cursor_result = None;
-        let mut boundary_result = None;
-        let mut viewport_result = None;
+        let mut cursor_mapped = false;
+        let mut boundary_mapped = false;
+        let mut viewport_mapped = false;
         let mut input = cells.into_iter().enumerate().peekable();
         while let Some((index, mut cell)) = input.next() {
             // A one-column screen must keep making progress, so wide glyphs
@@ -1218,18 +1329,21 @@ impl Grid {
                     row.cells[col].flags = Cell::LEADING_WIDE_SPACER;
                 }
                 row.wrapped = true;
-                rows.push_back(row);
-                row = Row::new(cols, &Cell::default());
+                output.push(row);
+                row = output.new_row();
                 col = 0;
             }
             if cursor == Some(index) {
-                cursor_result = Some((rows.len(), col, false));
+                output.cursor = Some((output.produced, col, false));
+                cursor_mapped = true;
             }
             if boundary == Some(index) {
-                boundary_result = Some(rows.len());
+                output.boundary = Some(output.produced);
+                boundary_mapped = true;
             }
             if viewport == Some(index) {
-                viewport_result = Some(rows.len());
+                output.viewport = Some(output.produced);
+                viewport_mapped = true;
             }
             if wide && cols == 1 {
                 cell.flags &= !Cell::WIDE;
@@ -1239,13 +1353,16 @@ impl Grid {
                 {
                     let spacer_index = input.next().expect("peeked wide spacer").0;
                     if cursor == Some(spacer_index) {
-                        cursor_result = Some((rows.len(), col, false));
+                        output.cursor = Some((output.produced, col, false));
+                        cursor_mapped = true;
                     }
                     if boundary == Some(spacer_index) {
-                        boundary_result = Some(rows.len());
+                        output.boundary = Some(output.produced);
+                        boundary_mapped = true;
                     }
                     if viewport == Some(spacer_index) {
-                        viewport_result = Some(rows.len());
+                        output.viewport = Some(output.produced);
+                        viewport_mapped = true;
                     }
                 }
             }
@@ -1261,31 +1378,25 @@ impl Grid {
             row.cells[col] = cell;
             col += if expanded_wide { 2 } else { 1 };
         }
-        if cursor_result.is_none() && cursor.is_some() {
+        if !cursor_mapped && cursor.is_some() {
             if col == cols && cursor_pending {
-                cursor_result = Some((rows.len(), cols - 1, true));
+                output.cursor = Some((output.produced, cols - 1, true));
             } else if col == cols {
                 row.wrapped = true;
-                rows.push_back(row);
-                row = Row::new(cols, &Cell::default());
-                cursor_result = Some((rows.len(), 0, false));
+                output.push(row);
+                row = output.new_row();
+                output.cursor = Some((output.produced, 0, false));
             } else {
-                cursor_result = Some((rows.len(), col, false));
+                output.cursor = Some((output.produced, col, false));
             }
         }
-        if boundary_result.is_none() && boundary.is_some() {
-            boundary_result = Some(rows.len());
+        if !boundary_mapped && boundary.is_some() {
+            output.boundary = Some(output.produced);
         }
-        if viewport_result.is_none() && viewport.is_some() {
-            viewport_result = Some(rows.len());
+        if !viewport_mapped && viewport.is_some() {
+            output.viewport = Some(output.produced);
         }
-        rows.push_back(row);
-        ReflowedLine {
-            rows,
-            cursor: cursor_result,
-            boundary: boundary_result,
-            viewport: viewport_result,
-        }
+        output.push(row);
     }
 }
 

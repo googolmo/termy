@@ -70,7 +70,12 @@ impl State {
     }
 
     fn event(&mut self, event: Event) {
-        enqueue(&mut self.events, &mut self.dropped_events, event);
+        enqueue(
+            &mut self.events,
+            &mut self.dropped_events,
+            self.modes.clipboard_paste_events,
+            event,
+        );
     }
 
     pub(super) fn reply(&mut self, bytes: &[u8]) {
@@ -179,6 +184,12 @@ impl State {
             1016 => self.mouse_encoding(MouseEncoding::SgrPixels, enabled),
             2004 => self.modes.bracketed_paste = enabled,
             2026 => self.modes.synchronized_update = enabled,
+            5522 => {
+                self.modes.clipboard_paste_events = enabled;
+                self.event(Event::KittyClipboardControl(
+                    crate::KittyClipboardControl::Set(enabled),
+                ));
+            }
             _ => {}
         }
         if self.grid.cursor != old_cursor {
@@ -433,6 +444,9 @@ impl Handler for State {
                 self.title.clear();
                 self.title_stack.clear();
                 self.event(Event::ResetTitle);
+                self.event(Event::KittyClipboardControl(
+                    crate::KittyClipboardControl::Reset,
+                ));
             }
             ([b'('], b'0' | b'B') => self.charsets[0] = final_byte == b'0',
             ([b')'], b'0' | b'B') => self.charsets[1] = final_byte == b'0',
@@ -616,6 +630,21 @@ impl Handler for State {
                 _ => {}
             },
             _ => {}
+        }
+    }
+
+    fn osc_terminated(&mut self, bytes: &[u8], bell: bool) {
+        if let Some(body) = bytes.strip_prefix(b"5522;") {
+            let terminator = if bell {
+                crate::KittyClipboardOscTerminator::Bell
+            } else {
+                crate::KittyClipboardOscTerminator::StringTerminator
+            };
+            self.event(Event::KittyClipboard(crate::KittyClipboardOsc::from_body(
+                body, terminator,
+            )));
+        } else {
+            self.osc(bytes);
         }
     }
 

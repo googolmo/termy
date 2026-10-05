@@ -174,6 +174,15 @@ pub enum Damage {
     Partial(Vec<DirtySpan>),
 }
 
+/// A viewport row rotation to replay before applying the accompanying damage.
+/// `bottom` is exclusive; positive `lines` move rows up, negative values down.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ViewportScroll {
+    pub top: usize,
+    pub bottom: usize,
+    pub lines: i32,
+}
+
 /// Ordered text-grid operations consumed by the graphics placement bridge.
 /// Scroll regions and column spans both use exclusive upper bounds. Positive
 /// line counts move cells up; negative counts move them down.

@@ -19,7 +19,7 @@ use std::{collections::VecDeque, time::Instant};
 
 pub use types::{
     Cell, CellExtra, Color, Cursor, CursorShape, Damage, DirtySpan, Hyperlink, Size, Style,
-    UnderlineStyle,
+    UnderlineStyle, ViewportScroll,
 };
 
 use dispatch::State;
@@ -28,6 +28,7 @@ use sync::SynchronizedUpdate;
 
 const MAX_EVENTS: usize = 1024;
 const MAX_REPLY_BYTES: usize = 64 * 1024;
+const PARSE_CHUNK: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Options {
@@ -51,6 +52,8 @@ pub enum Event {
     ShellIntegration(String),
     Progress(crate::ProgressState),
     Clipboard { selection: String, data: String },
+    KittyClipboard(crate::KittyClipboardOsc),
+    KittyClipboardControl(crate::KittyClipboardControl),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -83,6 +86,7 @@ pub struct Modes {
     pub mouse_encoding: MouseEncoding,
     pub kitty_keyboard: u8,
     pub synchronized_update: bool,
+    pub clipboard_paste_events: bool,
 }
 
 /// Reusable, single-owner parser and grid. The runtime controls synchronization;
@@ -124,7 +128,8 @@ impl Engine {
                     self.stop_synchronized_update();
                 }
             } else {
-                let consumed = self.parser.advance(&mut self.state, &bytes[offset..]);
+                let end = offset.saturating_add(PARSE_CHUNK).min(bytes.len());
+                let consumed = self.parser.advance(&mut self.state, &bytes[offset..end]);
                 offset += consumed;
                 self.state.flush_graphics_effects();
                 self.generation = self.generation.wrapping_add(1);
@@ -147,7 +152,10 @@ impl Engine {
         let Some(bytes) = self.synchronized_update.take_buffer() else {
             return false;
         };
-        self.parser.advance_uninterrupted(&mut self.state, &bytes);
+        for chunk in bytes.chunks(PARSE_CHUNK) {
+            self.parser.advance_uninterrupted(&mut self.state, chunk);
+            self.state.flush_graphics_effects();
+        }
         self.state.modes.synchronized_update = false;
         self.state.flush_graphics_effects();
         self.synchronized_update.recycle_buffer(bytes);
@@ -240,6 +248,12 @@ impl Engine {
         self.state.grid.take_damage()
     }
 
+    /// Replay the ordered row rotations, then patch the damaged spans from the
+    /// current viewport. Cell-only consumers can continue using `take_damage`.
+    pub fn take_render_damage(&mut self) -> (Damage, Vec<ViewportScroll>) {
+        self.state.grid.take_render_damage()
+    }
+
     pub fn resize(&mut self, size: Size) {
         self.stop_synchronized_update();
         self.state.grid.resize(size);
@@ -315,12 +329,29 @@ impl Engine {
     }
 }
 
-fn enqueue(events: &mut VecDeque<Event>, dropped: &mut u64, event: Event) {
+fn enqueue(events: &mut VecDeque<Event>, dropped: &mut u64, paste_events: bool, event: Event) {
     if events.len() == MAX_EVENTS {
-        *dropped = dropped.saturating_add(1);
-    } else {
-        events.push_back(event);
+        if matches!(
+            event,
+            Event::KittyClipboard(_) | Event::KittyClipboardControl(_)
+        ) {
+            // Losing a write chunk or a reset must not leave a host with an
+            // incomplete clipboard transaction or a stale permission grant.
+            // Compaction happens only at capacity, amortizing the cleanup.
+            *dropped = dropped.saturating_add(events.len() as u64);
+            events.clear();
+            events.push_back(Event::KittyClipboardControl(
+                crate::KittyClipboardControl::Reset,
+            ));
+            events.push_back(Event::KittyClipboardControl(
+                crate::KittyClipboardControl::Set(paste_events),
+            ));
+        } else {
+            *dropped = dropped.saturating_add(1);
+            return;
+        }
     }
+    events.push_back(event);
 }
 
 #[cfg(test)]

@@ -679,3 +679,233 @@ fn inserting_and_deleting_lines_preserve_the_cursor_column() {
     assert_eq!((grid.cursor.row, grid.cursor.col), (1, 4));
     assert_eq!(text(&grid, 1), "second  ");
 }
+
+fn rendered_rows(grid: &Grid) -> Vec<Vec<(Cell, bool)>> {
+    (0..grid.size.rows)
+        .map(|row| {
+            let row = grid.visible_row(row).unwrap();
+            row.cells
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(col, cell)| (cell, row.wrapped && col + 1 == grid.size.cols))
+                .collect()
+        })
+        .collect()
+}
+
+fn replay_damage(grid: &mut Grid, cached: &mut Vec<Vec<(Cell, bool)>>) -> usize {
+    let (damage, scrolls) = grid.take_render_damage();
+    let actual = rendered_rows(grid);
+    if damage == Damage::Full {
+        assert!(scrolls.is_empty());
+        *cached = actual;
+        return 0;
+    }
+    for scroll in &scrolls {
+        let rows = &mut cached[scroll.top..scroll.bottom];
+        if scroll.lines > 0 {
+            rows.rotate_left(scroll.lines as usize);
+        } else {
+            rows.rotate_right(scroll.lines.unsigned_abs() as usize);
+        }
+    }
+    let Damage::Partial(spans) = damage else {
+        unreachable!();
+    };
+    for span in spans {
+        cached[span.row][span.start..span.end]
+            .clone_from_slice(&actual[span.row][span.start..span.end]);
+    }
+    assert_eq!(*cached, actual);
+    scrolls.len()
+}
+
+#[test]
+fn ordered_scroll_damage_replays_edits_before_between_and_after_scrolls() {
+    let mut grid = grid(8, 5, 10);
+    print(&mut grid, "one\r\ntwo\r\nthree\r\nfour\r\nfive");
+    let mut cached = Vec::new();
+    replay_damage(&mut grid, &mut cached);
+    grid.goto(2, 1);
+    print(&mut grid, "界");
+    grid.scroll_up(1);
+    grid.goto(4, 0);
+    print(&mut grid, "new");
+    grid.set_scroll_region(1, 4);
+    grid.scroll_down(1);
+    grid.goto(1, 3);
+    print(&mut grid, "z\u{301}");
+    grid.scroll_up(2);
+    grid.goto(2, 2);
+    grid.insert_lines(1);
+    assert_eq!(replay_damage(&mut grid, &mut cached), 4);
+    assert_eq!(grid.take_render_damage(), (Damage::Partial(vec![]), vec![]));
+}
+
+#[test]
+fn scroll_damage_coalesces_and_falls_back_at_a_bounded_record_count() {
+    let mut grid = grid(8, 5, 0);
+    grid.take_damage();
+    for _ in 0..100 {
+        grid.scroll_up(1);
+    }
+    let (damage, scrolls) = grid.take_render_damage();
+    assert_ne!(damage, Damage::Full);
+    assert_eq!(
+        scrolls,
+        vec![ViewportScroll {
+            top: 0,
+            bottom: 5,
+            lines: 5
+        }]
+    );
+    for _ in 0..MAX_SCROLL_DAMAGE {
+        grid.scroll_up(1);
+        grid.scroll_down(1);
+    }
+    assert_eq!(grid.take_render_damage(), (Damage::Full, vec![]));
+    assert_eq!(grid.pending_scrolls.capacity(), MAX_SCROLL_DAMAGE);
+}
+
+#[test]
+fn cell_only_damage_covers_scrolls_and_full_invalidations_discard_them() {
+    let mut grid = grid(8, 5, 10);
+    print(&mut grid, "one\r\ntwo\r\nthree\r\nfour\r\nfive");
+    grid.take_damage();
+    grid.scroll_up(1);
+    let Damage::Partial(spans) = grid.take_damage() else {
+        panic!("expected spans")
+    };
+    assert_eq!(
+        spans,
+        (0..5)
+            .map(|row| DirtySpan {
+                row,
+                start: 0,
+                end: 8
+            })
+            .collect::<Vec<_>>()
+    );
+    grid.scroll_up(1);
+    grid.set_alternate(true, true, true);
+    assert_eq!(grid.take_render_damage(), (Damage::Full, vec![]));
+    grid.set_alternate(false, false, true);
+    grid.take_damage();
+    assert!(grid.scroll_display(1));
+    grid.take_damage();
+    grid.scroll_up(1);
+    assert_eq!(grid.take_render_damage(), (Damage::Full, vec![]));
+}
+
+#[test]
+fn randomized_scroll_damage_reconstructs_cell_and_wrap_metadata() {
+    let mut grid = grid(9, 6, 12);
+    let mut cached = Vec::new();
+    replay_damage(&mut grid, &mut cached);
+    let mut random = 0xabcddcba12344321_u64;
+    let mut scrolls = 0;
+    for _ in 0..500 {
+        for _ in 0..7 {
+            random = random.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let value = (random >> 32) as usize;
+            match value % 12 {
+                0 => grid.goto(value / 12 % grid.size.rows, value / 100 % grid.size.cols),
+                1 => grid.scroll_up(1 + value % 3),
+                2 => grid.scroll_down(1 + value % 3),
+                3 => print(&mut grid, "A界e\u{301}"),
+                4 => grid.insert_lines(1 + value % 2),
+                5 => grid.delete_lines(1 + value % 2),
+                6 => grid.linefeed(),
+                7 => grid.set_scroll_region(value / 12 % 3, 4 + value % 3),
+                8 => grid.erase_chars(1 + value % 3),
+                9 => grid.carriage_return(),
+                10 => grid.delete_chars(1 + value % 3),
+                _ => print(&mut grid, "123456789012345"),
+            }
+        }
+        scrolls += replay_damage(&mut grid, &mut cached);
+    }
+    assert!(scrolls > 100);
+}
+
+#[test]
+fn widening_history_bounds_intermediate_rows_and_clamps_evicted_viewport_anchor() {
+    let mut grid = grid(1, 3, 2048);
+    for index in 0..1024 {
+        grid.put_char(char::from(b'a' + (index % 26) as u8));
+        grid.carriage_return();
+        grid.linefeed();
+    }
+    assert_eq!(grid.history_size(), 1022);
+    assert!(grid.scroll_display(400));
+    grid.resize(Size {
+        cols: 4096,
+        rows: 3,
+    });
+    let limit = Size::MAX_CELLS / 4096;
+    assert_eq!(grid.history_size(), limit);
+    assert_eq!(grid.display_offset(), limit);
+    assert!(grid.last_reflow_row_allocations <= limit + 3 + 1);
+    assert_eq!(
+        grid.row(-1).unwrap().cells[0].character,
+        char::from(b'a' + (1021 % 26) as u8)
+    );
+    assert_eq!(
+        grid.visible_row(0).unwrap().cells[0].character,
+        char::from(b'a' + (766 % 26) as u8)
+    );
+    assert_eq!((grid.cursor.row, grid.cursor.col), (2, 0));
+}
+
+#[test]
+fn narrowing_one_long_logical_line_recycles_rows_and_preserves_its_tail() {
+    let mut grid = grid(80, 3, 1000);
+    let pattern = "abcdefghijklmnopqrstuvwxyz";
+    let input = pattern.repeat(3000);
+    grid.write_ascii(input.as_bytes());
+    grid.resize(Size { cols: 1, rows: 3 });
+    assert_eq!(grid.history_size(), 1000);
+    assert!(grid.last_reflow_row_allocations <= 1000 + 3 + 1);
+    assert_eq!(grid.primary.rows.len(), 3);
+    assert_eq!(text(&grid, 0), "x");
+    assert_eq!(text(&grid, 1), "y");
+    assert_eq!(text(&grid, 2), "z");
+    assert_eq!((grid.cursor.row, grid.cursor.col), (2, 0));
+    assert!(grid.pending_wrap);
+    assert_eq!(grid.row(-1).unwrap().cells[0].character, 'w');
+}
+
+#[test]
+fn reflow_drops_below_cursor_rows_without_losing_the_cursor_window() {
+    let mut grid = grid(80, 4, 5);
+    grid.write_ascii(&vec![b'x'; 320]);
+    grid.goto(0, 1);
+    grid.resize(Size { cols: 1, rows: 4 });
+    assert_eq!(grid.history_size(), 1);
+    assert_eq!((grid.cursor.row, grid.cursor.col), (0, 0));
+    assert!(grid.last_reflow_row_allocations <= 5 + 4 + 1);
+    assert!((0..4).all(|row| text(&grid, row) == "x"));
+}
+
+#[test]
+fn alternate_width_growth_and_height_shrink_preserve_only_surviving_rows() {
+    let mut grid = grid(1, 4096, 0);
+    grid.set_alternate(true, true, true);
+    grid.put_char('a');
+    grid.goto(4095, 0);
+    grid.put_char('z');
+    grid.resize(Size {
+        cols: 4096,
+        rows: 1,
+    });
+    assert!(grid.alternate_active);
+    assert_eq!(grid.screen().rows.len(), 1);
+    assert_eq!(grid.screen().rows[0].cells.len(), 4096);
+    assert_eq!(grid.screen().rows[0].cells[0].character, 'a');
+    assert_eq!((grid.cursor.row, grid.cursor.col), (0, 0));
+    assert!(!grid.pending_wrap);
+    grid.set_alternate(false, false, true);
+    assert_eq!(grid.primary.rows.len(), 1);
+    assert_eq!(grid.primary.rows[0].cells.len(), 4096);
+}
