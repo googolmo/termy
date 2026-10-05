@@ -5,7 +5,7 @@ Validated on macOS on 2026-09-10. Protocol reference:
 
 ## Implementation
 
-Both terminal engines now decode uploads into shared RGBA images. PNG encoding
+The terminal engine decodes uploads into shared RGBA images. PNG encoding
 is deferred until export, and native drawing reuses bounded GPU textures.
 The protocol implementation includes chunked RGB/RGBA/PNG uploads, zlib, file
 and shared-memory transfers, image numbers, placement and deletion selectors,
@@ -20,20 +20,17 @@ explicit paint bounds so magnified one-pixel images have solid edges.
 The protocol regressions also cover omitted/zero parent placement IDs in cycle
 detection, silent anonymous uploads, and aspect-preserving explicit placement
 boxes. Letterboxing retains the full requested cursor occupancy across resize
-and deletion. Run the public conformance suite with each backend:
+and deletion. Run the public conformance suite:
 
 ```sh
-TERMY_CORE_TEST_BACKEND=tmon cargo test --locked -p termy_core --test kitty_conformance
-TERMY_CORE_TEST_BACKEND=alacritty cargo test --locked -p termy_core --test kitty_conformance
+cargo test --locked -p termy_core --test kitty_conformance
 ```
 
-The affected crates have **1,591 passing tests**, with nine existing integration
-tests ignored because they require a live tmux environment. The public runtime
-regressions also pass with the Alacritty backend explicitly selected. Checks:
+Current validation commands:
 
 ```sh
 cargo test --locked -p termy -p termy_core -p termy -p termy_core -p termy_core
-TERMY_CORE_TEST_BACKEND=alacritty cargo test --locked -p termy_core
+cargo test --locked -p termy_core
 cargo clippy --locked -p termy -p termy_core -p termy -p termy_core -p termy_core --all-targets -- -D warnings
 cargo check --locked --workspace
 cargo build --locked -p termy --bin termy
@@ -91,10 +88,10 @@ verified. The demo can start on either page without keyboard input.
 - The C placement struct has new fields. Embedders must rebuild against the
   updated header. PNG export ownership remains unchanged.
 - The protocol keeps bounded memory, image dimensions, placement counts, and
-  relative-placement depth. Resource limits are documented in the core/Tmon
+  relative-placement depth. Resource limits are documented in the core graphics
   modules and return protocol errors when exceeded.
 
-## Grok Build synchronized preview regression (2026-09-11)
+## Historical Grok Build synchronized preview regression (2026-09-11)
 
 Captured the image-preview output from installed Grok Build 1.0.25 using the
 bundled `kitty-demo.png`, without submitting a prompt. Grok wraps cursor

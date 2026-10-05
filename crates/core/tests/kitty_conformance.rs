@@ -1,4 +1,19 @@
-use termy_core::{Terminal, TerminalSize};
+use termy_core::{Terminal, TerminalClipboardTarget, TerminalReplyHost, TerminalSize};
+
+fn drain_protocol_replies(terminal: &Terminal) -> Vec<u8> {
+    struct Host(Vec<u8>);
+    impl TerminalReplyHost for Host {
+        fn load_clipboard(&mut self, _: TerminalClipboardTarget) -> Option<String> {
+            None
+        }
+        fn protocol_reply(&mut self, bytes: &[u8]) {
+            self.0.extend_from_slice(bytes);
+        }
+    }
+    let mut host = Host(Vec::new());
+    while terminal.drain_events(&mut host).1 {}
+    host.0
+}
 
 fn terminal() -> Terminal {
     Terminal::new_display(
@@ -173,24 +188,21 @@ fn letterboxed_image_keeps_requested_cursor_occupancy_after_resize() {
 }
 
 #[test]
-fn tmon_anonymous_uploads_stay_silent_and_numbered_uploads_reply() {
-    let terminal = termy_core::tmon::Terminal::new_display(
-        termy_core::tmon::Size::default(),
-        Default::default(),
-    );
+fn anonymous_uploads_stay_silent_and_numbered_uploads_reply() {
+    let terminal = Terminal::new_display(TerminalSize::default(), None);
     for controls in ["", ",i=0", ",I=0", ",q=1", ",q=2"] {
         terminal
             .feed_output(format!("\x1b_Ga=T,f=32,s=1,v=1,C=1,m=1{controls};AQID\x1b\\").as_bytes());
-        assert!(terminal.drain_protocol_replies().is_empty());
+        assert!(drain_protocol_replies(&terminal).is_empty());
         terminal.feed_output(b"\x1b_Gm=0;/w==\x1b\\");
         assert!(
-            terminal.drain_protocol_replies().is_empty(),
+            drain_protocol_replies(&terminal).is_empty(),
             "controls: {controls}"
         );
     }
     assert_eq!(terminal.kitty_graphics_placements().len(), 5);
     terminal.feed_output(b"\x1b_Ga=t,i=7,f=32,s=1,v=1;AQID/w==\x1b\\");
-    assert_eq!(terminal.drain_protocol_replies(), b"\x1b_Gi=7;OK\x1b\\");
+    assert_eq!(drain_protocol_replies(&terminal), b"\x1b_Gi=7;OK\x1b\\");
     terminal.feed_output(b"\x1b_Ga=T,I=13,p=9,f=32,s=1,v=1,C=1;AQID/w==\x1b\\");
     let placements = terminal.kitty_graphics_placements();
     let id = placements
@@ -199,12 +211,12 @@ fn tmon_anonymous_uploads_stay_silent_and_numbered_uploads_reply() {
         .unwrap()
         .image_id;
     assert_eq!(
-        terminal.drain_protocol_replies(),
+        drain_protocol_replies(&terminal),
         format!("\x1b_Gi={id},I=13,p=9;OK\x1b\\").as_bytes()
     );
     terminal.feed_output(b"\x1b_Ga=p,i=99\x1b\\");
     assert!(
-        String::from_utf8(terminal.drain_protocol_replies())
+        String::from_utf8(drain_protocol_replies(&terminal))
             .unwrap()
             .contains("ENOENT")
     );

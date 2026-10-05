@@ -163,6 +163,36 @@ fn single_column_wide_input_always_makes_progress() {
 }
 
 #[test]
+fn wide_glyphs_recover_their_spacers_after_single_column_resize() {
+    let mut grid = grid(4, 3, 8);
+    print(&mut grid, "界e\u{301}");
+    assert_eq!((grid.cursor.row, grid.cursor.col), (0, 3));
+    grid.resize(Size { cols: 1, rows: 3 });
+    grid.resize(Size { cols: 4, rows: 3 });
+    let row = grid.row(0).unwrap().cells();
+    assert_eq!(row[0].character, '界');
+    assert_eq!(row[0].flags, Cell::WIDE);
+    assert_eq!(row[1].flags, Cell::WIDE_SPACER);
+    assert_eq!(row[2].character, 'e');
+    assert_eq!(row[2].combining(), "\u{301}");
+    assert_eq!((grid.cursor.row, grid.cursor.col), (0, 3));
+}
+
+#[test]
+fn squeezed_wide_glyph_preserves_pending_wrap_and_spacer_cursor_mapping() {
+    let mut grid = grid(2, 2, 4);
+    grid.put_char('界');
+    grid.resize(Size { cols: 1, rows: 2 });
+    grid.resize(Size { cols: 2, rows: 2 });
+    assert_eq!((grid.cursor.row, grid.cursor.col), (0, 1));
+    assert!(grid.pending_wrap);
+    grid.goto(0, 1);
+    grid.resize(Size { cols: 1, rows: 2 });
+    assert_eq!((grid.cursor.row, grid.cursor.col), (0, 0));
+    assert!(!grid.pending_wrap);
+}
+
+#[test]
 fn editing_repairs_cut_wide_glyphs_and_preserves_other_cells() {
     let mut grid = grid(8, 2, 0);
     print(&mut grid, "ab界cd");
@@ -236,6 +266,24 @@ fn damage_spans_cover_cursor_motion_and_changed_glyph_halves() {
         ])
     );
     assert_eq!(grid.take_damage(), Damage::Partial(vec![]));
+}
+
+#[test]
+fn erasing_one_column_of_a_wide_glyph_damages_both_columns() {
+    let mut grid = grid(8, 2, 0);
+    grid.put_char('界');
+    grid.goto(0, 0);
+    grid.take_damage();
+    grid.erase_chars(1);
+    assert_eq!(
+        grid.take_damage(),
+        Damage::Partial(vec![DirtySpan {
+            row: 0,
+            start: 0,
+            end: 2
+        }])
+    );
+    assert_eq!(text(&grid, 0), "        ");
 }
 
 #[test]
@@ -443,4 +491,191 @@ fn mixed_edit_resize_and_scroll_sequences_preserve_grid_invariants() {
             }
         }
     }
+}
+
+#[test]
+fn effects_are_dormant_without_graphics_and_coalesce_contiguous_scrolls() {
+    let mut grid = grid(8, 3, 4);
+    for _ in 0..20 {
+        print(&mut grid, "row\r\n");
+    }
+    assert!(grid.effects.is_empty());
+    assert_eq!(grid.effects.capacity(), 0);
+    grid.set_effect_tracking(true);
+    for _ in 0..1000 {
+        print(&mut grid, "row\r\n");
+    }
+    assert_eq!(
+        grid.effects,
+        vec![GridEffect::Scroll {
+            alternate: false,
+            top: 0,
+            bottom: 3,
+            lines: 1000,
+            retains_history: true,
+            history_before: 4,
+            history_after: 4
+        }]
+    );
+    let capacity = grid.effects.capacity();
+    let mut output = Vec::new();
+    grid.drain_effects(&mut output);
+    assert_eq!(output.len(), 1);
+    assert_eq!(grid.effects.capacity(), capacity);
+    assert!(grid.effects.is_empty());
+}
+
+#[test]
+fn effect_order_preserves_opposing_scrolls_partial_regions_and_clears() {
+    let mut grid = grid(8, 5, 10);
+    grid.set_effect_tracking(true);
+    grid.scroll_up(2);
+    grid.scroll_up(1);
+    grid.scroll_down(1);
+    grid.set_scroll_region(1, 4);
+    grid.goto(2, 0);
+    grid.delete_lines(1);
+    grid.insert_lines(2);
+    grid.erase_display(2, false);
+    grid.clear_scrollback();
+    grid.set_alternate(true, true, true);
+    grid.scroll_up(1);
+    grid.reset();
+    assert_eq!(
+        grid.effects,
+        vec![
+            GridEffect::Scroll {
+                alternate: false,
+                top: 0,
+                bottom: 5,
+                lines: 3,
+                retains_history: true,
+                history_before: 0,
+                history_after: 3
+            },
+            GridEffect::Scroll {
+                alternate: false,
+                top: 0,
+                bottom: 5,
+                lines: -1,
+                retains_history: false,
+                history_before: 3,
+                history_after: 3
+            },
+            GridEffect::Scroll {
+                alternate: false,
+                top: 2,
+                bottom: 4,
+                lines: 1,
+                retains_history: false,
+                history_before: 3,
+                history_after: 3
+            },
+            GridEffect::Scroll {
+                alternate: false,
+                top: 2,
+                bottom: 4,
+                lines: -2,
+                retains_history: false,
+                history_before: 3,
+                history_after: 3
+            },
+            GridEffect::Clear {
+                alternate: false,
+                history_size: 3
+            },
+            GridEffect::ClearHistory { removed: 3 },
+            GridEffect::Clear {
+                alternate: true,
+                history_size: 0
+            },
+            GridEffect::Scroll {
+                alternate: true,
+                top: 0,
+                bottom: 5,
+                lines: 1,
+                retains_history: false,
+                history_before: 0,
+                history_after: 0
+            },
+            GridEffect::Reset,
+        ]
+    );
+    assert!(
+        grid.track_effects,
+        "reset must still report future graphics changes"
+    );
+    grid.set_effect_tracking(false);
+    grid.scroll_up(1);
+    assert!(grid.effects.is_empty());
+}
+
+#[test]
+fn saturated_history_scroll_effects_distinguish_line_deletion() {
+    let mut grid = grid(8, 3, 2);
+    grid.scroll_up(2);
+    grid.set_effect_tracking(true);
+    grid.scroll_up(1);
+    grid.goto(0, 0);
+    grid.delete_lines(1);
+    assert_eq!(
+        grid.effects,
+        vec![
+            GridEffect::Scroll {
+                alternate: false,
+                top: 0,
+                bottom: 3,
+                lines: 1,
+                retains_history: true,
+                history_before: 2,
+                history_after: 2
+            },
+            GridEffect::Scroll {
+                alternate: false,
+                top: 0,
+                bottom: 3,
+                lines: 1,
+                retains_history: false,
+                history_before: 2,
+                history_after: 2
+            },
+        ]
+    );
+}
+
+#[test]
+fn history_clear_and_reset_release_resize_suppression() {
+    let mut grid = grid(8, 3, 8);
+    grid.erase_display(2, false);
+    assert!(grid.clear_anchor);
+    grid.erase_display(3, false);
+    assert!(!grid.clear_anchor);
+    grid.erase_display(2, false);
+    grid.reset();
+    assert!(!grid.clear_anchor);
+}
+
+#[test]
+fn invalid_scroll_margins_preserve_the_previous_region_and_cursor() {
+    let mut grid = grid(8, 6, 8);
+    grid.set_scroll_region(1, 5);
+    grid.goto(3, 4);
+    grid.set_scroll_region(5, 1);
+    grid.set_scroll_region(3, 4);
+    grid.set_scroll_region(100, 200);
+    assert_eq!(grid.scroll_region(), (1, 5));
+    assert_eq!((grid.cursor.row, grid.cursor.col), (3, 4));
+}
+
+#[test]
+fn inserting_and_deleting_lines_preserve_the_cursor_column() {
+    let mut grid = grid(8, 5, 8);
+    print(&mut grid, "first\r\nsecond\r\nthird");
+    grid.goto(1, 4);
+    grid.insert_lines(1);
+    assert_eq!((grid.cursor.row, grid.cursor.col), (1, 4));
+    assert_eq!(text(&grid, 1), "        ");
+    grid.delete_lines(1);
+    assert_eq!((grid.cursor.row, grid.cursor.col), (1, 4));
+    assert_eq!(text(&grid, 1), "second  ");
 }

@@ -1,9 +1,9 @@
 # Terminal engine replacement
 
-This directory owns the new terminal engine. The goal is to remove Alacritty
-from every shipped Termy path and from the dependency graph, while leaving
-`crates/core/src/tmon` unchanged. This is an in-progress replacement, not yet
-the default runtime.
+This directory owns the parser, screen storage, and platform PTY transport used
+by native, display-only, tmux and persistent Termy sessions. The legacy tmon
+engine implementation stays in its original folder outside the compiled module
+tree; its obsolete external-oracle test glue has been removed.
 
 ## Design
 
@@ -17,7 +17,14 @@ the default runtime.
   cells occupy at most 32 bytes. Combining marks and links use shared optional
   metadata, so ordinary cells and ASCII writes allocate nothing.
 - `dispatch.rs` applies control sequences and owns modes, palette changes,
-  hyperlinks and bounded event/reply queues.
+  hyperlinks and bounded event/reply queues. `queries.rs` reports live VT state.
+- `sync.rs` buffers synchronized output with a 2 MiB limit and a 150 ms timeout.
+  A syntax-aware marker scanner preserves ordering across fragmented strings.
+- `graphics.rs` applies image commands and ordered scroll/clear effects inside
+  the same parser commits as text. Animation revision polling allocates nothing.
+- `transport/` provides bounded native PTY input/output on Unix and Windows.
+  The runtime watchdog sleeps while idle and wakes only for pending synchronized
+  output deadlines.
 - `Engine` is single-owner state. Transport/runtime synchronization belongs
   outside it. Viewport and history reads borrow row slices rather than building
   intermediate cell vectors.
@@ -44,8 +51,13 @@ cargo run --release -p termy_core --example terminal_engine_bench -- 32
 
 The benchmark warms each workload first, feeds both 64 KiB and one-byte chunks,
 and counts actual allocator calls. Steady plain-text scrolling, styled redraws
-and wide Unicode must reuse their warmed storage. Combining text is measured
-separately because its uncommon metadata currently allocates. Timings include
+and wide Unicode must reuse their warmed storage. Repeated combining suffixes
+also allocate nothing after warmup: a per-grid, 256-entry cache shares immutable
+metadata, including hyperlink identity, without changing older cells when a new
+mark is appended. Suffixes are capped at 256 bytes, and links with more than
+1024 bytes of allocated string storage bypass the cache to bound retained memory.
+New combinations still allocate; the benchmark asserts zero allocations for its
+repeated combining workload as well as ordinary text. Timings include
 allocator instrumentation and are not a substitute for PTY/UI latency tests.
 The heap figures are allocator-requested bytes for the process, not OS RSS.
 
@@ -59,12 +71,11 @@ The replacement is complete only when all of these hold:
   terminal contracts. Search, links, selection, palette, clipboard, shell
   integration, Kitty graphics and synchronized output retain their behavior.
 - Resize/reflow, history anchoring, Unicode, screen editing and damage replay
-  are covered by expected-state regression tests. Protocol features not yet
-  implemented here (including DCS/APC handlers and synchronized-output commit/
-  timeout behavior) must be completed before the default runtime switches.
+  are covered by expected-state regression tests. DCS/APC handlers and synchronized-output commit/timeout behavior must pass
+  fragmentation and native transport tests.
 - All active Alacritty imports, adapters, comparisons and Cargo dependencies
-  are removed. The legacy tmon source stays unchanged and leaves the compiled
-  module tree so its old oracle tests do not retain the dependency.
+  are removed. The legacy tmon engine implementation remains outside the compiled module
+  tree; fixed expected-byte tests replace its old external-oracle assertions.
 - Core, desktop, FFI, IPC and tmux integration suites pass, along with workspace
   checks, formatting, Clippy and repository architecture gates.
 - A real shell and tmux pane are exercised in the app. Parser throughput,
@@ -73,6 +84,5 @@ The replacement is complete only when all of these hold:
 - The branch and PR contain the verified changes and required CI checks have
   reached successful terminal states.
 
-The public runtime facade remains stable during this work. Desktop panes are
-being migrated to that facade first, eliminating the duplicate desktop emulator
-so the eventual engine switch applies to tmux and native sessions together.
+The public runtime facade remains stable. Desktop panes use the shared facade,
+so tmux and native sessions exercise the same engine and graphics pipeline.

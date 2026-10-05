@@ -1,0 +1,109 @@
+name: Terminal Engine Performance
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/core/**"
+      - ".github/workflows/terminal-engine-benchmark.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/core/**"
+      - ".github/workflows/terminal-engine-benchmark.yml"
+  workflow_dispatch:
+    inputs:
+      target_mib:
+        description: "MiB per workload (1 to 128)"
+        required: false
+        default: "32"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terminal-engine-performance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Parser, grid, and steady allocation gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TARGET_MIB: ${{ github.event_name == 'workflow_dispatch' && inputs.target_mib || '32' }}
+      REPORT_NAME: terminal-engine-benchmark.txt
+    steps:
+      - name: Initialize report
+        shell: bash
+        run: ': > "$RUNNER_TEMP/$REPORT_NAME"'
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Verify terminal behavior
+        id: correctness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p termy_core --lib terminal_engine 2>&1 | tee -a "$RUNNER_TEMP/$REPORT_NAME"
+
+      - name: Measure throughput, allocations, and retained heap
+        id: benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$TARGET_MIB" =~ ^[1-9][0-9]{0,2}$ ]] || (( TARGET_MIB > 128 )); then
+            echo "target_mib must be an integer from 1 to 128" >&2
+            exit 2
+          fi
+          {
+            echo "Git commit: $GITHUB_SHA"
+            echo "Runner: $RUNNER_OS/$RUNNER_ARCH"
+            echo "Runner image: ${ImageOS:-unknown}/${ImageVersion:-unknown}"
+            echo "Kernel: $(uname -srvm)"
+            rustc --version
+            echo "Cargo.lock SHA-256: $(sha256sum Cargo.lock | awk '{print $1}')"
+            cargo run --locked --quiet -p termy_core --release --example terminal_engine_bench -- "$TARGET_MIB"
+          } 2>&1 | tee -a "$RUNNER_TEMP/$REPORT_NAME"
+
+      - name: Finalize report
+        if: ${{ always() }}
+        shell: bash
+        env:
+          CORRECTNESS_OUTCOME: ${{ steps.correctness.outcome }}
+          BENCHMARK_OUTCOME: ${{ steps.benchmark.outcome }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/$REPORT_NAME"
+          {
+            printf '\nCorrectness: %s\n' "${CORRECTNESS_OUTCOME:-unknown}"
+            printf 'Benchmark: %s\n' "${BENCHMARK_OUTCOME:-unknown}"
+          } >> "$report"
+          {
+            echo '## Terminal engine performance'
+            echo 'Steady warmed workloads must allocate zero times. Throughput and requested heap are reported; desktop latency has separate comparison gates.'
+            echo '```text'
+            cat "$report"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: terminal-engine-benchmark-${{ github.sha }}
+          path: ${{ runner.temp }}/terminal-engine-benchmark.txt
+          if-no-files-found: error
+          retention-days: 30

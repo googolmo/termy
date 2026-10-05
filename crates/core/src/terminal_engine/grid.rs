@@ -4,7 +4,10 @@ use std::collections::VecDeque;
 
 use unicode_width::UnicodeWidthChar;
 
-use super::types::{Cell, Cursor, Damage, DirtySpan, Size, Style};
+use super::types::{Cell, Cursor, Damage, DirtySpan, GridEffect, Size, Style};
+
+mod combining;
+use combining::CombiningCache;
 
 const MAX_HISTORY_ROWS: usize = 20_000;
 
@@ -100,6 +103,9 @@ pub(super) struct Grid {
     clear_anchor: bool,
     full_damage: bool,
     dirty: Vec<Option<(usize, usize)>>,
+    combining_cache: CombiningCache,
+    track_effects: bool,
+    effects: Vec<GridEffect>,
     pub(super) cursor: Cursor,
     pub(super) pen: Cell,
     pub(super) autowrap: bool,
@@ -127,6 +133,9 @@ impl Grid {
             clear_anchor: false,
             full_damage: true,
             dirty: vec![None; size.rows],
+            combining_cache: CombiningCache::default(),
+            track_effects: false,
+            effects: Vec::new(),
             cursor: Cursor::default(),
             pen: Cell::default(),
             autowrap: true,
@@ -208,6 +217,53 @@ impl Grid {
         self.full_damage = true;
     }
 
+    pub(super) fn set_effect_tracking(&mut self, enabled: bool) {
+        self.track_effects = enabled;
+        if !enabled {
+            self.effects.clear();
+        }
+    }
+
+    pub(super) fn drain_effects(&mut self, output: &mut Vec<GridEffect>) {
+        output.append(&mut self.effects);
+    }
+
+    fn effect(&mut self, effect: GridEffect) {
+        if !self.track_effects {
+            return;
+        }
+        if let GridEffect::Scroll {
+            alternate,
+            top,
+            bottom,
+            lines,
+            retains_history,
+            history_before,
+            history_after,
+        } = effect
+            && let Some(GridEffect::Scroll {
+                alternate: previous_alternate,
+                top: previous_top,
+                bottom: previous_bottom,
+                lines: previous_lines,
+                retains_history: previous_retains_history,
+                history_after: previous_history_after,
+                ..
+            }) = self.effects.last_mut()
+            && *previous_alternate == alternate
+            && *previous_top == top
+            && *previous_bottom == bottom
+            && previous_lines.signum() == lines.signum()
+            && *previous_retains_history == retains_history
+            && *previous_history_after == history_before
+        {
+            *previous_lines = previous_lines.saturating_add(lines);
+            *previous_history_after = history_after;
+            return;
+        }
+        self.effects.push(effect);
+    }
+
     fn mark(&mut self, row: usize, start: usize, end: usize) {
         if self.full_damage || row >= self.size.rows || start >= end {
             return;
@@ -283,6 +339,7 @@ impl Grid {
     }
 
     pub(super) fn put_char(&mut self, character: char) {
+        self.observe_output();
         let width = character.width().unwrap_or(0);
         if width == 0 {
             let mut row = self.cursor.row;
@@ -300,7 +357,17 @@ impl Grid {
             if self.screen().rows[row].cells[col].flags & Cell::WIDE_SPACER != 0 && col > 0 {
                 col -= 1;
             }
-            self.screen_mut().rows[row].cells[col].push_combining(character);
+            let cell = if self.alternate_active {
+                &mut self
+                    .alternate
+                    .as_mut()
+                    .expect("active alternate screen")
+                    .rows[row]
+                    .cells[col]
+            } else {
+                &mut self.primary.rows[row].cells[col]
+            };
+            self.combining_cache.append(cell, character);
             self.mark(row, col, col + 1);
             return;
         }
@@ -368,6 +435,7 @@ impl Grid {
     pub(super) fn write_ascii(&mut self, mut text: &[u8]) {
         debug_assert!(text.iter().all(|byte| (0x20..=0x7e).contains(byte)));
         while !text.is_empty() {
+            self.observe_output();
             if self.pending_wrap || self.insert_mode || !self.autowrap {
                 self.put_char(char::from(text[0]));
                 text = &text[1..];
@@ -427,6 +495,13 @@ impl Grid {
             self.cursor.col = 0;
         }
         self.motion_done(old);
+        self.observe_output();
+    }
+
+    fn observe_output(&mut self) {
+        if !self.alternate_active && self.cursor.row + 1 == self.size.rows {
+            self.clear_anchor = false;
+        }
     }
 
     pub(super) fn reverse_index(&mut self) {
@@ -506,13 +581,13 @@ impl Grid {
         let blank = self.blank();
         let active = &mut self.screen_mut().rows[row];
         if !selective {
-            let (left, _) = Self::clear_wide_at(active, start, &blank);
-            let (_, right) = Self::clear_wide_at(active, end - 1, &blank);
+            let (first_left, first_right) = Self::clear_wide_at(active, start, &blank);
+            let (last_left, last_right) = Self::clear_wide_at(active, end - 1, &blank);
             active.cells[start..end].fill(blank);
             if end == active.cells.len() {
                 active.wrapped = false;
             }
-            self.mark(row, left, right);
+            self.mark(row, first_left.min(last_left), first_right.max(last_right));
             return;
         }
         let mut changed_start = end;
@@ -535,6 +610,11 @@ impl Grid {
 
     pub(super) fn erase_display(&mut self, mode: u16, selective: bool) {
         self.pending_wrap = false;
+        let full_clear = mode == 2
+            || (mode == 0 && self.cursor.row == 0 && self.cursor.col == 0)
+            || (mode == 1
+                && self.cursor.row + 1 == self.size.rows
+                && self.cursor.col + 1 == self.size.cols);
         match mode {
             0 => {
                 self.erase_range(self.cursor.row, self.cursor.col, self.size.cols, selective);
@@ -560,6 +640,12 @@ impl Grid {
                 self.clear_scrollback();
             }
             _ => {}
+        }
+        if full_clear && !selective {
+            self.effect(GridEffect::Clear {
+                alternate: self.alternate_active,
+                history_size: self.history_size(),
+            });
         }
     }
 
@@ -646,6 +732,7 @@ impl Grid {
         let blank = self.blank();
         let cols = self.size.cols;
         let count = count.min(bottom - top);
+        let history_before = self.history_size();
         for _ in 0..count {
             let removed = self
                 .screen_mut()
@@ -671,13 +758,24 @@ impl Grid {
         }
         if count != 0 {
             self.mark_full_damage();
+            self.effect(GridEffect::Scroll {
+                alternate: self.alternate_active,
+                top,
+                bottom,
+                lines: count as i64,
+                retains_history: retain_history && self.history_limit != 0,
+                history_before,
+                history_after: self.history_size(),
+            });
         }
     }
 
     fn scroll_region_down(&mut self, top: usize, bottom: usize, count: usize) {
         let blank = self.blank();
         let cols = self.size.cols;
-        for _ in 0..count.min(bottom - top) {
+        let count = count.min(bottom - top);
+        let history_before = self.history_size();
+        for _ in 0..count {
             let mut row = self
                 .screen_mut()
                 .rows
@@ -688,12 +786,20 @@ impl Grid {
         }
         if count != 0 {
             self.mark_full_damage();
+            self.effect(GridEffect::Scroll {
+                alternate: self.alternate_active,
+                top,
+                bottom,
+                lines: -(count as i64),
+                retains_history: false,
+                history_before,
+                history_after: self.history_size(),
+            });
         }
     }
 
     pub(super) fn scroll_up(&mut self, count: usize) {
-        let retain =
-            !self.alternate_active && self.scroll_top == 0 && self.scroll_bottom == self.size.rows;
+        let retain = !self.alternate_active && self.scroll_top == 0;
         self.scroll_region_up(self.scroll_top, self.scroll_bottom, count, retain);
     }
     pub(super) fn scroll_down(&mut self, count: usize) {
@@ -703,14 +809,12 @@ impl Grid {
         self.pending_wrap = false;
         if self.cursor.row >= self.scroll_top && self.cursor.row < self.scroll_bottom {
             self.scroll_region_down(self.cursor.row, self.scroll_bottom, count);
-            self.carriage_return();
         }
     }
     pub(super) fn delete_lines(&mut self, count: usize) {
         self.pending_wrap = false;
         if self.cursor.row >= self.scroll_top && self.cursor.row < self.scroll_bottom {
             self.scroll_region_up(self.cursor.row, self.scroll_bottom, count, false);
-            self.carriage_return();
         }
     }
     pub(super) fn set_scroll_region(&mut self, top: usize, bottom: usize) {
@@ -776,6 +880,10 @@ impl Grid {
                     ..Cursor::default()
                 };
                 alternate.pending_wrap = false;
+                self.effect(GridEffect::Clear {
+                    alternate: true,
+                    history_size: 0,
+                });
             }
         }
         self.alternate_active = enabled;
@@ -813,19 +921,29 @@ impl Grid {
         if self.alternate_active {
             return false;
         }
-        let changed = !self.history.is_empty() || self.display_offset != 0;
+        self.clear_anchor = false;
+        let removed = self.history.len();
+        let changed = removed != 0 || self.display_offset != 0;
         self.history.clear();
         self.display_offset = 0;
         if changed {
             self.mark_full_damage();
+            if removed != 0 {
+                self.effect(GridEffect::ClearHistory { removed });
+            }
         }
         changed
     }
 
     pub(super) fn set_history_limit(&mut self, limit: usize) {
+        let previous = self.history.len();
         self.requested_history_limit = limit.min(MAX_HISTORY_ROWS);
         self.history_limit = Self::bounded_history(self.size, limit);
         self.trim_history();
+        let removed = previous.saturating_sub(self.history.len());
+        if removed != 0 {
+            self.effect(GridEffect::ClearHistory { removed });
+        }
         self.mark_full_damage();
     }
 
@@ -860,7 +978,9 @@ impl Grid {
         self.newline_mode = false;
         self.pending_wrap = false;
         self.clear_anchor = false;
+        self.combining_cache.clear();
         self.mark_full_damage();
+        self.effect(GridEffect::Reset);
     }
 
     /// Resize reconstructs logical lines only when their width changes. Normal
@@ -1086,7 +1206,13 @@ impl Grid {
         let mut viewport_result = None;
         let mut input = cells.into_iter().enumerate().peekable();
         while let Some((index, mut cell)) = input.next() {
-            let wide = cell.flags & Cell::WIDE != 0;
+            // A one-column screen must keep making progress, so wide glyphs
+            // temporarily occupy one cell there. Recover their second cell
+            // when the viewport grows again rather than permanently narrowing
+            // the saved text.
+            let expanded_wide =
+                cols > 1 && cell.flags & Cell::WIDE == 0 && cell.character.width() == Some(2);
+            let wide = cell.flags & Cell::WIDE != 0 || expanded_wide;
             if col == cols || (wide && cols > 1 && col + 1 == cols) {
                 if col < cols {
                     row.cells[col].flags = Cell::LEADING_WIDE_SPACER;
@@ -1111,11 +1237,29 @@ impl Grid {
                     .peek()
                     .is_some_and(|(_, spacer)| spacer.flags & Cell::WIDE_SPACER != 0)
                 {
-                    input.next();
+                    let spacer_index = input.next().expect("peeked wide spacer").0;
+                    if cursor == Some(spacer_index) {
+                        cursor_result = Some((rows.len(), col, false));
+                    }
+                    if boundary == Some(spacer_index) {
+                        boundary_result = Some(rows.len());
+                    }
+                    if viewport == Some(spacer_index) {
+                        viewport_result = Some(rows.len());
+                    }
                 }
             }
+            if expanded_wide {
+                cell.flags |= Cell::WIDE;
+                row.cells[col + 1] = Cell {
+                    character: ' ',
+                    style: cell.style,
+                    flags: Cell::WIDE_SPACER,
+                    extra: None,
+                };
+            }
             row.cells[col] = cell;
-            col += 1;
+            col += if expanded_wide { 2 } else { 1 };
         }
         if cursor_result.is_none() && cursor.is_some() {
             if col == cols && cursor_pending {

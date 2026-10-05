@@ -68,8 +68,6 @@ jobs:
             candidate -> target
 
       - name: Run benchmark comparison
-        env:
-          TERMY_EXPERIMENTAL_TMON_ENGINE: "0"
         run: |
           cd "$GITHUB_WORKSPACE/candidate"
           cargo run -p termy_cli --bin xtask -- benchmark-compare \

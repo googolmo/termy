@@ -1,7 +1,7 @@
-//! OSC escape sequence interceptor for sequences not handled by alacritty_terminal.
+//! OSC escape sequence interceptor for application-level terminal integration.
 //!
 //! This module pre-parses the PTY output stream to extract OSC sequences that
-//! alacritty_terminal does not expose as events:
+//! the host handles as application events:
 //! - OSC 7: Working directory (file:// URL)
 //! - OSC 9;4: Progress indicator (ConEmu/Windows Terminal)
 //! - OSC 9;9: Working directory (ConEmu path form; WSL reports its cwd this way)
@@ -360,9 +360,9 @@ mod tests {
     #[test]
     fn passthrough_osc_8_hyperlinks() {
         let mut interceptor = OscInterceptor::new();
-        // OSC 8 hyperlinks must reach the alacritty parser so cells pick up
+        // OSC 8 hyperlinks must reach the terminal parser so cells pick up
         // their hyperlink metadata. The interceptor re-emits passthrough OSC
-        // with a BEL terminator, which alacritty treats identically to ST.
+        // with a BEL terminator, which the terminal parser treats identically to ST.
         let input = "\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\";
         let (output, events) = process_str(&mut interceptor, input);
         assert_eq!(output, "\x1b]8;;https://example.com\x07link\x1b]8;;\x07");

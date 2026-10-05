@@ -259,7 +259,7 @@ fn numeric_parameters_saturate_without_allocation_or_overflow() {
 
 #[test]
 fn parameter_and_intermediate_limits_reject_whole_sequence() {
-    for parameter_bytes in [b';', b':'] {
+    for parameter_bytes in *b";:" {
         let limit = if parameter_bytes == b';' {
             MAX_PARAMS - 1
         } else {
@@ -360,7 +360,7 @@ fn unsupported_sos_and_privacy_messages_never_leak_text() {
 
 #[test]
 fn string_size_limit_is_exact_and_recovery_is_bounded() {
-    for introducer in [b']', b'P', b'_'] {
+    for introducer in *b"]P_" {
         for terminator in [b"\x1b\\".as_slice(), b"\x07"] {
             if introducer != b']' && terminator == b"\x07" {
                 continue;
@@ -380,7 +380,7 @@ fn string_size_limit_is_exact_and_recovery_is_bounded() {
                     assert_eq!(recorder.events.len(), 1);
                     match &recorder.events[0] {
                         Event::Osc(bytes) | Event::Dcs(bytes) | Event::Apc(bytes) => {
-                            assert_eq!(bytes.len(), size)
+                            assert_eq!(bytes.len(), size);
                         }
                         _ => panic!("expected a string event"),
                     }
@@ -423,7 +423,7 @@ fn ascii_runs_are_batched_and_strings_reuse_allocation() {
 
 #[test]
 fn oversized_strings_discard_embedded_escapes_until_termination() {
-    for introducer in [b']', b'P', b'_'] {
+    for introducer in *b"]P_" {
         let mut parser = Parser::default();
         let mut recorder = Recorder::default();
         parser.advance(&mut recorder, &[0x1b, introducer]);
@@ -434,4 +434,23 @@ fn oversized_strings_discard_embedded_escapes_until_termination() {
         );
         assert_eq!(recorder.events, vec![Event::Print('O'), Event::Print('K')]);
     }
+}
+
+#[test]
+fn configured_apc_limit_does_not_expand_osc_or_dcs_limits() {
+    for introducer in *b"]P_" {
+        let mut parser = Parser::with_apc_limit(MAX_STRING_BYTES * 2);
+        let mut recorder = Recorder::default();
+        parser.advance(&mut recorder, &[0x1b, introducer]);
+        parser.advance(&mut recorder, &vec![b'x'; MAX_STRING_BYTES + 1]);
+        parser.advance(&mut recorder, b"\x1b\\");
+        if introducer == b'_' {
+            assert!(
+                matches!(recorder.events.as_slice(), [Event::Apc(bytes)] if bytes.len() == MAX_STRING_BYTES + 1)
+            );
+        } else {
+            assert!(recorder.events.is_empty());
+        }
+    }
+    assert_eq!(Parser::with_apc_limit(usize::MAX).apc_limit, MAX_APC_BYTES);
 }

@@ -9,6 +9,7 @@ const MAX_PARAMS: usize = 32;
 const MAX_SUBPARAMS: usize = 8;
 const MAX_INTERMEDIATES: usize = 2;
 const MAX_STRING_BYTES: usize = 64 * 1024;
+const MAX_APC_BYTES: usize = 256 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Param {
@@ -67,6 +68,11 @@ pub(super) trait Handler {
     fn osc(&mut self, bytes: &[u8]);
     fn dcs(&mut self, bytes: &[u8]);
     fn apc(&mut self, bytes: &[u8]);
+
+    /// Stop at a completed callback without consuming the following bytes.
+    fn pause_requested(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -96,6 +102,7 @@ pub(super) struct Parser {
     intermediate_len: usize,
     discarded: bool,
     string: Vec<u8>,
+    apc_limit: usize,
     utf8_value: u32,
     utf8_remaining: u8,
     utf8_min: u8,
@@ -113,6 +120,7 @@ impl Default for Parser {
             intermediate_len: 0,
             discarded: false,
             string: Vec::new(),
+            apc_limit: MAX_STRING_BYTES,
             utf8_value: 0,
             utf8_remaining: 0,
             utf8_min: 0x80,
@@ -122,7 +130,45 @@ impl Default for Parser {
 }
 
 impl Parser {
-    pub(super) fn advance(&mut self, handler: &mut impl Handler, bytes: &[u8]) {
+    /// Graphics protocols may require a larger APC payload than ordinary
+    /// terminal strings. OSC and DCS retain their independent 64 KiB bound.
+    pub(super) fn with_apc_limit(limit: usize) -> Self {
+        Self {
+            apc_limit: limit.clamp(1, MAX_APC_BYTES),
+            ..Self::default()
+        }
+    }
+
+    /// Reset protocol state while retaining the reusable string allocation.
+    pub(super) fn reset(&mut self) {
+        self.state = State::Ground;
+        self.param_len = 0;
+        self.private = None;
+        self.intermediate_len = 0;
+        self.discarded = false;
+        self.string.clear();
+        self.utf8_remaining = 0;
+    }
+
+    pub(super) fn advance(&mut self, handler: &mut impl Handler, bytes: &[u8]) -> usize {
+        self.advance_impl::<true>(handler, bytes)
+    }
+
+    /// Replay an already bounded synchronized batch without pausing on nested
+    /// begin markers. Handler state changes still occur in their normal order.
+    pub(super) fn advance_uninterrupted(
+        &mut self,
+        handler: &mut impl Handler,
+        bytes: &[u8],
+    ) -> usize {
+        self.advance_impl::<false>(handler, bytes)
+    }
+
+    fn advance_impl<const PAUSABLE: bool>(
+        &mut self,
+        handler: &mut impl Handler,
+        bytes: &[u8],
+    ) -> usize {
         let mut offset = 0;
         while offset < bytes.len() {
             if self.state == State::Ground && self.utf8_remaining == 0 {
@@ -132,6 +178,9 @@ impl Parser {
                 }
                 if offset != start {
                     handler.print_ascii(&bytes[start..offset]);
+                    if PAUSABLE && handler.pause_requested() {
+                        break;
+                    }
                     continue;
                 }
             } else if let State::String(kind) = self.state {
@@ -147,7 +196,11 @@ impl Parser {
 
             self.advance_byte(handler, bytes[offset]);
             offset += 1;
+            if PAUSABLE && handler.pause_requested() {
+                break;
+            }
         }
+        offset
     }
 
     fn advance_byte(&mut self, handler: &mut impl Handler, byte: u8) {
@@ -352,7 +405,12 @@ impl Parser {
         if self.discarded || kind == StringKind::Ignore {
             return;
         }
-        if bytes.len() > MAX_STRING_BYTES - self.string.len() {
+        let limit = if kind == StringKind::Apc {
+            self.apc_limit
+        } else {
+            MAX_STRING_BYTES
+        };
+        if bytes.len() > limit - self.string.len() {
             self.discarded = true;
             self.string.clear();
             return;
@@ -361,7 +419,7 @@ impl Parser {
         if required > self.string.capacity() {
             // Control geometric growth explicitly so a large chunk cannot
             // double capacity beyond the payload limit.
-            let capacity = required.next_power_of_two().min(MAX_STRING_BYTES);
+            let capacity = required.next_power_of_two().min(limit);
             self.string.reserve_exact(capacity - self.string.len());
         }
         self.string.extend_from_slice(bytes);

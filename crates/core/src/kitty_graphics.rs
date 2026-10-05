@@ -15,12 +15,6 @@ use image::normalize_image;
 #[cfg(test)]
 mod conformance;
 
-use alacritty_terminal::{
-    grid::{Dimensions, Grid},
-    index::{Column, Line},
-    term::cell::Cell,
-    vte::ansi::{Color as AnsiColor, NamedColor},
-};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use flate2::read::ZlibDecoder;
 use std::{
@@ -44,12 +38,12 @@ const MAX_RELATIVE_DEPTH: usize = 8;
 
 #[derive(Clone, Debug)]
 struct StoredImage {
-    image: Arc<crate::tmon::GraphicsImage>,
+    image: Arc<crate::terminal_engine::media::GraphicsImage>,
     width: u32,
     height: u32,
     generation: u64,
     number: Option<u32>,
-    animation: Option<crate::tmon::GraphicsAnimation>,
+    animation: Option<crate::terminal_engine::media::GraphicsAnimation>,
 }
 
 impl StoredImage {
@@ -109,6 +103,49 @@ pub struct KittyGraphicsPlaceholder {
     image_col: u32,
 }
 
+impl KittyGraphicsPlaceholder {
+    pub(crate) fn from_cell(
+        viewport_row: i64,
+        col: usize,
+        image_id_low: u32,
+        placement_id: u32,
+        diacritics: [Option<u32>; 3],
+        previous: Option<Self>,
+    ) -> Self {
+        let [row, image_col, high] = diacritics;
+        let continuation = previous.filter(|previous| {
+            previous.viewport_row == viewport_row
+                && previous.col.saturating_add(1) == col
+                && previous.image_id_low == image_id_low
+                && previous.placement_id == placement_id
+                && row.is_none_or(|row| row == previous.image_row)
+                && image_col
+                    .is_none_or(|image_col| image_col == previous.image_col.saturating_add(1))
+                && high.is_none_or(|high| high == u32::from(previous.image_id_high))
+        });
+        let image_row = row
+            .or_else(|| continuation.map(|value| value.image_row))
+            .unwrap_or(0);
+        let image_col = image_col
+            .or_else(|| continuation.map(|value| value.image_col.saturating_add(1)))
+            .unwrap_or(0);
+        let image_id_high = high
+            .or_else(|| continuation.map(|value| u32::from(value.image_id_high)))
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        Self {
+            viewport_row,
+            col,
+            image_id_low,
+            image_id_high,
+            image_id: image_id_low | (u32::from(image_id_high) << 24),
+            placement_id,
+            image_row,
+            image_col,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 enum ResolvedOrigin {
     Buffer { anchor_line: i64, col: i64 },
@@ -140,7 +177,7 @@ impl KittyGraphicsScreen {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct KittyGraphicsRenderPlacement<I = Arc<crate::tmon::GraphicsImage>> {
+pub struct KittyGraphicsRenderPlacement<I = Arc<crate::terminal_engine::media::GraphicsImage>> {
     pub placement_serial: u64,
     pub image_id: u32,
     pub placement_id: u32,
@@ -222,94 +259,11 @@ pub struct KittyGraphicsState {
     viewport_rows: u16,
 }
 
-pub fn kitty_graphics_placeholders_from_alacritty_grid(
-    grid: &Grid<Cell>,
-) -> Vec<KittyGraphicsPlaceholder> {
-    let display_offset = grid.display_offset();
-    let rows = grid.screen_lines();
-    let cols = grid.columns();
-    let mut placeholders = Vec::new();
-    let mut previous = None;
-    for viewport_row in 0..rows {
-        let line = i32::try_from(viewport_row)
-            .unwrap_or(i32::MAX)
-            .saturating_sub(i32::try_from(display_offset).unwrap_or(i32::MAX));
-        for col in 0..cols {
-            let cell = &grid[Line(line)][Column(col)];
-            if cell.c != crate::tmon::kitty_graphics_unicode::PLACEHOLDER {
-                previous = None;
-                continue;
-            }
-            let image_id_low = ansi_color_to_placeholder_id(cell.fg);
-            let placement_id = cell
-                .underline_color()
-                .map_or(0, ansi_color_to_placeholder_id);
-            let [row, image_col, high] = placeholder_diacritics(cell.zerowidth());
-            let continuation = previous.filter(|previous: &KittyGraphicsPlaceholder| {
-                previous.viewport_row == viewport_row as i64
-                    && previous.col.saturating_add(1) == col
-                    && previous.image_id_low == image_id_low
-                    && previous.placement_id == placement_id
-                    && row.is_none_or(|row| row == previous.image_row)
-                    && image_col
-                        .is_none_or(|image_col| image_col == previous.image_col.saturating_add(1))
-                    && high.is_none_or(|high| high == u32::from(previous.image_id_high))
-            });
-            let image_row = row
-                .or_else(|| continuation.map(|value| value.image_row))
-                .unwrap_or(0);
-            let image_col = image_col
-                .or_else(|| continuation.map(|value| value.image_col.saturating_add(1)))
-                .unwrap_or(0);
-            let image_id_high = high
-                .or_else(|| continuation.map(|value| u32::from(value.image_id_high)))
-                .and_then(|value| u8::try_from(value).ok())
-                .unwrap_or(0);
-            let placeholder = KittyGraphicsPlaceholder {
-                viewport_row: viewport_row as i64,
-                col,
-                image_id_low,
-                image_id_high,
-                image_id: image_id_low | (u32::from(image_id_high) << 24),
-                placement_id,
-                image_row,
-                image_col,
-            };
-            placeholders.push(placeholder);
-            previous = Some(placeholder);
-        }
-    }
-    placeholders
-}
-
-fn ansi_color_to_placeholder_id(color: AnsiColor) -> u32 {
-    match color {
-        AnsiColor::Spec(rgb) => {
-            (u32::from(rgb.r) << 16) | (u32::from(rgb.g) << 8) | u32::from(rgb.b)
-        }
-        AnsiColor::Indexed(index) => u32::from(index),
-        AnsiColor::Named(name) if (name as usize) < 16 => name as u32,
-        AnsiColor::Named(NamedColor::Foreground) => 0,
-        AnsiColor::Named(_) => 0,
-    }
-}
-
-fn placeholder_diacritics(combining: Option<&[char]>) -> [Option<u32>; 3] {
-    let mut decoded = [None; 3];
-    for (slot, character) in decoded
-        .iter_mut()
-        .zip(combining.unwrap_or_default().iter().copied())
-    {
-        *slot = crate::tmon::kitty_graphics_unicode::diacritic_index(character);
-    }
-    decoded
-}
-
 impl KittyGraphicsState {
     pub fn resize(&mut self, size: TerminalSize) {
         self.viewport_rows = size.rows;
         for placement in &mut self.placements {
-            let (width, height) = crate::tmon::graphics_display_layout(
+            let (width, height) = crate::terminal_engine::media::graphics_display_layout(
                 placement.source_width,
                 placement.source_height,
                 placement.display_cols,
@@ -702,6 +656,10 @@ impl KittyGraphicsState {
         self.clear_visible_on_screen(KittyGraphicsScreen::Primary)
     }
 
+    pub(crate) fn needs_grid_effects(&self) -> bool {
+        self.has_placements() || self.pending.is_some()
+    }
+
     pub fn has_placements(&self) -> bool {
         !self.placements.is_empty()
     }
@@ -828,7 +786,7 @@ impl KittyGraphicsState {
             let PlacementLocation::Direct { anchor_line, .. } = &mut placement.location else {
                 return true;
             };
-            let mut span = crate::tmon::GraphicsRowSpan {
+            let mut span = crate::terminal_engine::media::GraphicsRowSpan {
                 anchor: *anchor_line - history_size as i64,
                 rows: placement.occupied_rows,
                 clip_top: placement.clip_top_rows,
@@ -846,6 +804,32 @@ impl KittyGraphicsState {
             self.remove_orphaned_relative_placements();
         }
         changed
+    }
+
+    pub(crate) fn scroll_partial_history_region(
+        &mut self,
+        bottom: usize,
+        lines: usize,
+        history_before: usize,
+        history_after: usize,
+    ) -> bool {
+        let evicted = lines.saturating_sub(history_after.saturating_sub(history_before));
+        let mut changed = false;
+        for placement in &mut self.placements {
+            if placement.screen != KittyGraphicsScreen::Primary {
+                continue;
+            }
+            if let PlacementLocation::Direct { anchor_line, .. } = &mut placement.location {
+                let row = *anchor_line - history_before as i64;
+                // Keep footer images and images spanning the bottom margin
+                // fixed, while scrolled rows keep their place in history.
+                if row >= 0 && row + i64::from(placement.occupied_rows) > bottom as i64 {
+                    *anchor_line = anchor_line.saturating_add(lines as i64);
+                    changed |= lines != 0;
+                }
+            }
+        }
+        changed | self.scroll_up_without_history_on_screen(evicted, KittyGraphicsScreen::Primary)
     }
 
     pub fn preserve_primary_placements_across_partial_history_growth(
@@ -866,9 +850,9 @@ impl KittyGraphicsState {
             placement.screen == KittyGraphicsScreen::Primary
                 && matches!(placement.location, PlacementLocation::Direct { .. })
         }) {
-            // Alacritty grows history when a partial DECSTBM region starts at
-            // the top. Kitty placements are not region-aware, so cancel that
-            // global history offset rather than moving fixed footer images.
+            // Top-anchored scrolling regions can grow primary history.
+            // Cancel that global offset for placements outside the region,
+            // such as fixed footer images.
             if let PlacementLocation::Direct { anchor_line, .. } = &mut placement.location {
                 *anchor_line = anchor_line.saturating_add(lines);
             }
@@ -1084,7 +1068,7 @@ impl KittyGraphicsState {
                 .max(1.0);
             placed_source_width = source_width.min(available.floor() as u32);
         }
-        let (width, height) = crate::tmon::graphics_display_layout(
+        let (width, height) = crate::terminal_engine::media::graphics_display_layout(
             placed_source_width,
             source_height,
             display_cols,
@@ -1195,7 +1179,7 @@ impl KittyGraphicsState {
                 }
                 result
             }
-            's' => crate::tmon::read_graphics_shared_memory(
+            's' => crate::terminal_engine::media::read_graphics_shared_memory(
                 &decoded,
                 u64::from(command.u32_value('O').unwrap_or(0)),
                 command
@@ -1331,9 +1315,12 @@ fn response(command: &KittyGraphicsCommand, success: bool, message: &str) -> Opt
     if (success && quiet >= 1) || (!success && quiet >= 2) {
         return None;
     }
-    let image_id = command.u32_value('i').or_else(|| command.u32_value('I'))?;
+    let image_id = command
+        .u32_value('i')
+        .filter(|id| *id != 0)
+        .or_else(|| command.u32_value('I').filter(|number| *number != 0))?;
     let mut control = format!("i={image_id}");
-    if let Some(number) = command.u32_value('I') {
+    if let Some(number) = command.u32_value('I').filter(|number| *number != 0) {
         control.push_str(&format!(",I={number}"));
     }
     if let Some(placement_id) = command.u32_value('p') {

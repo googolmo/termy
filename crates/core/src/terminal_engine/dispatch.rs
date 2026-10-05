@@ -11,6 +11,7 @@ const MAX_TITLE_STACK: usize = 64;
 const MAX_KEYBOARD_STACK: usize = 32;
 
 pub(super) struct State {
+    pub(super) graphics: super::graphics::Graphics,
     pub(super) grid: Grid,
     pub(super) modes: Modes,
     pub(super) alternate_screen: bool,
@@ -23,6 +24,10 @@ pub(super) struct State {
     pub(super) background: Option<Color>,
     pub(super) cursor_color: Option<Color>,
     pub(super) palette_revision: u64,
+    pub(super) query_colors: crate::TerminalQueryColors,
+    pub(super) default_cursor_shape: CursorShape,
+    pub(super) cursor_shape_overridden: bool,
+    pub(super) cell_pixels: (u16, u16),
     title: String,
     title_stack: Vec<String>,
     keyboard_stack: [Vec<u8>; 2],
@@ -30,11 +35,13 @@ pub(super) struct State {
     charsets: [bool; 2],
     active_charset: usize,
     saved_charsets: [([bool; 2], usize); 2],
+    last_printed: Option<char>,
 }
 
 impl State {
     pub(super) fn new(size: Size, options: Options) -> Self {
         Self {
+            graphics: super::graphics::Graphics::default(),
             grid: Grid::new(size, options.scrollback_history),
             modes: Modes::default(),
             alternate_screen: false,
@@ -47,6 +54,10 @@ impl State {
             background: None,
             cursor_color: None,
             palette_revision: 0,
+            query_colors: crate::TerminalQueryColors::default(),
+            default_cursor_shape: CursorShape::Block,
+            cursor_shape_overridden: false,
+            cell_pixels: (9, 18),
             title: String::new(),
             title_stack: Vec::new(),
             keyboard_stack: [Vec::new(), Vec::new()],
@@ -54,6 +65,7 @@ impl State {
             charsets: [false; 2],
             active_charset: 0,
             saved_charsets: [([false; 2], 0); 2],
+            last_printed: None,
         }
     }
 
@@ -61,7 +73,7 @@ impl State {
         enqueue(&mut self.events, &mut self.dropped_events, event);
     }
 
-    fn reply(&mut self, bytes: &[u8]) {
+    pub(super) fn reply(&mut self, bytes: &[u8]) {
         if self.replies.len().saturating_add(bytes.len()) <= MAX_REPLY_BYTES {
             self.replies.extend_from_slice(bytes);
         } else {
@@ -118,6 +130,11 @@ impl State {
         let old_cursor = self.grid.cursor;
         match value {
             1 => self.modes.application_cursor = enabled,
+            3 => {
+                self.grid.set_scroll_region(0, self.grid.size().rows);
+                self.grid.erase_display(2, false);
+                self.grid.goto(0, 0);
+            }
             6 => {
                 self.grid.origin_mode = enabled;
                 self.grid.goto(0, 0);
@@ -217,7 +234,7 @@ impl State {
                 40..=47 => self.grid.pen.style.background = Color::indexed((value - 40) as u8),
                 90..=97 => self.grid.pen.style.foreground = Color::indexed((value - 90 + 8) as u8),
                 100..=107 => {
-                    self.grid.pen.style.background = Color::indexed((value - 100 + 8) as u8)
+                    self.grid.pen.style.background = Color::indexed((value - 100 + 8) as u8);
                 }
                 39 => self.grid.pen.style.foreground = Color::DEFAULT,
                 49 => self.grid.pen.style.background = Color::DEFAULT,
@@ -272,8 +289,9 @@ impl State {
             while let (Some(index), Some(spec)) = (fields.next(), fields.next()) {
                 if let Ok(index) = index.parse::<u8>() {
                     if spec == "?" {
-                        let color = self.palette[usize::from(index)]
-                            .unwrap_or_else(|| default_indexed_color(index));
+                        let color = self.palette[usize::from(index)].unwrap_or_else(|| {
+                            terminal_color(self.query_colors.indexed_color(index))
+                        });
                         self.color_reply(&format!("4;{index}"), color);
                     } else if let Some(color) = parse_color(spec) {
                         self.palette[usize::from(index)] = Some(color);
@@ -300,16 +318,14 @@ impl State {
                     _ => break,
                 };
                 if spec == "?" {
-                    self.color_reply(
-                        &cmd.to_string(),
-                        current.unwrap_or_else(|| {
-                            if cmd == 11 {
-                                Color::rgb(0, 0, 0)
-                            } else {
-                                Color::rgb(229, 229, 229)
-                            }
-                        }),
-                    );
+                    let color = current.or_else(|| match cmd {
+                        10 => Some(terminal_color(self.query_colors.foreground)),
+                        11 => Some(terminal_color(self.query_colors.background)),
+                        _ => None,
+                    });
+                    if let Some(color) = color {
+                        self.color_reply(&cmd.to_string(), color);
+                    }
                 } else if let Some(color) = parse_color(spec) {
                     match cmd {
                         10 => self.foreground = Some(color),
@@ -338,6 +354,10 @@ impl State {
 }
 
 impl Handler for State {
+    fn pause_requested(&self) -> bool {
+        self.modes.synchronized_update
+    }
+
     fn print(&mut self, character: char) {
         let character = if self.charsets[self.active_charset] {
             dec_graphic(character)
@@ -345,6 +365,7 @@ impl Handler for State {
             character
         };
         self.grid.put_char(character);
+        self.last_printed = Some(character);
     }
 
     fn print_ascii(&mut self, bytes: &[u8]) {
@@ -354,6 +375,9 @@ impl Handler for State {
             }
         } else {
             self.grid.write_ascii(bytes);
+            if let Some(&byte) = bytes.last() {
+                self.last_printed = Some(char::from(byte));
+            }
         }
     }
 
@@ -391,11 +415,14 @@ impl Handler for State {
             ([], b'Z') => self.reply(b"\x1b[?62;22c"),
             ([], b'c') => {
                 self.grid.reset();
+                self.grid.cursor.shape = self.default_cursor_shape;
+                self.cursor_shape_overridden = false;
                 self.modes = Modes::default();
                 self.alternate_screen = false;
                 self.charsets = [false; 2];
                 self.active_charset = 0;
                 self.saved_charsets = [([false; 2], 0); 2];
+                self.last_printed = None;
                 self.keyboard_stack.iter_mut().for_each(Vec::clear);
                 self.keyboard_flags = [0; 2];
                 self.palette.fill(None);
@@ -403,6 +430,9 @@ impl Handler for State {
                 self.background = None;
                 self.cursor_color = None;
                 self.palette_revision = self.palette_revision.wrapping_add(1);
+                self.title.clear();
+                self.title_stack.clear();
+                self.event(Event::ResetTitle);
             }
             ([b'('], b'0' | b'B') => self.charsets[0] = final_byte == b'0',
             ([b')'], b'0' | b'B') => self.charsets[1] = final_byte == b'0',
@@ -412,6 +442,14 @@ impl Handler for State {
 
     fn csi(&mut self, params: &[Param], private: Option<u8>, intermediates: &[u8], final_byte: u8) {
         let count = count(params, 0);
+        if intermediates == b"$" && final_byte == b'p' && matches!(private, None | Some(b'?')) {
+            for param in params {
+                if param.subparams().is_empty() {
+                    self.report_mode(private.is_some(), param.value().unwrap_or(0));
+                }
+            }
+            return;
+        }
         if final_byte == b'u'
             && intermediates.is_empty()
             && let Some(private) = private
@@ -419,15 +457,17 @@ impl Handler for State {
             self.keyboard(params, private);
             return;
         }
-        if intermediates == [b' '] && private.is_none() && final_byte == b'q' {
+        if intermediates == b" " && private.is_none() && final_byte == b'q' {
             let style = value(params, 0, 0);
             if style <= 6 {
                 let old_cursor = self.grid.cursor;
                 self.grid.cursor.shape = match style {
+                    0 => self.default_cursor_shape,
                     3 | 4 => CursorShape::Underline,
                     5 | 6 => CursorShape::Beam,
                     _ => CursorShape::Block,
                 };
+                self.cursor_shape_overridden = style != 0;
                 self.grid.cursor.blinking = style == 0 || style % 2 == 1;
                 if self.grid.cursor != old_cursor {
                     self.grid.cursor_changed(old_cursor);
@@ -435,7 +475,7 @@ impl Handler for State {
             }
             return;
         }
-        if intermediates == [b'"'] && private.is_none() && final_byte == b'q' {
+        if intermediates == b"\"" && private.is_none() && final_byte == b'q' {
             match value(params, 0, 0) {
                 0 | 2 => self.grid.pen.style.set(Style::PROTECTED, false),
                 1 => self.grid.pen.style.set(Style::PROTECTED, true),
@@ -489,7 +529,7 @@ impl Handler for State {
                 .grid
                 .erase_display(value(params, 0, 0), private.is_some()),
             (None | Some(b'?'), b'K') => {
-                self.grid.erase_line(value(params, 0, 0), private.is_some())
+                self.grid.erase_line(value(params, 0, 0), private.is_some());
             }
             (None, b'X') => self.grid.erase_chars(count),
             (None, b'@') => self.grid.insert_chars(count),
@@ -498,6 +538,13 @@ impl Handler for State {
             (None, b'M') => self.grid.delete_lines(count),
             (None, b'S') => self.grid.scroll_up(count),
             (None, b'T') => self.grid.scroll_down(count),
+            (None, b'b') => {
+                if let Some(character) = self.last_printed {
+                    for _ in 0..count {
+                        self.grid.put_char(character);
+                    }
+                }
+            }
             (None, b'r') => {
                 let bottom = value(params, 1, 0);
                 let bottom = if bottom == 0 {
@@ -512,6 +559,9 @@ impl Handler for State {
             (None, b'm') => self.sgr(params),
             (None | Some(b'?'), b'h' | b'l') => {
                 for param in params {
+                    if !param.subparams().is_empty() {
+                        continue;
+                    }
                     self.mode(
                         private.is_some(),
                         param.value().unwrap_or(0),
@@ -533,6 +583,17 @@ impl Handler for State {
                 self.reply(format!("\x1b[{private}{row};{}R", self.grid.cursor.col + 1).as_bytes());
             }
             (None, b't') => match value(params, 0, 0) {
+                14 => self.reply(
+                    format!(
+                        "\x1b[4;{};{}t",
+                        usize::from(self.cell_pixels.1) * self.grid.size().rows,
+                        usize::from(self.cell_pixels.0) * self.grid.size().cols
+                    )
+                    .as_bytes(),
+                ),
+                16 => self.reply(
+                    format!("\x1b[6;{};{}t", self.cell_pixels.1, self.cell_pixels.0).as_bytes(),
+                ),
                 18 => self.reply(
                     format!(
                         "\x1b[8;{};{}t",
@@ -582,7 +643,29 @@ impl Handler for State {
                 }
                 self.palette_revision = self.palette_revision.wrapping_add(1);
             }
-            7 => self.event(Event::WorkingDirectory(rest.to_owned())),
+            7 => {
+                let path = rest
+                    .strip_prefix("file://")
+                    .and_then(|rest| rest.find('/').map(|offset| &rest[offset..]))
+                    .unwrap_or(rest);
+                self.event(Event::WorkingDirectory(path.to_owned()));
+            }
+            9 => {
+                if let Some(rest) = rest.strip_prefix("4;") {
+                    let mut parts = rest.split(';');
+                    if let Some(state) = parts.next().and_then(|s| s.parse::<u8>().ok()) {
+                        let progress = parts.next().and_then(|s| s.parse::<u8>().ok()).unwrap_or(0);
+                        self.event(Event::Progress(crate::ProgressState::from_osc(
+                            state, progress,
+                        )));
+                    }
+                } else if let Some(path) = rest.strip_prefix("9;") {
+                    let path = path.trim().trim_matches('"');
+                    if !path.is_empty() {
+                        self.event(Event::WorkingDirectory(path.to_owned()));
+                    }
+                }
+            }
             8 => {
                 let Some((params, uri)) = rest.split_once(';') else {
                     return;
@@ -619,8 +702,12 @@ impl Handler for State {
         }
     }
 
-    fn dcs(&mut self, _bytes: &[u8]) {}
-    fn apc(&mut self, _bytes: &[u8]) {}
+    fn dcs(&mut self, bytes: &[u8]) {
+        self.device_control_query(bytes);
+    }
+    fn apc(&mut self, bytes: &[u8]) {
+        self.apply_graphics(bytes);
+    }
 }
 
 fn value(params: &[Param], index: usize, default: u16) -> u16 {
@@ -709,44 +796,8 @@ fn parse_component(component: &str) -> Option<u8> {
     Some((value * 255 / max) as u8)
 }
 
-fn default_indexed_color(index: u8) -> Color {
-    const ANSI: [(u8, u8, u8); 16] = [
-        (0, 0, 0),
-        (205, 0, 0),
-        (0, 205, 0),
-        (205, 205, 0),
-        (0, 0, 238),
-        (205, 0, 205),
-        (0, 205, 205),
-        (229, 229, 229),
-        (127, 127, 127),
-        (255, 0, 0),
-        (0, 255, 0),
-        (255, 255, 0),
-        (92, 92, 255),
-        (255, 0, 255),
-        (0, 255, 255),
-        (255, 255, 255),
-    ];
-    match index {
-        0..=15 => {
-            let (r, g, b) = ANSI[usize::from(index)];
-            Color::rgb(r, g, b)
-        }
-        16..=231 => {
-            let index = index - 16;
-            let component = |n| if n == 0 { 0 } else { 55 + n * 40 };
-            Color::rgb(
-                component(index / 36),
-                component(index / 6 % 6),
-                component(index % 6),
-            )
-        }
-        _ => {
-            let gray = 8 + (index - 232) * 10;
-            Color::rgb(gray, gray, gray)
-        }
-    }
+fn terminal_color(color: crate::TerminalColor) -> Color {
+    Color::rgb(color.r, color.g, color.b)
 }
 
 fn dec_graphic(character: char) -> char {

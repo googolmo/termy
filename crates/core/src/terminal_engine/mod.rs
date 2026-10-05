@@ -6,11 +6,16 @@
 //! status and the remaining integration gates.
 
 mod dispatch;
+mod graphics;
 mod grid;
+pub mod media;
 mod parser;
+mod queries;
+mod sync;
+pub(crate) mod transport;
 mod types;
 
-use std::collections::VecDeque;
+use std::{collections::VecDeque, time::Instant};
 
 pub use types::{
     Cell, CellExtra, Color, Cursor, CursorShape, Damage, DirtySpan, Hyperlink, Size, Style,
@@ -19,6 +24,7 @@ pub use types::{
 
 use dispatch::State;
 use parser::Parser;
+use sync::SynchronizedUpdate;
 
 const MAX_EVENTS: usize = 1024;
 const MAX_REPLY_BYTES: usize = 64 * 1024;
@@ -40,8 +46,10 @@ impl Default for Options {
 pub enum Event {
     Bell,
     Title(String),
+    ResetTitle,
     WorkingDirectory(String),
     ShellIntegration(String),
+    Progress(crate::ProgressState),
     Clipboard { selection: String, data: String },
 }
 
@@ -81,6 +89,7 @@ pub struct Modes {
 /// the hot parsing path performs no locking and ordinary screen reads borrow.
 pub struct Engine {
     parser: Parser,
+    synchronized_update: SynchronizedUpdate,
     state: State,
     generation: u64,
 }
@@ -88,18 +97,62 @@ pub struct Engine {
 impl Engine {
     pub fn new(size: Size, options: Options) -> Self {
         Self {
-            parser: Parser::default(),
+            parser: Parser::with_apc_limit(256 * 1024 * 1024),
+            synchronized_update: SynchronizedUpdate::default(),
             state: State::new(size, options),
             generation: 0,
         }
     }
 
     pub fn feed(&mut self, bytes: &[u8]) {
-        if bytes.is_empty() {
-            return;
+        self.feed_at(bytes, Instant::now());
+    }
+
+    fn feed_at(&mut self, bytes: &[u8], now: Instant) {
+        if self
+            .synchronized_update_deadline()
+            .is_some_and(|deadline| deadline <= now)
+        {
+            self.stop_synchronized_update();
         }
-        self.parser.advance(&mut self.state, bytes);
+        let mut offset = 0;
+        while offset < bytes.len() {
+            if self.synchronized_update_deadline().is_some() {
+                let buffered = self.synchronized_update.push(&bytes[offset..], now);
+                offset += buffered.consumed;
+                if buffered.commit {
+                    self.stop_synchronized_update();
+                }
+            } else {
+                let consumed = self.parser.advance(&mut self.state, &bytes[offset..]);
+                offset += consumed;
+                self.state.flush_graphics_effects();
+                self.generation = self.generation.wrapping_add(1);
+                if self.state.modes.synchronized_update {
+                    self.synchronized_update.begin(now);
+                }
+            }
+        }
+    }
+
+    /// The runtime can schedule a watchdog without polling or copying a frame.
+    /// Compare its captured deadline with this value before firing a stale task.
+    pub fn synchronized_update_deadline(&self) -> Option<Instant> {
+        self.synchronized_update.deadline()
+    }
+
+    /// Commit pending output atomically through the existing parser and grid.
+    /// Returns false when there is no pending batch (including stale watchdogs).
+    pub fn stop_synchronized_update(&mut self) -> bool {
+        let Some(bytes) = self.synchronized_update.take_buffer() else {
+            return false;
+        };
+        self.parser.advance_uninterrupted(&mut self.state, &bytes);
+        self.state.modes.synchronized_update = false;
+        self.state.flush_graphics_effects();
+        self.synchronized_update.recycle_buffer(bytes);
         self.generation = self.generation.wrapping_add(1);
+        true
     }
 
     pub fn size(&self) -> Size {
@@ -128,6 +181,7 @@ impl Engine {
         self.state
             .grid
             .set_history_limit(options.scrollback_history);
+        self.state.flush_graphics_effects();
         self.generation = self.generation.wrapping_add(1);
     }
 
@@ -148,18 +202,56 @@ impl Engine {
         self.state.grid.row(line).map(|row| row.cells())
     }
 
+    pub fn line_wrapped(&self, line: i32) -> bool {
+        self.state.grid.row(line).is_some_and(|row| row.wrapped)
+    }
+
+    pub fn set_query_colors(&mut self, colors: crate::TerminalQueryColors) {
+        self.state.query_colors = colors;
+    }
+
+    pub fn set_default_cursor_shape(&mut self, shape: CursorShape) {
+        self.state.default_cursor_shape = shape;
+        if !self.state.cursor_shape_overridden {
+            let old = self.state.grid.cursor;
+            self.state.grid.cursor.shape = shape;
+            self.state.grid.cursor_changed(old);
+        }
+    }
+
+    pub fn set_cell_pixels(&mut self, width: f32, height: f32) {
+        let clamp = |value: f32| {
+            if value.is_finite() {
+                value.round().clamp(1.0, 65535.0) as u16
+            } else {
+                1
+            }
+        };
+        self.state.cell_pixels = (clamp(width), clamp(height));
+        self.state.resize_graphics();
+    }
+
+    pub fn discard_events_and_replies(&mut self) {
+        self.state.events.clear();
+        self.state.replies.clear();
+    }
+
     pub fn take_damage(&mut self) -> Damage {
         self.state.grid.take_damage()
     }
 
     pub fn resize(&mut self, size: Size) {
+        self.stop_synchronized_update();
         self.state.grid.resize(size);
+        self.state.resize_graphics();
+        self.state.flush_graphics_effects();
         self.generation = self.generation.wrapping_add(1);
     }
 
     pub fn scroll_display(&mut self, delta: i32) -> bool {
         let changed = self.state.grid.scroll_display(delta);
         if changed {
+            self.state.flush_graphics_effects();
             self.generation = self.generation.wrapping_add(1);
         }
         changed
@@ -167,6 +259,7 @@ impl Engine {
 
     pub fn clear_scrollback(&mut self) {
         self.state.grid.clear_scrollback();
+        self.state.flush_graphics_effects();
         self.generation = self.generation.wrapping_add(1);
     }
 
@@ -193,6 +286,23 @@ impl Engine {
     }
     pub fn palette_revision(&self) -> u64 {
         self.state.palette_revision
+    }
+
+    pub fn graphics_revision(&self) -> u64 {
+        self.state.graphics.revision
+    }
+
+    /// Advance image animation deadlines without materializing a frame.
+    pub fn poll_graphics_revision(&mut self) -> u64 {
+        self.state.poll_graphics_revision()
+    }
+
+    pub fn graphics_snapshot(&mut self) -> (u64, Vec<crate::KittyGraphicsRenderPlacement>) {
+        self.state.graphics_snapshot()
+    }
+
+    pub fn graphics_placements(&mut self) -> Vec<crate::KittyGraphicsRenderPlacement> {
+        self.graphics_snapshot().1
     }
 
     /// Reports bounded output queues reaching capacity. The runtime can drain

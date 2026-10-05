@@ -70,11 +70,10 @@ show that project. Repeat with tmux enabled and disabled.
 
 The remote graphics regressions compare local and multiplexed placements while
 output scrolls, the viewport moves through history, and Unicode placeholders
-are moved or erased. Run them against both terminal engines:
+are moved or erased. Run the shared engine and transport regressions:
 
 ```sh
-TERMY_CORE_TEST_BACKEND=alacritty cargo test -p termy_core --test remote_graphics
-TERMY_CORE_TEST_BACKEND=tmon cargo test -p termy_core --test remote_graphics
+cargo test -p termy_core --test remote_graphics
 cargo test -p termy_core --test ipc kitty_images_follow_pty_scrolling
 ```
 
@@ -97,7 +96,6 @@ cargo test -p termy_core --test ipc scrolling_reply_updates_viewport
 cargo test -p termy --bin termy multiplexer_text_selection_survives_scrolling_and_output
 ```
 
-Repeat the core commands with `TERMY_CORE_TEST_BACKEND=alacritty` and `tmon`.
 The desktop regression drives mouse down, dragging, wheel scrolling, and release
 against an isolated session host, then verifies the selected text survives new
 output while viewing history.

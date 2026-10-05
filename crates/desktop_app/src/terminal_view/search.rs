@@ -262,7 +262,7 @@ impl TerminalView {
 
         let (display_offset, history_size) = terminal.scroll_state();
 
-        // `current.line` uses Alacritty coordinates: negative values are scrollback.
+        // `current.line` uses terminal coordinates: negative values are scrollback.
         let viewport_row = current.line + display_offset as i32;
 
         if viewport_row >= 0 && viewport_row < rows {

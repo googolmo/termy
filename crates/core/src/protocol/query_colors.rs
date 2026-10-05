@@ -1,6 +1,4 @@
-use alacritty_terminal::{term::color::Colors, vte::ansi::NamedColor};
-
-use crate::{TerminalColor, backend};
+use crate::TerminalColor;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TerminalQueryColors {
@@ -112,75 +110,7 @@ impl Default for TerminalQueryColors {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum QueryColorSlot {
-    Indexed(u8),
-    Foreground,
-    Background,
-    Cursor,
-    DimAnsi(u8),
-    BrightForeground,
-    DimForeground,
-}
-
-impl QueryColorSlot {
-    fn from_index(index: usize) -> Option<Self> {
-        match index {
-            0..=255 => Some(Self::Indexed(index as u8)),
-            value if value == NamedColor::Foreground as usize => Some(Self::Foreground),
-            value if value == NamedColor::Background as usize => Some(Self::Background),
-            value if value == NamedColor::Cursor as usize => Some(Self::Cursor),
-            value if value == NamedColor::DimBlack as usize => Some(Self::DimAnsi(0)),
-            value if value == NamedColor::DimRed as usize => Some(Self::DimAnsi(1)),
-            value if value == NamedColor::DimGreen as usize => Some(Self::DimAnsi(2)),
-            value if value == NamedColor::DimYellow as usize => Some(Self::DimAnsi(3)),
-            value if value == NamedColor::DimBlue as usize => Some(Self::DimAnsi(4)),
-            value if value == NamedColor::DimMagenta as usize => Some(Self::DimAnsi(5)),
-            value if value == NamedColor::DimCyan as usize => Some(Self::DimAnsi(6)),
-            value if value == NamedColor::DimWhite as usize => Some(Self::DimAnsi(7)),
-            value if value == NamedColor::BrightForeground as usize => Some(Self::BrightForeground),
-            value if value == NamedColor::DimForeground as usize => Some(Self::DimForeground),
-            _ => None,
-        }
-    }
-
-    fn live_color(self, colors: &Colors) -> Option<TerminalColor> {
-        let index = match self {
-            Self::Indexed(index) => index as usize,
-            Self::Foreground => NamedColor::Foreground as usize,
-            Self::Background => NamedColor::Background as usize,
-            Self::Cursor => NamedColor::Cursor as usize,
-            Self::DimAnsi(offset) => NamedColor::DimBlack as usize + offset as usize,
-            Self::BrightForeground => NamedColor::BrightForeground as usize,
-            Self::DimForeground => NamedColor::DimForeground as usize,
-        };
-        backend::live_color(colors, index)
-    }
-}
-
 impl TerminalQueryColors {
-    pub(crate) fn resolve_color(self, live_colors: &Colors, index: usize) -> Option<TerminalColor> {
-        let slot = QueryColorSlot::from_index(index)?;
-
-        slot.live_color(live_colors)
-            .or_else(|| self.fallback_color(slot))
-    }
-
-    fn fallback_color(self, slot: QueryColorSlot) -> Option<TerminalColor> {
-        match slot {
-            QueryColorSlot::Indexed(idx) => Some(self.indexed_color(idx)),
-            QueryColorSlot::Foreground
-            | QueryColorSlot::BrightForeground
-            | QueryColorSlot::DimForeground => Some(self.foreground),
-            QueryColorSlot::Background => Some(self.background),
-            // Upstream Alacritty only answers OSC 12 when the cursor color was explicitly
-            // overridden by terminal state. The configured theme cursor color does not count,
-            // so there is intentionally no fallback for cursor queries here.
-            QueryColorSlot::Cursor => None,
-            QueryColorSlot::DimAnsi(offset) => Some(self.ansi[offset as usize]),
-        }
-    }
-
     pub(crate) fn indexed_color(self, idx: u8) -> TerminalColor {
         match idx {
             0..=15 => self.ansi[idx as usize],
@@ -211,50 +141,57 @@ impl TerminalQueryColors {
 #[cfg(test)]
 mod tests {
     use super::TerminalQueryColors;
-    use alacritty_terminal::{
-        event::VoidListener,
-        term::color,
-        term::{Config as TermConfig, Term},
-        vte::ansi::{self, NamedColor},
+    use crate::{
+        TerminalColor,
+        terminal_engine::{Engine, Options, Size},
     };
 
-    use crate::{TerminalColor, runtime::TerminalSize};
-    fn test_terminal_size() -> TerminalSize {
-        TerminalSize {
-            cols: 32,
-            rows: 4,
-            cell_width: 9.0,
-            cell_height: 18.0,
-        }
-    }
-
-    fn term_colors_after_bytes(input: &[u8]) -> alacritty_terminal::term::color::Colors {
-        let size = test_terminal_size();
-        let mut term: Term<VoidListener> = Term::new(TermConfig::default(), &size, VoidListener);
-        let mut parser: ansi::Processor = ansi::Processor::new();
-        parser.advance(&mut term, input);
-        *term.colors()
+    fn reply(colors: TerminalQueryColors, input: &[u8]) -> Vec<u8> {
+        let mut engine = Engine::new(Size { cols: 32, rows: 4 }, Options::default());
+        engine.set_query_colors(colors);
+        engine.feed(input);
+        let mut replies = Vec::new();
+        engine.drain_replies(&mut replies);
+        replies
     }
 
     #[test]
     fn indexed_colors_fall_back_to_generated_palette() {
         let colors = TerminalQueryColors::default();
-        let live = term_colors_after_bytes(b"");
+        assert_eq!(colors.indexed_color(16), TerminalColor { r: 0, g: 0, b: 0 });
         assert_eq!(
-            colors.resolve_color(&live, 16),
-            Some(TerminalColor {
-                r: 0x00,
-                g: 0x00,
-                b: 0x00,
-            })
+            colors.indexed_color(231),
+            TerminalColor {
+                r: 255,
+                g: 255,
+                b: 255
+            }
         );
         assert_eq!(
-            colors.resolve_color(&live, 232),
-            Some(TerminalColor {
-                r: 0x08,
-                g: 0x08,
-                b: 0x08,
-            })
+            colors.indexed_color(232),
+            TerminalColor { r: 8, g: 8, b: 8 }
+        );
+        assert_eq!(
+            colors.indexed_color(255),
+            TerminalColor {
+                r: 238,
+                g: 238,
+                b: 238
+            }
+        );
+        assert_eq!(
+            reply(colors, b"\x1b]4;232;?\x07"),
+            b"\x1b]4;232;rgb:0808/0808/0808\x1b\\"
+        );
+    }
+
+    #[test]
+    fn configured_ansi_colors_supply_protocol_fallbacks() {
+        let mut colors = TerminalQueryColors::default();
+        colors.ansi[4] = TerminalColor { r: 1, g: 2, b: 3 };
+        assert_eq!(
+            reply(colors, b"\x1b]4;4;?\x07"),
+            b"\x1b]4;4;rgb:0101/0202/0303\x1b\\"
         );
     }
 
@@ -268,14 +205,9 @@ mod tests {
             },
             ..TerminalQueryColors::default()
         };
-        let live = term_colors_after_bytes(b"\x1b]10;#123456\x07");
         assert_eq!(
-            defaults.resolve_color(&live, NamedColor::Foreground as usize),
-            Some(TerminalColor {
-                r: 0x12,
-                g: 0x34,
-                b: 0x56,
-            })
+            reply(defaults, b"\x1b]10;#123456\x07\x1b]10;?\x07"),
+            b"\x1b]10;rgb:1212/3434/5656\x1b\\"
         );
     }
 
@@ -289,28 +221,9 @@ mod tests {
             },
             ..TerminalQueryColors::default()
         };
-        let live = term_colors_after_bytes(b"\x1b]10;#123456\x07\x1b]110\x07");
         assert_eq!(
-            defaults.resolve_color(&live, NamedColor::Foreground as usize),
-            Some(defaults.foreground)
-        );
-    }
-
-    #[test]
-    fn resolves_dim_and_bright_named_slots() {
-        let defaults = TerminalQueryColors::default();
-        let live = term_colors_after_bytes(b"");
-        assert_eq!(
-            defaults.resolve_color(&live, NamedColor::BrightForeground as usize),
-            Some(defaults.foreground)
-        );
-        assert_eq!(
-            defaults.resolve_color(&live, NamedColor::DimForeground as usize),
-            Some(defaults.foreground)
-        );
-        assert_eq!(
-            defaults.resolve_color(&live, NamedColor::DimBlue as usize),
-            Some(defaults.ansi[4])
+            reply(defaults, b"\x1b]10;#123456\x07\x1b]110\x07\x1b]10;?\x07"),
+            b"\x1b]10;rgb:4444/5555/6666\x1b\\"
         );
     }
 
@@ -324,27 +237,15 @@ mod tests {
             }),
             ..TerminalQueryColors::default()
         };
-        let empty_live = term_colors_after_bytes(b"");
+        assert!(reply(defaults, b"\x1b]12;?\x07").is_empty());
         assert_eq!(
-            defaults.resolve_color(&empty_live, NamedColor::Cursor as usize),
-            None
-        );
-
-        let live = term_colors_after_bytes(b"\x1b]12;#102030\x07");
-        assert_eq!(
-            defaults.resolve_color(&live, NamedColor::Cursor as usize),
-            Some(TerminalColor {
-                r: 0x10,
-                g: 0x20,
-                b: 0x30,
-            })
+            reply(defaults, b"\x1b]12;#102030\x07\x1b]12;?\x07"),
+            b"\x1b]12;rgb:1010/2020/3030\x1b\\"
         );
     }
 
     #[test]
-    fn unsupported_index_returns_none() {
-        let defaults = TerminalQueryColors::default();
-        let live = term_colors_after_bytes(b"");
-        assert_eq!(defaults.resolve_color(&live, color::COUNT), None);
+    fn unsupported_palette_index_has_no_reply() {
+        assert!(reply(TerminalQueryColors::default(), b"\x1b]4;256;?\x07").is_empty());
     }
 }

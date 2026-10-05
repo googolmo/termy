@@ -1,4 +1,4 @@
-use crate::tmon::GraphicsImage;
+use crate::terminal_engine::media::GraphicsImage;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
 use std::sync::Arc;
 

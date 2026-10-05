@@ -101,10 +101,9 @@ fn run(label: &str, line: &[u8], target: usize, fragmentation: usize, zero_alloc
 }
 
 fn main() {
-    let mib = std::env::args()
-        .nth(1)
-        .map(|value| value.parse::<usize>().expect("MiB must be an integer"))
-        .unwrap_or(32);
+    let mib = std::env::args().nth(1).map_or(32, |value| {
+        value.parse::<usize>().expect("MiB must be an integer")
+    });
     assert!((1..=4096).contains(&mib), "MiB must be in 1..=4096");
     println!(
         "terminal_engine: {} byte cells, 120x40, 1000 history rows, {mib} MiB per case",
@@ -131,7 +130,7 @@ fn main() {
         "e\u{301} a\u{308} n\u{303} o\u{302} u\u{30a}\r\n".as_bytes(),
         target,
         64 * 1024,
-        false,
+        true,
     );
     run(
         "plain scroll / 1 byte",

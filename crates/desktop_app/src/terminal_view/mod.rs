@@ -934,7 +934,7 @@ impl Terminal {
     ) -> Option<usize> {
         self.with_core_terminal(|terminal| {
             terminal
-                .visit_viewport_cells(|offset, line, col, cell| {
+                .visit_viewport_cells_locked(|offset, line, col, cell| {
                     visitor(offset, line, col, TerminalCellRef(cell));
                 })
                 .display_offset
@@ -949,9 +949,11 @@ impl Terminal {
         let display_offset = read.metadata.display_offset;
         let cols = usize::from(read.metadata.cols);
         if cols > 0 {
-            for (index, cell) in read.cells.iter().enumerate() {
-                let line = (index / cols) as i32 - display_offset as i32;
-                visitor(display_offset, line, index % cols, TerminalCellRef(cell));
+            for (row, cells) in read.cells.chunks(cols).enumerate() {
+                let line = row as i32 - display_offset as i32;
+                for (col, cell) in cells.iter().enumerate() {
+                    visitor(display_offset, line, col, TerminalCellRef(cell));
+                }
             }
         }
         Some(display_offset)
@@ -967,7 +969,7 @@ impl Terminal {
             return false;
         };
         self.with_core_terminal(|terminal| {
-            terminal.visit_viewport_ranges_at_generation(
+            terminal.visit_viewport_ranges_locked_at_generation(
                 generation,
                 spans,
                 |row, offset, line, col, cell| {
@@ -4014,7 +4016,7 @@ impl TerminalView {
         if should_redraw {
             self.debug_overlay_stats.record_terminal_redraw();
 
-            // Detect content-driven display_offset changes: Alacritty auto-increments the
+            // Detect content-driven display_offset changes: the terminal engine auto-increments the
             // offset to keep the viewport stable when new lines arrive while the user is
             // scrolled into history. The background PTY thread already updated the offset
             // before we got here, so we compare against content_scroll_baseline (a value
@@ -4431,7 +4433,7 @@ mod tests {
             terminal_engine_label(Some(&tmux)),
             NativeTerminal::new_display(TerminalSize::default(), None).engine_label()
         );
-        assert_eq!(terminal_engine_label(Some(&native)), "tmon");
+        assert_eq!(terminal_engine_label(Some(&native)), "custom");
         assert_eq!(terminal_engine_label(None), "-");
     }
 

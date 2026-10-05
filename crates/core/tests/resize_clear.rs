@@ -70,4 +70,65 @@ fn ordinary_output_still_uses_bottom_anchored_resize() {
     assert!(text.contains("BBBBBBBBBB"));
     assert!(text.contains("CCCCCCCCCC"));
     assert!(text.contains("$ "));
+    assert_eq!(resized.cursor.unwrap().row, 6);
+    assert_eq!(
+        &resized.cells[..10]
+            .iter()
+            .map(|cell| cell.char)
+            .collect::<String>(),
+        "AAAAAAAAAA"
+    );
+}
+
+#[test]
+fn clear_preserves_the_live_boundary_during_height_growth() {
+    let mut terminal = Terminal::new_display(size(20, 4), None);
+    for index in 0..12 {
+        terminal.feed_output(format!("HISTORY-{index}\r\n").as_bytes());
+    }
+    terminal.feed_output(b"\x1b[H\x1b[2J$ ");
+    terminal.resize(size(20, 8));
+    let frame = terminal.snapshot();
+    assert!(!visible_text(&frame).contains("HISTORY"));
+    assert!(frame.history_size > 0);
+    assert_eq!(frame.cursor.unwrap().row, 0);
+}
+
+#[test]
+fn new_output_at_the_bottom_reenables_normal_history_growth() {
+    let mut terminal = Terminal::new_display(size(20, 4), None);
+    for index in 0..12 {
+        terminal.feed_output(format!("HISTORY-{index}\r\n").as_bytes());
+    }
+    terminal.feed_output(b"\x1b[H\x1b[2J$ \r\nnew one\r\nnew two\r\nnew three");
+    let before = terminal.snapshot();
+    terminal.resize(size(20, 6));
+    let grown = terminal.snapshot();
+    assert_eq!(grown.history_size, before.history_size - 2);
+    assert!(visible_text(&grown).contains("HISTORY"));
+    assert_eq!(grown.cursor.unwrap().row, 5);
+}
+
+#[test]
+fn alternate_screen_clear_does_not_resurface_primary_history() {
+    let mut terminal = Terminal::new_display(size(20, 4), None);
+    for index in 0..12 {
+        terminal.feed_output(format!("HISTORY-{index}\r\n").as_bytes());
+    }
+    terminal.feed_output(b"\x1b[H\x1b[2J$ \x1b[?1049h\x1b[2J\x1b[?1049l");
+    terminal.resize(size(20, 8));
+    let frame = terminal.snapshot();
+    assert!(!visible_text(&frame).contains("HISTORY"));
+    assert!(frame.history_size > 0);
+}
+
+#[test]
+fn single_wrapped_line_uses_available_blank_rows_on_resize() {
+    let mut terminal = Terminal::new_display(size(20, 10), None);
+    terminal.feed_output(b"AAAAAAAAAAAAAAAAAA\r\n$ ");
+    terminal.resize(size(10, 10));
+    let frame = terminal.snapshot();
+    assert_eq!(frame.history_size, 0);
+    assert_eq!(frame.cursor.unwrap().row, 2);
+    assert!(visible_text(&frame).starts_with("AAAAAAAAAA\nAAAAAAAA  \n$ "));
 }

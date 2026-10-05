@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+pub(super) const MAX_COMBINING_BYTES: usize = 256;
+
 /// A color occupies four bytes, including its default/indexed/RGB tag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Color(u32);
@@ -119,7 +121,7 @@ impl Cell {
     }
     pub(super) fn push_combining(&mut self, character: char) {
         // Bound a hostile stream of combining marks attached to a single cell.
-        if self.combining().len() >= 256 {
+        if self.combining().len().saturating_add(character.len_utf8()) > MAX_COMBINING_BYTES {
             return;
         }
         let extra = self
@@ -170,6 +172,30 @@ pub struct DirtySpan {
 pub enum Damage {
     Full,
     Partial(Vec<DirtySpan>),
+}
+
+/// Ordered text-grid operations consumed by the graphics placement bridge.
+/// Scroll regions and column spans both use exclusive upper bounds. Positive
+/// line counts move cells up; negative counts move them down.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum GridEffect {
+    Scroll {
+        alternate: bool,
+        top: usize,
+        bottom: usize,
+        lines: i64,
+        retains_history: bool,
+        history_before: usize,
+        history_after: usize,
+    },
+    Clear {
+        alternate: bool,
+        history_size: usize,
+    },
+    ClearHistory {
+        removed: usize,
+    },
+    Reset,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

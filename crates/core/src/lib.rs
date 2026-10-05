@@ -1,4 +1,3 @@
-mod backend;
 mod cell_metrics;
 mod config;
 mod frame;
@@ -14,7 +13,6 @@ mod path_env;
 mod protocol;
 pub mod remote;
 mod render_metrics;
-mod resize_anchor;
 mod runtime;
 mod search;
 mod shell_integration;
@@ -23,7 +21,7 @@ pub use crate::config_core::{
     AppConfig, ConfigDiagnostic, ConfigDiagnosticKind, ConfigParseReport,
     CursorStyle as AppConfigCursorStyle, SystemAppearance, config_path,
 };
-pub use crate::tmon::{
+pub use crate::terminal_engine::media::{
     GraphicsDisplayLayout, GraphicsImage, graphics_display_layout, graphics_display_size,
 };
 pub use cell_metrics::{TerminalCellMetrics, measure_cell, measure_cell_from_config};
@@ -52,7 +50,7 @@ pub use keyboard::{
 pub use kitty_graphics::{
     KittyGraphicsApplyResult, KittyGraphicsCommand, KittyGraphicsInterceptor, KittyGraphicsItem,
     KittyGraphicsItemRef, KittyGraphicsPlaceholder, KittyGraphicsRenderPlacement,
-    KittyGraphicsScreen, KittyGraphicsState, kitty_graphics_placeholders_from_alacritty_grid,
+    KittyGraphicsScreen, KittyGraphicsState,
 };
 pub use links::{DetectedLink, DetectedViewportLink, classify_link_token, find_link_in_line};
 #[cfg(unix)]
@@ -81,11 +79,11 @@ pub use render_metrics::{
     terminal_ui_render_metrics_snapshot,
 };
 pub use runtime::{
-    KittyGraphicsCursorTracker, KittyGraphicsTextEffects, MAX_TERMINAL_SCROLLBACK_HISTORY,
-    ResolvedTerminalLaunch, TabTitleShellIntegration, Terminal, TerminalCursorState,
-    TerminalCursorStyle, TerminalDamageSnapshot, TerminalDirtySpan, TerminalEvent, TerminalLaunch,
-    TerminalOptions, TerminalRuntimeConfig, TerminalSize, TerminalWakeupNotifier, WindowsShell,
-    WorkingDirFallback, normalize_working_directory_candidate, resolve_launch_working_directory,
+    MAX_TERMINAL_SCROLLBACK_HISTORY, ResolvedTerminalLaunch, TabTitleShellIntegration, Terminal,
+    TerminalCursorState, TerminalCursorStyle, TerminalDamageSnapshot, TerminalDirtySpan,
+    TerminalEvent, TerminalLaunch, TerminalOptions, TerminalRuntimeConfig, TerminalSize,
+    TerminalWakeupNotifier, WindowsShell, WorkingDirFallback,
+    normalize_working_directory_candidate, resolve_launch_working_directory,
     resolve_terminal_launch, resolve_working_directory_path, terminal_environment_overrides,
 };
 pub use search::{
@@ -117,8 +115,6 @@ pub mod ssh_core;
 pub mod theme_core;
 
 pub mod themes;
-
-pub mod tmon;
 
 pub mod terminal_engine;
 
