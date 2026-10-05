@@ -5,7 +5,9 @@
 
 mod placement;
 mod protocol;
-pub use protocol::{KittyGraphicsCommand, KittyGraphicsInterceptor, KittyGraphicsItem};
+pub use protocol::{
+    KittyGraphicsCommand, KittyGraphicsInterceptor, KittyGraphicsItem, KittyGraphicsItemRef,
+};
 mod animation;
 mod deletion;
 mod image;

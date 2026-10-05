@@ -1,4 +1,5 @@
 use super::{MAX_COMMAND_BYTES, MAX_CONTROL_BYTES, MAX_CONTROL_FIELDS};
+use std::borrow::Cow;
 
 #[derive(Clone, Debug)]
 pub struct KittyGraphicsCommand {
@@ -118,6 +119,13 @@ pub enum KittyGraphicsItem {
     Command(KittyGraphicsCommand),
 }
 
+/// Graphics input whose ordinary text can borrow the current PTY read buffer.
+#[derive(Clone, Debug)]
+pub enum KittyGraphicsItemRef<'a> {
+    Text(Cow<'a, [u8]>),
+    Command(KittyGraphicsCommand),
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 enum InterceptorState {
     #[default]
@@ -141,6 +149,52 @@ pub struct KittyGraphicsInterceptor {
 }
 
 impl KittyGraphicsInterceptor {
+    /// Intercept graphics commands without copying ordinary ASCII/ANSI output.
+    /// The owned [`Self::process`] API remains available for callers retaining
+    /// text beyond the lifetime of their input buffer.
+    pub fn process_borrowed<'a>(
+        &mut self,
+        bytes: &'a [u8],
+    ) -> impl Iterator<Item = KittyGraphicsItemRef<'a>> + use<'a> {
+        let passthrough = self.can_borrow_text(bytes);
+        let items = if passthrough {
+            Vec::new()
+        } else {
+            self.process(bytes)
+        };
+        passthrough
+            .then_some(bytes)
+            .filter(|bytes| !bytes.is_empty())
+            .into_iter()
+            .map(|bytes| KittyGraphicsItemRef::Text(Cow::Borrowed(bytes)))
+            .chain(items.into_iter().map(|item| match item {
+                KittyGraphicsItem::Text(text) => KittyGraphicsItemRef::Text(Cow::Owned(text)),
+                KittyGraphicsItem::Command(command) => KittyGraphicsItemRef::Command(command),
+            }))
+    }
+
+    fn can_borrow_text(&mut self, bytes: &[u8]) -> bool {
+        if !matches!(self.state, InterceptorState::Ground) || !bytes.is_ascii() {
+            return false;
+        }
+        let mut remaining = bytes;
+        while let Some(escape) = remaining.iter().position(|byte| *byte == 0x1b) {
+            match remaining.get(escape + 1) {
+                // Graphics APCs, repeated ESCs, and split prefixes keep the
+                // original state machine. All other ASCII escape pairs pass
+                // through unchanged and return it to Ground.
+                None | Some(b'_' | 0x1b) => return false,
+                Some(_) => remaining = &remaining[escape + 2..],
+            }
+        }
+        if !bytes.is_empty() {
+            // ASCII terminates any incomplete UTF-8 prefix from a previous
+            // read. Empty reads must preserve that prefix for C1 detection.
+            self.utf8_remaining = 0;
+        }
+        true
+    }
+
     pub fn process(&mut self, bytes: &[u8]) -> Vec<KittyGraphicsItem> {
         let mut items = Vec::new();
         let mut text = Vec::with_capacity(bytes.len().min(8192));

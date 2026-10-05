@@ -288,9 +288,9 @@ impl AlacrittyBackend {
         let mut term = self.term.lock();
         let mut graphics_changed = false;
         let mut term_mutated = false;
-        for item in interceptor.process(&filtered) {
+        for item in interceptor.process_borrowed(&filtered) {
             match item {
-                KittyGraphicsItem::Text(text) => {
+                KittyGraphicsItemRef::Text(text) => {
                     term_mutated = true;
                     let track_scrolls = self.kitty_graphics.lock().has_placements();
                     let effects = advance_terminal_text(
@@ -305,7 +305,7 @@ impl AlacrittyBackend {
                         graphics_changed |= effects.apply_to(&mut self.kitty_graphics.lock());
                     }
                 }
-                KittyGraphicsItem::Command(command) => {
+                KittyGraphicsItemRef::Command(command) => {
                     term_mutated |= parser.sync_bytes_count() > 0;
                     let track_scrolls = self.kitty_graphics.lock().has_placements();
                     let effects = prepare_kitty_graphics_command(

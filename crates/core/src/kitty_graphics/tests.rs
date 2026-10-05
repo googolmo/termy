@@ -71,6 +71,84 @@ fn interceptor_preserves_non_kitty_apc_sequences() {
 }
 
 #[test]
+fn borrowed_interceptor_reuses_plain_and_ansi_input() {
+    use std::borrow::Cow;
+
+    for input in [
+        b"ordinary terminal output\r\n".as_slice(),
+        b"\x1b[1;32mgreen\x1b[0m\r\n\x1b[2J\x1b[H".as_slice(),
+    ] {
+        let mut interceptor = KittyGraphicsInterceptor::default();
+        let mut items = interceptor.process_borrowed(input);
+        let Some(KittyGraphicsItemRef::Text(Cow::Borrowed(text))) = items.next() else {
+            panic!("ordinary output should borrow its input");
+        };
+        assert_eq!(text.as_ptr(), input.as_ptr());
+        assert_eq!(text, input);
+        assert!(items.next().is_none());
+    }
+}
+
+#[test]
+fn borrowed_interceptor_matches_owned_across_all_split_boundaries() {
+    fn assert_same_items(expected: Vec<KittyGraphicsItem>, actual: Vec<KittyGraphicsItem>) {
+        assert_eq!(expected.len(), actual.len());
+        for (expected, actual) in expected.into_iter().zip(actual) {
+            match (expected, actual) {
+                (KittyGraphicsItem::Text(expected), KittyGraphicsItem::Text(actual)) => {
+                    assert_eq!(expected, actual);
+                }
+                (KittyGraphicsItem::Command(expected), KittyGraphicsItem::Command(actual)) => {
+                    assert_eq!(expected.control, actual.control);
+                    assert_eq!(expected.payload, actual.payload);
+                    assert_eq!(expected.oversized, actual.oversized);
+                }
+                _ => panic!("borrowed and owned paths must intercept the same commands"),
+            }
+        }
+    }
+
+    let fixtures: &[&[u8]] = &[
+        b"plain\r\n\x1b[1;32mgreen\x1b[0m",
+        b"before\x1b_Ga=T,f=32,s=1,v=1;AAAA/w==\x1b\\after",
+        b"before\x9fGa=d\x9cafter",
+        b"\x1b\x1b_Ga=d\x1b\\\x1b",
+        b"\x1b_not-graphics\x1b\\after",
+        "\u{1f7e2}Ghello \u{1f7e2}Gworld".as_bytes(),
+        b"\xf0\x9fASCII\x9fGa=d\x9c",
+        b"\xf0\x1b[0m\x9fGa=d\x9c",
+    ];
+    for &input in fixtures {
+        for first in 0..=input.len() {
+            for second in first..=input.len() {
+                let mut owned = KittyGraphicsInterceptor::default();
+                let mut borrowed = KittyGraphicsInterceptor::default();
+                for chunk in [
+                    &input[..first],
+                    &input[first..second],
+                    &input[second..],
+                    b"\x1b_Ga=d\x1b\\end".as_slice(),
+                ] {
+                    let expected = owned.process(chunk);
+                    let actual = borrowed
+                        .process_borrowed(chunk)
+                        .map(|item| match item {
+                            KittyGraphicsItemRef::Text(text) => {
+                                KittyGraphicsItem::Text(text.into_owned())
+                            }
+                            KittyGraphicsItemRef::Command(command) => {
+                                KittyGraphicsItem::Command(command)
+                            }
+                        })
+                        .collect();
+                    assert_same_items(expected, actual);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn uploads_raw_rgba_and_places_at_cursor() {
     let mut state = KittyGraphicsState::default();
     let result = state.apply(

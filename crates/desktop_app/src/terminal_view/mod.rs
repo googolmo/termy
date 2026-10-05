@@ -2932,35 +2932,55 @@ impl TerminalView {
             )
     }
 
+    fn terminal_scrollbar_animation_delay(&self, now: Instant) -> Option<Duration> {
+        self.terminal_scrollbar_visibility_controller
+            .next_animation_delay(
+                self.terminal_scrollbar_mode(),
+                now,
+                TERMINAL_SCROLLBAR_HOLD_DURATION,
+                TERMINAL_SCROLLBAR_FADE_DURATION,
+                Duration::from_millis(16),
+            )
+    }
+
     fn start_terminal_scrollbar_animation(&mut self, cx: &mut Context<Self>) {
-        if self.terminal_scrollbar_animation_active
-            || self.terminal_scrollbar_mode() != ScrollbarVisibilityMode::OnScroll
-            || !self.terminal_scrollbar_needs_animation(Instant::now())
-        {
+        if self.terminal_scrollbar_animation_active {
             return;
         }
+        let now = Instant::now();
+        let Some(mut delay) = self.terminal_scrollbar_animation_delay(now) else {
+            return;
+        };
+        let mut previous_alpha = self.terminal_scrollbar_alpha(now);
 
         self.terminal_scrollbar_animation_active = true;
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(16))
-                    .await;
+                cx.background_executor().timer(delay).await;
 
-                let mut keep_running = false;
+                let mut next_delay = None;
                 let result = cx.update(|cx| {
                     this.update(cx, |view, cx| {
-                        keep_running = view.terminal_scrollbar_needs_animation(Instant::now());
-                        if !keep_running {
+                        let now = Instant::now();
+                        next_delay = view.terminal_scrollbar_animation_delay(now);
+                        if next_delay.is_none() {
                             view.terminal_scrollbar_animation_active = false;
                         }
-                        cx.notify();
+                        let alpha = view.terminal_scrollbar_alpha(now);
+                        if alpha != previous_alpha {
+                            previous_alpha = alpha;
+                            cx.notify();
+                        }
                     })
                 });
 
-                if result.is_err() || !keep_running {
+                if result.is_err() {
                     break;
                 }
+                let Some(next_delay) = next_delay else {
+                    break;
+                };
+                delay = next_delay;
             }
         })
         .detach();

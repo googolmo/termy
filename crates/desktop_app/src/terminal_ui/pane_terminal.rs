@@ -14,9 +14,9 @@ use std::{
 };
 use termy_core::{
     KittyClipboardControl, KittyClipboardHostState, KittyClipboardInput, KittyClipboardInterceptor,
-    KittyClipboardOsc, KittyGraphicsInterceptor, KittyGraphicsItem, KittyGraphicsRenderPlacement,
-    KittyGraphicsScreen, KittyGraphicsState, TerminalClipboardLocation, TerminalReplyHost,
-    kitty_graphics_placeholders_from_alacritty_grid,
+    KittyClipboardOsc, KittyGraphicsInterceptor, KittyGraphicsItemRef,
+    KittyGraphicsRenderPlacement, KittyGraphicsScreen, KittyGraphicsState,
+    TerminalClipboardLocation, TerminalReplyHost, kitty_graphics_placeholders_from_alacritty_grid,
 };
 
 use termy_core::{
@@ -129,9 +129,9 @@ impl PaneTerminal {
         let term = self.cloned_term_arc();
         let mut term = term.lock();
         let mut graphics_changed = false;
-        for item in interceptor.process(&filtered) {
+        for item in interceptor.process_borrowed(&filtered) {
             match item {
-                KittyGraphicsItem::Text(text) => {
+                KittyGraphicsItemRef::Text(text) => {
                     let mut graphics = self.kitty_graphics.lock();
                     let track_scrolls = graphics.has_placements();
                     let tracks_placeholders = graphics.has_virtual_placements();
@@ -145,7 +145,7 @@ impl PaneTerminal {
                     );
                     graphics_changed |= tracks_placeholders;
                 }
-                KittyGraphicsItem::Command(command) => {
+                KittyGraphicsItemRef::Command(command) => {
                     let cursor = term.grid().cursor.point;
                     let full_screen_scroll_region =
                         cursor_tracker.region_covers_full_screen(term.grid().screen_lines());

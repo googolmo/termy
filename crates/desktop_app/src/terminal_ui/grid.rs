@@ -3,7 +3,12 @@ use gpui_kit::{
     PathBuilder, Pixels, ShapedLine, SharedString, Size, StrikethroughStyle, TextRun,
     UnderlineStyle as GpuiUnderlineStyle, Window, point, px, quad,
 };
-use std::{cell::RefCell, rc::Rc, sync::Arc, time::Instant};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, LazyLock},
+    time::Instant,
+};
 use termy_core::{
     TerminalCursorStyle, TerminalGlyphMetrics, TerminalGlyphNeighbors, TerminalGlyphPlan,
     TerminalGlyphRect, TerminalGlyphRectSnap, TerminalGlyphRenderKind, TerminalGlyphStrokeKind,
@@ -268,7 +273,9 @@ struct BlockDraw {
     row: usize,
     col: usize,
     glyph: char,
-    geometry: TerminalGlyphPlan,
+    /// Normalized glyphs share one immutable plan per codepoint. Box drawing
+    /// plans depend on snapped physical bounds and are resolved during paint.
+    geometry: Option<&'static TerminalGlyphPlan>,
     fg: Hsla,
 }
 
@@ -279,10 +286,9 @@ impl BlockDraw {
         font_size: Pixels,
         scale_factor: f32,
     ) -> Option<(Bounds<Pixels>, TerminalGlyphPlan)> {
-        if self.geometry.kind() == TerminalGlyphRenderKind::BoxDrawing {
-            snapped_glyph_plan(bounds, self.glyph, font_size, scale_factor)
-        } else {
-            Some((bounds, self.geometry))
+        match self.geometry {
+            Some(geometry) => Some((bounds, *geometry)),
+            None => snapped_glyph_plan(bounds, self.glyph, font_size, scale_factor),
         }
     }
 }
@@ -292,8 +298,50 @@ struct SextantDraw {
     #[cfg_attr(not(test), allow(dead_code))]
     row: usize,
     col: usize,
-    geometry: TerminalGlyphPlan,
+    geometry: &'static TerminalGlyphPlan,
     fg: Hsla,
+}
+
+/// These three glyph families use normalized coordinates independent of font,
+/// cell size, and display scale. Share their canonical plans across all cells
+/// and windows instead of embedding the largest plan in every `TextDrawOp`.
+/// Each table is initialized only when its family is encountered; the complete
+/// cache is bounded to 347 plans and needs no per-cell heap allocations.
+fn normalized_glyph_plan(character: char) -> Option<&'static TerminalGlyphPlan> {
+    fn plans<const N: usize>(start: u32) -> [TerminalGlyphPlan; N] {
+        std::array::from_fn(|index| {
+            let glyph = char::from_u32(start + index as u32).expect("valid normalized glyph");
+            terminal_glyph_plan(
+                glyph,
+                TerminalGlyphMetrics {
+                    cell_width: 1.0,
+                    cell_height: 1.0,
+                    font_size: 1.0,
+                },
+                // Eligibility for braille geometry is checked against real
+                // neighbors while collecting ops. The cached plan only stores
+                // its shape after that decision has been made.
+                TerminalGlyphNeighbors {
+                    before: Some(glyph),
+                    after: Some(glyph),
+                    ..TerminalGlyphNeighbors::default()
+                },
+            )
+            .expect("normalized glyph geometry")
+        })
+    }
+
+    static BLOCKS: LazyLock<[TerminalGlyphPlan; 32]> = LazyLock::new(|| plans(0x2580));
+    static SEXTANTS: LazyLock<[TerminalGlyphPlan; 60]> = LazyLock::new(|| plans(0x1FB00));
+    static BRAILLE: LazyLock<[TerminalGlyphPlan; 255]> = LazyLock::new(|| plans(0x2801));
+
+    let codepoint = character as u32;
+    match codepoint {
+        0x2580..=0x259F => Some(&BLOCKS[(codepoint - 0x2580) as usize]),
+        0x1FB00..=0x1FB3B => Some(&SEXTANTS[(codepoint - 0x1FB00) as usize]),
+        0x2801..=0x28FF => Some(&BRAILLE[(codepoint - 0x2801) as usize]),
+        _ => None,
+    }
 }
 
 /// Deferred paint operation for a rounded-corner box-drawing glyph (U+256D-U+2570).
@@ -939,7 +987,8 @@ fn text_batches_match_without_row(lhs: &TextBatch, rhs: &TextBatch) -> bool {
 }
 
 fn block_draws_match_without_row(lhs: &BlockDraw, rhs: &BlockDraw) -> bool {
-    lhs.col == rhs.col && lhs.glyph == rhs.glyph && lhs.geometry == rhs.geometry && lhs.fg == rhs.fg
+    // A glyph uniquely identifies its normalized plan or deferred box plan.
+    lhs.col == rhs.col && lhs.glyph == rhs.glyph && lhs.fg == rhs.fg
 }
 
 fn rounded_corner_draws_match_without_row(
@@ -954,7 +1003,7 @@ fn diagonal_draws_match_without_row(lhs: &DiagonalDraw, rhs: &DiagonalDraw) -> b
 }
 
 fn sextant_draws_match_without_row(lhs: &SextantDraw, rhs: &SextantDraw) -> bool {
-    lhs.col == rhs.col && lhs.geometry == rhs.geometry && lhs.fg == rhs.fg
+    lhs.col == rhs.col && std::ptr::eq(lhs.geometry, rhs.geometry) && lhs.fg == rhs.fg
 }
 
 /// Returns the inclusive column range `(start, end)` covered by a draw op.
@@ -1341,7 +1390,7 @@ impl TerminalGrid {
                     TerminalGlyphRenderKind::Sextant => TextDrawOp::Sextant(SextantDraw {
                         row,
                         col: cell.col,
-                        geometry,
+                        geometry: normalized_glyph_plan(cell.char).expect("sextant geometry"),
                         fg,
                     }),
                     TerminalGlyphRenderKind::BlockElement
@@ -1350,7 +1399,7 @@ impl TerminalGrid {
                         row,
                         col: cell.col,
                         glyph: cell.char,
-                        geometry,
+                        geometry: normalized_glyph_plan(cell.char),
                         fg,
                     }),
                 };
@@ -1606,7 +1655,7 @@ impl TerminalGrid {
                         origin: point(x, origin.y),
                         size: self.cell_size,
                     };
-                    paint_block_element_quad(window, cell_bounds, &sextant.geometry, sextant.fg);
+                    paint_block_element_quad(window, cell_bounds, sextant.geometry, sextant.fg);
                 }
                 TextDrawOp::RoundedCorner(corner) => {
                     let x = origin.x + self.cell_size.width * corner.col as f32;
@@ -2319,6 +2368,49 @@ mod tests {
     }
 
     #[test]
+    fn cached_normalized_glyph_plans_match_canonical_geometry_at_all_cell_sizes() {
+        for range in [0x2580..=0x259F, 0x1FB00..=0x1FB3B, 0x2801..=0x28FF] {
+            for codepoint in range {
+                let glyph = char::from_u32(codepoint).unwrap();
+                let cached = normalized_glyph_plan(glyph).unwrap();
+                assert!(std::ptr::eq(cached, normalized_glyph_plan(glyph).unwrap()));
+                for (width, height, font_size) in [
+                    (1.0, 1.0, 1.0),
+                    (7.225, 16.8, 12.0),
+                    (8.4287, 19.6, 14.0),
+                    (19.2666, 44.8, 32.0),
+                ] {
+                    let canonical = terminal_glyph_plan(
+                        glyph,
+                        test_glyph_metrics(width, height, font_size),
+                        TerminalGlyphNeighbors {
+                            before: Some(glyph),
+                            after: Some(glyph),
+                            ..TerminalGlyphNeighbors::default()
+                        },
+                    )
+                    .unwrap();
+                    assert_eq!(*cached, canonical, "cached geometry for U+{codepoint:04X}");
+                }
+            }
+        }
+        for glyph in ['A', '─', '╭', '╱', '\u{2800}'] {
+            assert!(normalized_glyph_plan(glyph).is_none());
+        }
+    }
+
+    #[test]
+    fn text_draw_ops_do_not_embed_full_glyph_plans() {
+        // Ordinary colored text and geometry each use one enum slot per run.
+        // A large inline glyph plan would inflate every slot, including text.
+        assert!(
+            std::mem::size_of::<TextDrawOp>()
+                <= std::mem::size_of::<TextBatch>() + std::mem::align_of::<TextBatch>()
+        );
+        assert!(std::mem::size_of::<TextDrawOp>() < std::mem::size_of::<TerminalGlyphPlan>());
+    }
+
+    #[test]
     fn braille_geometry_supports_non_empty_patterns() {
         let geometry = braille_geometry('\u{28FF}').expect("expected braille geometry");
         assert_eq!(geometry.rects().len(), 8);
@@ -2667,8 +2759,7 @@ mod tests {
                         row: 0,
                         col: 0,
                         glyph,
-                        geometry: box_draw_geometry_for_char(glyph, width, height, font_size)
-                            .unwrap(),
+                        geometry: None,
                         fg: Hsla::transparent_black(),
                     };
                     let (bounds, plan) = line
@@ -3887,7 +3978,7 @@ mod tests {
             row: 0,
             col: 7,
             glyph: '▀',
-            geometry: block_element_geometry('\u{2580}').unwrap(),
+            geometry: normalized_glyph_plan('\u{2580}'),
             fg: Hsla::transparent_black(),
         });
         assert_eq!(draw_op_col_range(&block), (7, 7));
@@ -3898,7 +3989,7 @@ mod tests {
         let sextant = TextDrawOp::Sextant(SextantDraw {
             row: 0,
             col: 4,
-            geometry: sextant_geometry('\u{1FB00}').unwrap(),
+            geometry: normalized_glyph_plan('\u{1FB00}').unwrap(),
             fg: Hsla::transparent_black(),
         });
         assert_eq!(draw_op_col_range(&sextant), (4, 4));

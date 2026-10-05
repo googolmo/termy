@@ -124,6 +124,36 @@ impl ScrollbarVisibilityController {
         }
     }
 
+    /// Schedule only opacity changes: dragging and the fully visible hold
+    /// phase need no recurring redraws. Pointer events redraw drag movement.
+    pub fn next_animation_delay(
+        &self,
+        mode: ScrollbarVisibilityMode,
+        now: Instant,
+        hold_duration: Duration,
+        fade_duration: Duration,
+        frame_duration: Duration,
+    ) -> Option<Duration> {
+        if mode != ScrollbarVisibilityMode::OnScroll || self.dragging {
+            return None;
+        }
+        let elapsed = now.saturating_duration_since(self.last_activity?);
+        let frame_duration = frame_duration.max(Duration::from_nanos(1));
+        if elapsed <= hold_duration {
+            // alpha() includes the hold boundary. Advance past it even when
+            // fading is disabled, so the final redraw actually hides the bar.
+            let first_fade_frame = frame_duration
+                .min(fade_duration)
+                .max(Duration::from_nanos(1));
+            Some(hold_duration.saturating_sub(elapsed) + first_fade_frame)
+        } else {
+            let remaining = hold_duration
+                .saturating_add(fade_duration)
+                .saturating_sub(elapsed);
+            (!remaining.is_zero()).then_some(remaining.min(frame_duration))
+        }
+    }
+
     pub fn needs_animation(
         &self,
         mode: ScrollbarVisibilityMode,
@@ -405,5 +435,106 @@ mod tests {
             0.0
         );
         assert!(!controller.needs_animation(ScrollbarVisibilityMode::OnScroll, done, hold, fade));
+    }
+
+    #[test]
+    fn on_scroll_animation_sleeps_through_hold_and_finishes_the_fade() {
+        let start = Instant::now();
+        let hold = Duration::from_millis(900);
+        let fade = Duration::from_millis(140);
+        let frame = Duration::from_millis(16);
+        let mode = ScrollbarVisibilityMode::OnScroll;
+        let mut controller = ScrollbarVisibilityController::default();
+        controller.mark_activity(start);
+
+        let mut now = start;
+        let mut previous_alpha = 1.0;
+        let mut redraws = 0;
+        while let Some(delay) = controller.next_animation_delay(mode, now, hold, fade, frame) {
+            assert!(delay > Duration::ZERO);
+            now += delay;
+            let alpha = controller.alpha(mode, now, hold, fade);
+            assert!(alpha < previous_alpha);
+            previous_alpha = alpha;
+            redraws += 1;
+            assert!(redraws < 20, "animation failed to stop");
+        }
+        assert_eq!(now, start + hold + fade);
+        assert_eq!(previous_alpha, 0.0);
+        assert_eq!(redraws, 9);
+    }
+
+    #[test]
+    fn on_scroll_animation_reschedules_activity_and_sleeps_while_dragging() {
+        let start = Instant::now();
+        let hold = Duration::from_millis(900);
+        let fade = Duration::from_millis(140);
+        let frame = Duration::from_millis(16);
+        let mode = ScrollbarVisibilityMode::OnScroll;
+        let mut controller = ScrollbarVisibilityController::default();
+        assert_eq!(
+            controller.next_animation_delay(mode, start, hold, fade, frame),
+            None
+        );
+        controller.mark_activity(start);
+        let first_wake = start
+            + controller
+                .next_animation_delay(mode, start, hold, fade, frame)
+                .unwrap();
+        controller.mark_activity(start + Duration::from_millis(500));
+        assert_eq!(controller.alpha(mode, first_wake, hold, fade), 1.0);
+        assert_eq!(
+            controller.next_animation_delay(mode, first_wake, hold, fade, frame),
+            Some(Duration::from_millis(500)),
+        );
+
+        controller.start_drag(first_wake);
+        assert_eq!(
+            controller.next_animation_delay(mode, first_wake, hold, fade, frame),
+            None
+        );
+        let drag_end = first_wake + Duration::from_secs(4);
+        assert_eq!(controller.alpha(mode, drag_end, hold, fade), 1.0);
+        controller.end_drag(drag_end);
+        assert_eq!(
+            controller.next_animation_delay(mode, drag_end, hold, fade, frame),
+            Some(hold + frame),
+        );
+        for mode in [
+            ScrollbarVisibilityMode::AlwaysOff,
+            ScrollbarVisibilityMode::AlwaysOn,
+        ] {
+            assert_eq!(
+                controller.next_animation_delay(mode, drag_end, hold, fade, frame),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn on_scroll_animation_hides_after_hold_with_zero_fade() {
+        let start = Instant::now();
+        let hold = Duration::from_millis(900);
+        let mode = ScrollbarVisibilityMode::OnScroll;
+        let mut controller = ScrollbarVisibilityController::default();
+        controller.mark_activity(start);
+        let delay = controller
+            .next_animation_delay(mode, start, hold, Duration::ZERO, Duration::from_millis(16))
+            .unwrap();
+        assert!(delay > hold);
+        assert_eq!(
+            controller.alpha(mode, start + delay, hold, Duration::ZERO),
+            0.0
+        );
+        assert_eq!(
+            controller.next_animation_delay(
+                mode,
+                start + delay,
+                hold,
+                Duration::ZERO,
+                Duration::from_millis(16)
+            ),
+            None
+        );
     }
 }

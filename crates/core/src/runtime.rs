@@ -5,8 +5,8 @@ use crate::frame::{
 };
 use crate::keyboard::TerminalKeyboardMode;
 use crate::kitty_graphics::{
-    KittyGraphicsInterceptor, KittyGraphicsItem, KittyGraphicsRenderPlacement, KittyGraphicsScreen,
-    KittyGraphicsState,
+    KittyGraphicsInterceptor, KittyGraphicsItemRef, KittyGraphicsRenderPlacement,
+    KittyGraphicsScreen, KittyGraphicsState,
 };
 #[cfg(unix)]
 use crate::locale::{Utf8LocaleOverridePlan, preferred_utf8_locale, utf8_locale_override_plan};
@@ -1912,9 +1912,9 @@ impl NativeEventLoop {
             processed = processed.saturating_add(unprocessed);
             self.handle_osc_events(osc_events);
 
-            for item in state.kitty_graphics_interceptor.process(&filtered) {
+            for item in state.kitty_graphics_interceptor.process_borrowed(&filtered) {
                 match item {
-                    KittyGraphicsItem::Text(text) => {
+                    KittyGraphicsItemRef::Text(text) => {
                         parsed = parsed.saturating_add(text.len());
                         term_mutated = true;
                         let track_scrolls = self.kitty_graphics.lock().has_placements();
@@ -1930,7 +1930,7 @@ impl NativeEventLoop {
                             graphics_changed |= effects.apply_to(&mut self.kitty_graphics.lock());
                         }
                     }
-                    KittyGraphicsItem::Command(command) => {
+                    KittyGraphicsItemRef::Command(command) => {
                         term_mutated |= state.parser.sync_bytes_count() > 0;
                         let track_scrolls = self.kitty_graphics.lock().has_placements();
                         let effects = prepare_kitty_graphics_command(

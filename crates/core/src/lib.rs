@@ -51,8 +51,8 @@ pub use keyboard::{
 };
 pub use kitty_graphics::{
     KittyGraphicsApplyResult, KittyGraphicsCommand, KittyGraphicsInterceptor, KittyGraphicsItem,
-    KittyGraphicsPlaceholder, KittyGraphicsRenderPlacement, KittyGraphicsScreen,
-    KittyGraphicsState, kitty_graphics_placeholders_from_alacritty_grid,
+    KittyGraphicsItemRef, KittyGraphicsPlaceholder, KittyGraphicsRenderPlacement,
+    KittyGraphicsScreen, KittyGraphicsState, kitty_graphics_placeholders_from_alacritty_grid,
 };
 pub use links::{DetectedLink, DetectedViewportLink, classify_link_token, find_link_in_line};
 #[cfg(unix)]
