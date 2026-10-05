@@ -89,6 +89,10 @@ pub struct KittyClipboardOsc {
 }
 
 impl KittyClipboardOsc {
+    pub(crate) fn payload_capacity(&self) -> usize {
+        self.body.capacity()
+    }
+
     pub fn from_osc_payload(
         payload: &[u8],
         terminator: KittyClipboardOscTerminator,
@@ -460,6 +464,12 @@ impl KittyClipboardHostState {
 
     pub fn reset(&mut self) {
         *self = Self::default();
+    }
+
+    pub(crate) fn reset_preserving_paste_mode(&mut self) {
+        let enabled = self.paste_events_enabled;
+        self.reset();
+        self.paste_events_enabled = enabled;
     }
 
     pub fn handle_osc(

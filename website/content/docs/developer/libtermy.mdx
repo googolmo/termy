@@ -119,7 +119,7 @@ damage, or generation-checked partial reads can use `Terminal::render_read`,
 lock, so its callback must not call back into the same terminal.
 
 The terminal engine itself is private. `termy_core` 0.2 removes `Terminal::with_term`,
-`TerminalOptions::term_config`, and the exported raw Alacritty conversion
+`TerminalOptions::term_config`, and the exported raw backend conversion
 helpers as part of the renderer-neutral core API change. Use core-owned
 `TerminalColor`, `TerminalRenderCell`, and `TerminalQueryColors` values plus the
 public `Terminal` methods instead. This is an intentional Rust source break;

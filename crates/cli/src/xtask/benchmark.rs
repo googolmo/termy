@@ -19,6 +19,10 @@ const DEFAULT_DURATION_SECS: u64 = 13;
 // Give launched apps enough room to finish the benchmark command, flush metrics,
 // and quit before xctrace force-terminates them at the trace time limit.
 const TRACE_PADDING_SECS: u64 = 5;
+// On hosted macOS runners, xctrace can take 30-45 seconds to launch a
+// recording before its time limit begins. Budget startup separately so it does
+// not consume the trace finalization allowance.
+const XCTRACE_STARTUP_GRACE_SECS: u64 = 60;
 // xctrace occasionally ignores its own time limit while finalizing a trace.
 // Keep a hard outer deadline so one wedged recording cannot consume the job.
 const XCTRACE_FINALIZATION_GRACE_SECS: u64 = 45;
@@ -77,9 +81,6 @@ fn run_driver(mut args: impl Iterator<Item = String>) -> Result<()> {
 }
 
 fn run_compare(mut args: impl Iterator<Item = String>) -> Result<()> {
-    // Capture once so inherited engine state cannot select different runtimes
-    // for the two Termy targets during a comparison.
-    let termy_engine = TermyBenchmarkEngine::from_env();
     let mut baseline_spec = None;
     let mut candidate_spec = None;
     let mut baseline_root = None;
@@ -141,16 +142,14 @@ fn run_compare(mut args: impl Iterator<Item = String>) -> Result<()> {
     }
 
     let baseline = match (baseline_spec, baseline_root) {
-        (Some(spec), None) => BenchmarkTargetSpec::parse("baseline", &spec, termy_engine)?,
-        (None, Some(root)) => BenchmarkTargetSpec::from_termy_root("baseline", root, termy_engine)?,
+        (Some(spec), None) => BenchmarkTargetSpec::parse("baseline", &spec)?,
+        (None, Some(root)) => BenchmarkTargetSpec::from_termy_root("baseline", root)?,
         (None, None) => bail!("missing --baseline or --baseline-root"),
         (Some(_), Some(_)) => unreachable!(),
     };
     let candidate = match (candidate_spec, candidate_root) {
-        (Some(spec), None) => BenchmarkTargetSpec::parse("candidate", &spec, termy_engine)?,
-        (None, Some(root)) => {
-            BenchmarkTargetSpec::from_termy_root("candidate", root, termy_engine)?
-        }
+        (Some(spec), None) => BenchmarkTargetSpec::parse("candidate", &spec)?,
+        (None, Some(root)) => BenchmarkTargetSpec::from_termy_root("candidate", root)?,
         (None, None) => bail!("missing --candidate or --candidate-root"),
         (Some(_), Some(_)) => unreachable!(),
     };
@@ -532,35 +531,9 @@ impl BenchmarkDriverSpec {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TermyBenchmarkEngine {
-    Alacritty,
-    Tmon,
-}
-
-impl TermyBenchmarkEngine {
-    fn from_env() -> Self {
-        if env::var_os("TERMY_EXPERIMENTAL_TMON_ENGINE").as_deref() == Some(OsStr::new("1")) {
-            Self::Tmon
-        } else {
-            Self::Alacritty
-        }
-    }
-
-    fn env_value(self) -> &'static str {
-        match self {
-            Self::Alacritty => "0",
-            Self::Tmon => "1",
-        }
-    }
-
-    fn runtime_name(self) -> &'static str {
-        match self {
-            Self::Alacritty => "native/alacritty",
-            Self::Tmon => "native/tmon",
-        }
-    }
-}
+// A baseline checkout or supplied app may predate this engine migration.
+// Report the selected default accurately without assuming its implementation.
+const TERMY_NATIVE_RUNTIME: &str = "native/default";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BenchmarkTargetKind {
@@ -596,31 +569,22 @@ struct BenchmarkTargetSpec {
     executable_path: PathBuf,
     git_sha: Option<String>,
     runtime_name: &'static str,
-    engine_env: Option<&'static str>,
 }
 
 impl BenchmarkTargetSpec {
-    fn parse(label: &'static str, value: &str, termy_engine: TermyBenchmarkEngine) -> Result<Self> {
+    fn parse(label: &'static str, value: &str) -> Result<Self> {
         let (kind, path) = value
             .split_once(':')
             .with_context(|| format!("invalid target spec `{value}`; expected kind:/path"))?;
         let kind = BenchmarkTargetKind::parse(kind)?;
         match kind {
-            BenchmarkTargetKind::Termy => {
-                Self::from_termy_root(label, PathBuf::from(path), termy_engine)
-            }
-            BenchmarkTargetKind::Native => {
-                Self::from_native_path(label, PathBuf::from(path), termy_engine)
-            }
+            BenchmarkTargetKind::Termy => Self::from_termy_root(label, PathBuf::from(path)),
+            BenchmarkTargetKind::Native => Self::from_native_path(label, PathBuf::from(path)),
             BenchmarkTargetKind::Ghostty => Self::from_ghostty_path(label, PathBuf::from(path)),
         }
     }
 
-    fn from_termy_root(
-        label: &'static str,
-        root: PathBuf,
-        engine: TermyBenchmarkEngine,
-    ) -> Result<Self> {
+    fn from_termy_root(label: &'static str, root: PathBuf) -> Result<Self> {
         let root = canonicalize_root(root)?;
         Ok(Self {
             label,
@@ -628,8 +592,7 @@ impl BenchmarkTargetSpec {
             executable_path: root.join("target/release/termy"),
             git_sha: Some(git_rev_parse_short(&root)?),
             source_path: root,
-            runtime_name: engine.runtime_name(),
-            engine_env: Some(engine.env_value()),
+            runtime_name: TERMY_NATIVE_RUNTIME,
         })
     }
 
@@ -643,15 +606,10 @@ impl BenchmarkTargetSpec {
             executable_path,
             git_sha: None,
             runtime_name: "ghostty",
-            engine_env: None,
         })
     }
 
-    fn from_native_path(
-        label: &'static str,
-        path: PathBuf,
-        engine: TermyBenchmarkEngine,
-    ) -> Result<Self> {
+    fn from_native_path(label: &'static str, path: PathBuf) -> Result<Self> {
         let source_path = canonicalize_root(path)?;
         let executable_path = resolve_native_executable(&source_path)?;
         Ok(Self {
@@ -660,8 +618,7 @@ impl BenchmarkTargetSpec {
             source_path,
             executable_path,
             git_sha: None,
-            runtime_name: engine.runtime_name(),
-            engine_env: Some(engine.env_value()),
+            runtime_name: TERMY_NATIVE_RUNTIME,
         })
     }
 
@@ -1618,11 +1575,6 @@ fn termy_trace_command(
             "TERMY_BENCHMARK_GIT_SHA={}",
             build.git_sha.as_deref().unwrap_or("unknown")
         ));
-    if let Some(value) = build.engine_env {
-        command
-            .arg("--env")
-            .arg(format!("TERMY_EXPERIMENTAL_TMON_ENGINE={value}"));
-    }
     command
         .arg("--launch")
         .arg("--")
@@ -2423,7 +2375,11 @@ fn run_xctrace_record_command(
 }
 
 fn xctrace_timeout(time_limit_secs: u64) -> Duration {
-    Duration::from_secs(time_limit_secs.saturating_add(XCTRACE_FINALIZATION_GRACE_SECS))
+    Duration::from_secs(
+        time_limit_secs
+            .saturating_add(XCTRACE_STARTUP_GRACE_SECS)
+            .saturating_add(XCTRACE_FINALIZATION_GRACE_SECS),
+    )
 }
 
 fn read_ndjson<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>> {
@@ -3284,7 +3240,7 @@ fn format_option_f32(value: Option<f32>) -> String {
 mod tests {
     use super::{
         BenchmarkDriverSpec, BenchmarkTargetKind, BenchmarkTargetSpec, FrameCaptureStatus,
-        FrameEvent, GhosttyVersion, MarkerEvent, Scenario, TermyBenchmarkEngine,
+        FrameEvent, GhosttyVersion, MarkerEvent, Scenario, TERMY_NATIVE_RUNTIME,
         benchmark_config_contents, create_ghostty_launch_artifacts, marker_file_contains,
         parse_animation_summary, parse_displayed_frame_starts, parse_ghostty_version,
         parse_hitch_durations, parse_single_row_table, render_report, resolve_native_executable,
@@ -3370,14 +3326,8 @@ mod tests {
     }
 
     #[test]
-    fn termy_engine_metadata_is_explicit() {
-        assert_eq!(
-            TermyBenchmarkEngine::Alacritty.runtime_name(),
-            "native/alacritty"
-        );
-        assert_eq!(TermyBenchmarkEngine::Alacritty.env_value(), "0");
-        assert_eq!(TermyBenchmarkEngine::Tmon.runtime_name(), "native/tmon");
-        assert_eq!(TermyBenchmarkEngine::Tmon.env_value(), "1");
+    fn native_runtime_metadata_describes_the_selected_default() {
+        assert_eq!(TERMY_NATIVE_RUNTIME, "native/default");
     }
 
     #[test]
@@ -3388,8 +3338,7 @@ mod tests {
             source_path: PathBuf::from("/tmp/termy"),
             executable_path: PathBuf::from("/tmp/termy/target/release/termy"),
             git_sha: Some("abc123".to_string()),
-            runtime_name: "native/alacritty",
-            engine_env: Some("0"),
+            runtime_name: "native/default",
         };
         let command = termy_trace_command(
             &build,
@@ -3415,10 +3364,7 @@ mod tests {
             args.iter()
                 .any(|arg| arg == "TERMY_BENCHMARK_SCENARIO=steady-scroll")
         );
-        assert!(
-            args.iter()
-                .any(|arg| arg == "TERMY_EXPERIMENTAL_TMON_ENGINE=0")
-        );
+
         assert_eq!(
             args.last().map(String::as_str),
             Some("/tmp/termy/target/release/termy")
@@ -3670,7 +3616,7 @@ mod tests {
             baseline: super::ComparedTargetSummary {
                 label: "baseline".to_string(),
                 name: "Termy".to_string(),
-                runtime_name: "native/alacritty".to_string(),
+                runtime_name: "native/default".to_string(),
                 source_path: "/tmp/baseline".to_string(),
                 git_sha: Some("abc".to_string()),
             },
@@ -3686,7 +3632,7 @@ mod tests {
                 baseline: super::RunResult {
                     build_label: "baseline".to_string(),
                     target_name: "Termy".to_string(),
-                    runtime_name: "native/alacritty".to_string(),
+                    runtime_name: "native/default".to_string(),
                     git_sha: Some("abc".to_string()),
                     scenario: "idle-burst".to_string(),
                     app_summary: Some(super::AppSummary {
@@ -3804,7 +3750,7 @@ mod tests {
         assert!(report.contains("Render callback interval p95 ms"));
         assert!(report.contains("callback cadence, not presented-frame latency"));
         assert!(report.contains("Only `Baseline` exposed in-app diagnostics"));
-        assert!(report.contains("runtime `native/alacritty`"));
+        assert!(report.contains("runtime `native/default`"));
         assert!(report.contains("runtime `ghostty`"));
         assert!(report.contains("Shaped-line cache hits"));
     }
@@ -4016,7 +3962,7 @@ mod tests {
         super::ComparedTargetSummary {
             label: label.to_string(),
             name: "Termy".to_string(),
-            runtime_name: "native/alacritty".to_string(),
+            runtime_name: "native/default".to_string(),
             source_path: format!("/tmp/{label}"),
             git_sha: None,
         }
@@ -4031,7 +3977,7 @@ mod tests {
         super::RunResult {
             build_label: build_label.to_string(),
             target_name: "Termy".to_string(),
-            runtime_name: "native/alacritty".to_string(),
+            runtime_name: "native/default".to_string(),
             git_sha: None,
             scenario: "idle-burst".to_string(),
             app_summary: None,

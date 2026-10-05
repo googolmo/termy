@@ -676,7 +676,7 @@ fn configured_query_colors_are_available_before_the_first_theme_refresh() {
 }
 
 #[test]
-fn query_replies_match_the_alacritty_engine() {
+fn query_replies_match_expected_protocol_bytes() {
     let size = Size {
         cols: 12,
         rows: 3,
@@ -696,7 +696,6 @@ fn query_replies_match_the_alacritty_engine() {
                   \x1b[>1u\x1b[=2;2u\x1b[?u";
     let mut engine = Engine::new(size, &Config::default());
     let (_, tmon_replies, _) = engine.feed(input);
-    let alacritty_replies = alacritty_query_replies(input, size);
     let expected = b"\x1b[0n\
                      \x1b[1;3R\
                      \x1b[?6c\
@@ -708,7 +707,6 @@ fn query_replies_match_the_alacritty_engine() {
                      \x1b[8;3;12t\
                      \x1b[?1u";
 
-    assert_eq!(tmon_replies, alacritty_replies);
     assert_eq!(tmon_replies, expected);
 }
 
@@ -751,7 +749,7 @@ fn pending_event_probe_tracks_bounded_drains() {
 }
 
 #[test]
-fn live_color_query_replies_match_the_alacritty_engine() {
+fn live_color_query_replies_match_expected_protocol_bytes() {
     let size = Size::default();
     let input = b"\x1b]4;1;#123456\x1b\\\
                   \x1b]10;#010203\x07\
@@ -763,18 +761,16 @@ fn live_color_query_replies_match_the_alacritty_engine() {
                   \x1b]12;?\x07";
     let mut engine = Engine::new(size, &Config::default());
     let (_, tmon_replies, _) = engine.feed(input);
-    let alacritty_replies = alacritty_query_replies(input, size);
     let expected = b"\x1b]4;1;rgb:1212/3434/5656\x1b\\\
                      \x1b]10;rgb:0101/0202/0303\x07\
                      \x1b]11;rgb:0404/0505/0606\x1b\\\
                      \x1b]12;rgb:0707/0808/0909\x07";
 
-    assert_eq!(tmon_replies, alacritty_replies);
     assert_eq!(tmon_replies, expected);
 }
 
 #[test]
-fn synchronized_query_replies_match_the_alacritty_engine() {
+fn synchronized_query_replies_match_expected_protocol_bytes() {
     let size = Size {
         cols: 12,
         rows: 3,
@@ -785,7 +781,6 @@ fn synchronized_query_replies_match_the_alacritty_engine() {
     let (_, tmon_replies, active) = engine.feed(input);
 
     assert!(!active);
-    assert_eq!(tmon_replies, alacritty_query_replies(input, size));
     assert_eq!(tmon_replies, b"\x1b[1;2R");
 }
 

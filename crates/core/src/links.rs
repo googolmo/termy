@@ -5,12 +5,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
-use alacritty_terminal::{
-    event::EventListener,
-    grid::Dimensions,
-    index::{Column, Line},
-    term::{Term, cell::Flags},
-};
+use crate::terminal_engine::{Cell, Engine, Style};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct DetectedLink {
@@ -99,25 +94,25 @@ fn store_cached_file_url(token: &str, resolved: Option<String>) {
 /// hyperlink (matched by OSC 8 id + uri), so hover underlines cover the whole
 /// link text even when it differs from the target URI. Takes priority over the
 /// heuristic [`find_link_in_line`] detection.
-pub(crate) fn hyperlink_at_viewport_cell<T: EventListener>(
-    term: &Term<T>,
+pub(crate) fn hyperlink_at_viewport_cell(
+    term: &Engine,
     row: usize,
     col: usize,
 ) -> Option<DetectedLink> {
-    let grid = term.grid();
-    let columns = grid.columns();
-    if row >= grid.screen_lines() || col >= columns {
+    let grid = term;
+    let columns = grid.size().cols;
+    if row >= grid.size().rows || col >= columns {
         return None;
     }
 
     // Viewport rows map directly into the live/history grid after subtracting
     // display_offset. Index that one row instead of materializing hyperlink
     // metadata for every visible cell on every mouse-hover lookup.
-    let line = Line(row as i32 - grid.display_offset() as i32);
-    let row_cells = &grid[line];
-    let target = row_cells[Column(col)].hyperlink()?;
+    let line = row as i32 - grid.display_offset() as i32;
+    let row_cells = grid.line(line)?;
+    let target = row_cells[col].hyperlink()?;
     let matches_target = |candidate_col: usize| {
-        row_cells[Column(candidate_col)]
+        row_cells[candidate_col]
             .hyperlink()
             .is_some_and(|other| other == target)
     };
@@ -134,7 +129,7 @@ pub(crate) fn hyperlink_at_viewport_cell<T: EventListener>(
     Some(DetectedLink {
         start_col,
         end_col,
-        target: target.uri().to_string(),
+        target: target.uri.clone(),
     })
 }
 
@@ -143,14 +138,14 @@ pub(crate) fn hyperlink_at_viewport_cell<T: EventListener>(
 /// OSC 8 metadata takes priority over heuristic URL detection. The returned
 /// range is clipped to the visible viewport while the target is built from the
 /// complete logical link, including portions currently in scrollback.
-pub(crate) fn link_at_viewport_cell<T: EventListener>(
-    term: &Term<T>,
+pub(crate) fn link_at_viewport_cell(
+    term: &Engine,
     row: usize,
     col: usize,
 ) -> Option<DetectedViewportLink> {
-    let grid = term.grid();
-    let columns = grid.columns();
-    let screen_lines = grid.screen_lines();
+    let grid = term;
+    let columns = grid.size().cols;
+    let screen_lines = grid.size().rows;
     if row >= screen_lines || col >= columns || columns == 0 {
         return None;
     }
@@ -162,11 +157,11 @@ pub(crate) fn link_at_viewport_cell<T: EventListener>(
     };
     let bounds = grid_line_bounds(grid)?;
 
-    if let Some(target) = grid[Line(hovered.line)][Column(hovered.col)].hyperlink() {
-        let target_uri = target.uri().to_string();
+    if let Some(target) = grid.line(hovered.line)?[hovered.col].hyperlink() {
+        let target_uri = target.uri.clone();
         let mut start = hovered;
         while let Some(previous) = previous_wrapped_position(grid, start, bounds, columns) {
-            if grid[Line(previous.line)][Column(previous.col)]
+            if grid.line(previous.line)?[previous.col]
                 .hyperlink()
                 .is_some_and(|candidate| candidate == target)
             {
@@ -178,7 +173,7 @@ pub(crate) fn link_at_viewport_cell<T: EventListener>(
 
         let mut end = hovered;
         while let Some(next) = next_wrapped_position(grid, end, bounds, columns) {
-            if grid[Line(next.line)][Column(next.col)]
+            if grid.line(next.line)?[next.col]
                 .hyperlink()
                 .is_some_and(|candidate| candidate == target)
             {
@@ -250,11 +245,9 @@ struct GridPosition {
     col: usize,
 }
 
-fn grid_line_bounds(
-    grid: &alacritty_terminal::grid::Grid<alacritty_terminal::term::cell::Cell>,
-) -> Option<(i32, i32)> {
-    let screen_lines = i32::try_from(grid.screen_lines()).ok()?;
-    let total_lines = i32::try_from(grid.total_lines()).ok()?;
+fn grid_line_bounds(grid: &Engine) -> Option<(i32, i32)> {
+    let screen_lines = i32::try_from(grid.size().rows).ok()?;
+    let total_lines = screen_lines.checked_add(i32::try_from(grid.history_size()).ok()?)?;
     if screen_lines <= 0 || total_lines <= 0 {
         return None;
     }
@@ -262,7 +255,7 @@ fn grid_line_bounds(
 }
 
 fn previous_wrapped_position(
-    grid: &alacritty_terminal::grid::Grid<alacritty_terminal::term::cell::Cell>,
+    grid: &Engine,
     position: GridPosition,
     (min_line, _): (i32, i32),
     columns: usize,
@@ -278,17 +271,14 @@ fn previous_wrapped_position(
         return None;
     }
     let previous_col = columns.checked_sub(1)?;
-    grid[Line(previous_line)][Column(previous_col)]
-        .flags
-        .contains(Flags::WRAPLINE)
-        .then_some(GridPosition {
-            line: previous_line,
-            col: previous_col,
-        })
+    grid.line_wrapped(previous_line).then_some(GridPosition {
+        line: previous_line,
+        col: previous_col,
+    })
 }
 
 fn next_wrapped_position(
-    grid: &alacritty_terminal::grid::Grid<alacritty_terminal::term::cell::Cell>,
+    grid: &Engine,
     position: GridPosition,
     (_, max_line): (i32, i32),
     columns: usize,
@@ -299,11 +289,7 @@ fn next_wrapped_position(
             col: position.col + 1,
         });
     }
-    if position.line >= max_line
-        || !grid[Line(position.line)][Column(position.col)]
-            .flags
-            .contains(Flags::WRAPLINE)
-    {
+    if position.line >= max_line || !grid.line_wrapped(position.line) {
         return None;
     }
     Some(GridPosition {
@@ -312,20 +298,21 @@ fn next_wrapped_position(
     })
 }
 
-fn grid_cell_char(
-    grid: &alacritty_terminal::grid::Grid<alacritty_terminal::term::cell::Cell>,
-    position: GridPosition,
-) -> char {
-    let cell = &grid[Line(position.line)][Column(position.col)];
-    if cell
-        .flags
-        .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER | Flags::HIDDEN)
-        || cell.c == '\0'
-        || cell.c.is_control()
+fn grid_cell_char(grid: &Engine, position: GridPosition) -> char {
+    let Some(cell) = grid
+        .line(position.line)
+        .and_then(|row| row.get(position.col))
+    else {
+        return ' ';
+    };
+    if cell.flags & (Cell::WIDE_SPACER | Cell::LEADING_WIDE_SPACER) != 0
+        || cell.style.attributes & Style::HIDDEN != 0
+        || cell.character == '\0'
+        || cell.character.is_control()
     {
         ' '
     } else {
-        cell.c
+        cell.character
     }
 }
 
@@ -739,26 +726,20 @@ mod tests {
     use super::{
         FileUrlLruCache, classify_link_token, hyperlink_at_viewport_cell, link_at_viewport_cell,
     };
-    use crate::runtime::TerminalSize;
-    use alacritty_terminal::{
-        event::VoidListener,
-        term::{Config as TermConfig, Term},
-        vte::ansi,
-    };
+    use crate::terminal_engine::{Engine, Options, Size};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn term_with_input(cols: u16, rows: u16, input: &[u8]) -> Term<VoidListener> {
-        let size = TerminalSize {
-            cols,
-            rows,
-            cell_width: 9.0,
-            cell_height: 18.0,
-        };
-        let mut term = Term::new(TermConfig::default(), &size, VoidListener);
-        let mut parser: ansi::Processor = ansi::Processor::new();
-        parser.advance(&mut term, input);
+    fn term_with_input(cols: u16, rows: u16, input: &[u8]) -> Engine {
+        let mut term = Engine::new(
+            Size {
+                cols: usize::from(cols),
+                rows: usize::from(rows),
+            },
+            Options::default(),
+        );
+        term.feed(input);
         term
     }
 

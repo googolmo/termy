@@ -58,7 +58,7 @@ read coherent and allocation-bounded; it must not call back into that terminal.
 
 The underlying terminal engine is not part of the Rust embedding contract.
 `termy_core` 0.2 removes `Terminal::with_term`,
-`TerminalOptions::term_config`, and the raw Alacritty conversion helpers. Use `TerminalColor`,
+`TerminalOptions::term_config`, and the raw backend conversion helpers. Use `TerminalColor`,
 `TerminalRenderCell`, `TerminalQueryColors`, and the public `Terminal` methods
 instead. This is an intentional Rust source break; the flat frame types and C
 ABI remain unchanged.

@@ -1,0 +1,259 @@
+name: Terminal Engine Performance
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/core/**"
+      - "scripts/benchmark-terminal-facades.py"
+      - ".github/workflows/terminal-engine-benchmark.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/core/**"
+      - "scripts/benchmark-terminal-facades.py"
+      - ".github/workflows/terminal-engine-benchmark.yml"
+  workflow_dispatch:
+    inputs:
+      target_mib:
+        description: "MiB per workload (1 to 128)"
+        required: false
+        default: "32"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terminal-engine-performance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Parser, grid, and steady allocation gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TARGET_MIB: ${{ github.event_name == 'workflow_dispatch' && inputs.target_mib || '32' }}
+      REPORT_NAME: terminal-engine-benchmark.txt
+    steps:
+      - name: Initialize report
+        shell: bash
+        run: ': > "$RUNNER_TEMP/$REPORT_NAME"'
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Verify terminal behavior
+        id: correctness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --locked -p termy_core --lib terminal_engine 2>&1 | tee -a "$RUNNER_TEMP/$REPORT_NAME"
+
+      - name: Measure throughput, allocations, and retained heap
+        id: benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$TARGET_MIB" =~ ^[1-9][0-9]{0,2}$ ]] || (( TARGET_MIB > 128 )); then
+            echo "target_mib must be an integer from 1 to 128" >&2
+            exit 2
+          fi
+          {
+            echo "Git commit: $GITHUB_SHA"
+            echo "Runner: $RUNNER_OS/$RUNNER_ARCH"
+            echo "Runner image: ${ImageOS:-unknown}/${ImageVersion:-unknown}"
+            echo "Kernel: $(uname -srvm)"
+            rustc --version
+            echo "Cargo.lock SHA-256: $(sha256sum Cargo.lock | awk '{print $1}')"
+            cargo run --locked --quiet -p termy_core --release --example terminal_engine_bench -- "$TARGET_MIB"
+          } 2>&1 | tee -a "$RUNNER_TEMP/$REPORT_NAME"
+
+      - name: Finalize report
+        if: ${{ always() }}
+        shell: bash
+        env:
+          CORRECTNESS_OUTCOME: ${{ steps.correctness.outcome }}
+          BENCHMARK_OUTCOME: ${{ steps.benchmark.outcome }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/$REPORT_NAME"
+          {
+            printf '\nCorrectness: %s\n' "${CORRECTNESS_OUTCOME:-unknown}"
+            printf 'Benchmark: %s\n' "${BENCHMARK_OUTCOME:-unknown}"
+          } >> "$report"
+          {
+            echo '## Terminal engine performance'
+            echo 'Steady warmed workloads must allocate zero times. Throughput and requested heap are reported; desktop latency has separate comparison gates.'
+            echo '```text'
+            cat "$report"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: terminal-engine-benchmark-${{ github.sha }}
+          path: ${{ runner.temp }}/terminal-engine-benchmark.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  facade-comparison:
+    name: Paired facade throughput (${{ matrix.os }})
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    env:
+      REPORT_DIR: ${{ github.workspace }}/facade-comparison-output
+    steps:
+      - name: Initialize report directory
+        shell: bash
+        run: mkdir -p "$REPORT_DIR"
+
+      - name: Checkout baseline
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          path: baseline
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Checkout candidate
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          path: candidate
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          key: facade-comparison
+          workspaces: |
+            baseline -> target
+            candidate -> target
+
+      - name: Record comparison provenance
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import platform
+          import subprocess
+
+          root = Path(os.environ["GITHUB_WORKSPACE"])
+          source = root / "candidate/crates/core/examples/terminal_facade_bench.rs"
+          report = {
+              "platform": platform.platform(),
+              "runner_image": os.environ.get("ImageOS"),
+              "runner_image_version": os.environ.get("ImageVersion"),
+              "rustc": subprocess.check_output(["rustc", "--version", "--verbose"], text=True),
+              "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+          }
+          for label in ("baseline", "candidate"):
+              checkout = root / label
+              report[label] = {
+                  "commit": subprocess.check_output(["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True).strip(),
+                  "lockfile_sha256": hashlib.sha256((checkout / "Cargo.lock").read_bytes()).hexdigest(),
+              }
+          (Path(os.environ["REPORT_DIR"]) / "provenance.json").write_text(json.dumps(report, indent=2) + "\n")
+          PY
+
+      - name: Build both libraries and identical facade helpers
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="$GITHUB_WORKSPACE/candidate/crates/core/examples/terminal_facade_bench.rs"
+          for label in baseline candidate; do
+            checkout="$GITHUB_WORKSPACE/$label"
+            (
+              cd "$checkout"
+              cargo build --locked --release -p termy_core --lib
+            ) 2>&1 | tee "$REPORT_DIR/build-$label.log"
+            rustc --edition=2024 -O "$source" \
+              --extern "termy_core=$checkout/target/release/libtermy_core.rlib" \
+              -L "dependency=$checkout/target/release/deps" \
+              -o "$REPORT_DIR/$label" \
+              2>&1 | tee "$REPORT_DIR/helper-$label.log"
+          done
+
+      - name: Compare feed throughput
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/candidate/scripts/benchmark-terminal-facades.py" \
+            --baseline "$REPORT_DIR/baseline" --candidate "$REPORT_DIR/candidate" \
+            --mib 32 --pairs 6 --min-ratio 0.95 \
+            --output "$REPORT_DIR/feed.json" 2>&1 | tee "$REPORT_DIR/feed.log"
+
+      - name: Compare throughput with damage consumption
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/candidate/scripts/benchmark-terminal-facades.py" \
+            --baseline "$REPORT_DIR/baseline" --candidate "$REPORT_DIR/candidate" \
+            --mib 32 --pairs 6 --min-ratio 0.95 --consume-damage \
+            --output "$REPORT_DIR/damage.json" 2>&1 | tee "$REPORT_DIR/damage.log"
+
+      - name: Summarize facade comparison
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
+              output.write("## Paired facade throughput\n\n")
+              output.write("Six alternating pairs per workload; identical helper source. The 0.95 gate allows 5% timing noise. Assess parity from the reported medians; these probes do not measure presentation latency.\n\n")
+              for mode in ("feed", "damage"):
+                  path = Path(os.environ["REPORT_DIR"]) / f"{mode}.json"
+                  if not path.exists():
+                      output.write(f"{mode}: no result produced.\n\n")
+                      continue
+                  report = json.loads(path.read_text())
+                  output.write(f"### {mode}: {report['status']}\n\n")
+                  output.write(f"Baseline engine: {report['baseline_backend']}.\n\n")
+                  output.write("| Workload | Baseline MiB/s | Candidate MiB/s | Median paired ratio |\n| --- | ---: | ---: | ---: |\n")
+                  for case, result in report["summary"].items():
+                      baseline = result["baseline_mib_per_second"]["median"]
+                      candidate = result["candidate_mib_per_second"]["median"]
+                      ratio = result["ratio"]["median"]
+                      output.write(f"| {case} | {baseline:.3f} | {candidate:.3f} | {ratio:.3f}x |\n")
+                  output.write("\n")
+          PY
+
+      - name: Upload facade comparison
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: terminal-facade-comparison-${{ matrix.os }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ env.REPORT_DIR }}/*.json
+            ${{ env.REPORT_DIR }}/*.log
+          if-no-files-found: warn
+          retention-days: 30

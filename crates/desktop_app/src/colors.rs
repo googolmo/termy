@@ -3,7 +3,6 @@ use crate::config::{
     resolve_active_theme,
 };
 use crate::theme_store;
-use alacritty_terminal::vte::ansi::{Color as AnsiColor, NamedColor, Rgb as AnsiRgb};
 use gpui_kit::Rgba;
 use termy_core::themes;
 use termy_core::themes::Rgb8;
@@ -93,40 +92,6 @@ impl TerminalColors {
             if let Some(c) = color {
                 self.ansi[i] = rgba(c.r, c.g, c.b);
             }
-        }
-    }
-
-    /// Convert an alacritty ANSI color to a GPUI Rgba
-    pub fn convert(&self, color: AnsiColor) -> Rgba {
-        match color {
-            AnsiColor::Named(named) => self.named_color(named),
-            AnsiColor::Spec(AnsiRgb { r, g, b }) => rgba(r, g, b),
-            AnsiColor::Indexed(idx) => self.indexed_color(idx),
-        }
-    }
-
-    fn named_color(&self, color: NamedColor) -> Rgba {
-        match color {
-            NamedColor::Black => self.ansi[0],
-            NamedColor::Red => self.ansi[1],
-            NamedColor::Green => self.ansi[2],
-            NamedColor::Yellow => self.ansi[3],
-            NamedColor::Blue => self.ansi[4],
-            NamedColor::Magenta => self.ansi[5],
-            NamedColor::Cyan => self.ansi[6],
-            NamedColor::White => self.ansi[7],
-            NamedColor::BrightBlack => self.ansi[8],
-            NamedColor::BrightRed => self.ansi[9],
-            NamedColor::BrightGreen => self.ansi[10],
-            NamedColor::BrightYellow => self.ansi[11],
-            NamedColor::BrightBlue => self.ansi[12],
-            NamedColor::BrightMagenta => self.ansi[13],
-            NamedColor::BrightCyan => self.ansi[14],
-            NamedColor::BrightWhite => self.ansi[15],
-            NamedColor::Foreground => self.foreground,
-            NamedColor::Background => self.background,
-            NamedColor::Cursor => self.cursor,
-            _ => self.foreground,
         }
     }
 

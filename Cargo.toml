@@ -3,7 +3,6 @@ members = ["crates/core", "crates/desktop_app", "crates/cli"]
 resolver = "2"
 
 [workspace.dependencies]
-alacritty_terminal = "0.26"
 anyhow = "1.0"
 dirs = "6.0"
 flume = "0.11"

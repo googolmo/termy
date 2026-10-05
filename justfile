@@ -8,21 +8,16 @@ set shell := ["bash", "-cu"]
 run:
     TERMY_INSTANCE_HOME="${TERMY_INSTANCE_HOME:-{{ justfile_directory() }}/target/termy-dev-instance}" cargo run -p termy --release
 
-# Compare the terminal engines and write timing and allocation reports.
-benchmark-tmon:
+# Measure the custom terminal parser/grid and enforce warmed allocation bounds.
+benchmark-terminal-engine mib="32":
     #!/usr/bin/env bash
     set -euo pipefail
-    report="${TMON_BENCH_OUTPUT:-target/benchmarks/tmon-alacritty-benchmark.txt}"
+    report="${TERMY_ENGINE_BENCH_OUTPUT:-target/benchmarks/terminal-engine-benchmark.txt}"
     mkdir -p "$(dirname "$report")"
     {
       rustc --version
-      echo
-      TERMY_CORE_TEST_BACKEND=alacritty cargo run --locked --quiet -p termy_cli --release --example engine_compare
+      cargo run --locked --quiet -p termy_core --release --example terminal_engine_bench -- {{ quote(mib) }}
     } 2>&1 | tee "$report"
-    {
-      echo
-      TERMY_CORE_TEST_BACKEND=alacritty TMON_BENCH_ALLOCATIONS_ONLY=1 cargo run --locked --quiet -p termy_cli --release --example engine_compare --features benchmark-allocations
-    } 2>&1 | tee -a "$report"
 
 run-cli *args:
     cargo run --bin termy-cli --release {{ args }}

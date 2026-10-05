@@ -153,7 +153,15 @@ dd bs=1 count=1 >/dev/null 2>/dev/null
             .iter()
             .any(|cell| cell.text == marker)
     };
-    wait_until(|| has_marker("A"));
+    // The Create snapshot can already contain text before the asynchronous
+    // graphics stream delivers its first placement.
+    wait_until(|| {
+        has_marker("A")
+            && terminal
+                .kitty_graphics_placements()
+                .first()
+                .is_some_and(|placement| placement.viewport_row == 2)
+    });
     assert_eq!(terminal.kitty_graphics_placements()[0].viewport_row, 2);
     terminal.write(b"x");
     wait_until(|| has_marker("B"));

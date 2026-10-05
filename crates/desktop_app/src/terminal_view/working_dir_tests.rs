@@ -2,6 +2,8 @@ use super::*;
 
 #[gpui_kit::test]
 fn new_tab_inherits_cwd_after_shell_cd_with_foreground_app(cx: &mut gpui_kit::TestAppContext) {
+    // This integration test receives wakeups from a real native PTY thread.
+    cx.executor().allow_parking();
     let root = tempfile::tempdir().unwrap();
     let initial = root.path().join("initial");
     let project = root.path().join("project with spaces");

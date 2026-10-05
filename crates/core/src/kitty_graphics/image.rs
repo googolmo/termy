@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn normalize_image(
     command: &KittyGraphicsCommand,
     data: Vec<u8>,
-) -> Result<(crate::tmon::GraphicsImage, u32, u32), String> {
+) -> Result<(crate::terminal_engine::media::GraphicsImage, u32, u32), String> {
     let (rgba, width, height) = match command.u32_value('f').unwrap_or(32) {
         100 => {
             let mut decoder = png::Decoder::new(Cursor::new(data));
@@ -67,7 +67,7 @@ pub(super) fn normalize_image(
         _ => return Err("EINVAL:unsupported image format".into()),
     };
     Ok((
-        crate::tmon::GraphicsImage::from_rgba(width, height, rgba),
+        crate::terminal_engine::media::GraphicsImage::from_rgba(width, height, rgba),
         width,
         height,
     ))

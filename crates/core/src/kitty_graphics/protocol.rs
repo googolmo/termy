@@ -14,7 +14,7 @@ impl KittyGraphicsCommand {
         self.char_value('a').unwrap_or('t')
     }
 
-    pub(super) fn parse(mut bytes: Vec<u8>, oversized: bool) -> Self {
+    pub(crate) fn parse(mut bytes: Vec<u8>, oversized: bool) -> Self {
         // A missing separator must not turn a payload-sized command into a control string.
         // Inspect one byte past the limit so a separator at the exact boundary is accepted.
         let separator = bytes[..bytes.len().min(MAX_CONTROL_BYTES + 1)]

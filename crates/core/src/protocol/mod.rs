@@ -13,5 +13,4 @@ pub use kitty_clipboard_control::{
     KittyClipboardControl, KittyClipboardInput, KittyClipboardInterceptor,
 };
 pub use query_colors::TerminalQueryColors;
-pub(crate) use replies::reply_bytes_for_event;
 pub use replies::{TerminalClipboardTarget, TerminalReplyHost};

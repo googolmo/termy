@@ -15,15 +15,12 @@ Use this crate when behavior should be available to FFI, WASM, JS, or non-GPUI h
 
 ```sh
 cargo test -p termy_core
-TERMY_CORE_TEST_BACKEND=alacritty cargo test -p termy_core
-TERMY_CORE_TEST_BACKEND=tmon cargo test -p termy_core
+cargo run --release -p termy_core --example terminal_engine_bench -- 32
 ```
 
-Display-only terminals use Tmon. Native terminals retain Alacritty unless the
-desktop rollout's exact `TERMY_EXPERIMENTAL_TMON_ENGINE=1` opt-in is present.
-The two explicit commands force the semantic suite through one private backend
-at a time. `TERMY_CORE_TEST_BACKEND` is test-only plumbing, not a supported
-embedder or desktop configuration surface.
+Native, display-only, tmux, and persistent sessions use the custom engine in
+`src/terminal_engine`. There is one runtime engine and no environment selector.
+The legacy `src/tmon` implementation is retained outside the compiled module tree.
 
 ## Forbidden Dependencies
 
@@ -39,13 +36,15 @@ underline variants and colors, live palette revisions, ordered viewport scroll
 damage, or generation-checked range reads should use `Terminal::render_read`,
 `Terminal::take_render_damage_snapshot`, and the `visit_*` methods instead.
 
-The terminal engine is deliberately private. During the Tmon migration the
-facade can dispatch to either retained Alacritty state or Tmon without exposing
-either engine's types. `termy_core` 0.2 removed
-`Terminal::with_term`, `TerminalOptions::term_config`, and the exported raw
-Alacritty conversion helpers. Embedders should use core-owned types such as
-`TerminalColor`, `TerminalRenderCell`, and `TerminalQueryColors`, plus the
-neutral `Terminal` methods, rather than depending on an engine grid or parser.
+The facade keeps engine types out of the embedding contract. Embedders should
+use core-owned `TerminalColor`, `TerminalRenderCell`, and `TerminalQueryColors`
+with the neutral `Terminal` methods. The standalone `terminal_engine::Engine`
+is also available for headless parsing and direct borrowed row access.
+
+The viewport visitor methods preserve reentrant callbacks by capturing a coherent
+read first. Renderers can opt into `visit_viewport_cells_locked` and
+`visit_viewport_ranges_locked_at_generation` to stream borrowed cells without an
+intermediate frame allocation; those callbacks must not reenter the terminal.
 
 `terminal_glyph_plan` owns the terminal-specific rendering semantics for block
 elements, box drawing, sextants, long Braille runs, rounded corners, and
@@ -87,8 +86,8 @@ views; it has no socket, desktop, or session-discovery dependency.
 ## Kitty graphics
 
 The protocol pipeline separates command interception, bounded upload assembly,
-pixel decoding, placement/deletion, and animation. Both core engines expose
-`GraphicsImage` pixels and share geometry, frame composition, animation timing,
+pixel decoding, placement/deletion, and animation. The engine exposes
+`GraphicsImage` pixels with shared geometry, frame composition, animation timing,
 and shared-memory transport. Raw uploads avoid PNG encoding; PNG uploads decode
 once. `image.png()` is an explicit lazy export for clipboard and C hosts.
 
@@ -105,7 +104,6 @@ below non-default backgrounds, other negative values below text, and nonnegative
 values above text.
 
 Run protocol regressions with `cargo test -p termy_core kitty_graphics` and run
-native-wrapper tests for both engines using `TERMY_CORE_TEST_BACKEND=alacritty`
-and `TERMY_CORE_TEST_BACKEND=tmon`. The `measure_raw_upload_cost` test reports a
+runtime regressions with `cargo test -p termy_core runtime`. The `measure_raw_upload_cost` test reports a
 bounded upload benchmark; it does not measure GPU time or establish acceptance
 in every third-party application.

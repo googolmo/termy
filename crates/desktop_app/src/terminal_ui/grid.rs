@@ -71,7 +71,7 @@ pub enum TerminalGridPaintDamage {
     Full,
     Rows(Arc<[usize]>),
     /// Row damage with column bounds `(row, left_col_inclusive, right_col_inclusive)`.
-    /// Emitted when alacritty reports partial damage with column-level granularity.
+    /// Emitted when the terminal reports partial damage with column-level granularity.
     RowRanges(Arc<[(usize, usize, usize)]>),
     /// Move retained rows with the viewport, then repaint the exposed/changed cells.
     Scroll {
