@@ -1,9 +1,9 @@
-# Custom terminal engine: cloud handoff
+# Custom terminal engine: cloud handoff and completion
 
 Continue on `feat/custom-terminal-engine` in
 [PR #400](https://github.com/lassejlv/termy/pull/400). The user requested this
-checkpoint so implementation can continue in the cloud; the remaining
-validation below is not complete.
+checkpoint so implementation could continue in the cloud. The replacement is
+complete; the cloud results and measurement limits are recorded below.
 
 ## Scope and constraints
 
@@ -57,31 +57,52 @@ limits and measured regressions as well as improvements.
   workload durations, retries and performance thresholds. All 24 CLI benchmark
   tests and the formatting check pass with that change.
 
-## Remaining work
+## Cloud completion
 
-1. Follow all checks on the newly pushed PR head to completion. Diagnose actual
-   failures; do not treat the previous head's successful checks as proof for a
-   later code revision. Confirm the tracing-timeout fix on hosted macOS.
-2. Evaluate the measured mixed-Unicode throughput regression. An unimplemented
-   proposal is a per-grid boxed cache of 512 `u32` entries (2 KiB), packing the
-   full scalar and two width bits. Hash with wrapping multiplication by
-   `0x9e3779b1`, use the top nine bits for the slot, and validate the complete
-   scalar tag on every hit. Bypass ASCII and preserve the pinned width lookup on
-   misses, including width 3 for U+17D8. Reflow would remain unchanged. This is
-   only a hypothesis: compare repeated and cache-miss-heavy Unicode, ASCII,
-   styled and combining workloads before adopting it. Exhaustive scalar and
-   collision checks should verify identical width results.
-3. Complete paired focused-app output/echo measurements if the cloud environment
-   supports a real macOS window. Preserve `HOME`; isolate `XDG_CONFIG_HOME` and
-   `TERMY_INSTANCE_HOME`, focus the window, then release an explicit workload
-   start gate. Render callbacks do not establish presented-frame or
-   key-to-photon latency. The current CI workflow disables Animation Hitches
-   tracing and permits zero displayed-frame samples.
-4. Retain the report's comparison with the former Tmon display facade. It has
-   substantial throughput and retained-memory differences from the former
-   native Alacritty backend; do not describe native gains as universal gains.
-5. Update the report and PR description around the final measured implementation.
-   Confirm review readiness when the remaining work and final checks are complete.
+- Audited the workspace, Cargo.lock, native/display construction, tmux panes and
+  persistent-session construction: no active Alacritty dependency or adapter
+  remains. Historical reports and untouched legacy Tmon references are retained.
+- Strengthened the dependency boundary to reject Alacritty in every workspace
+  package, feature, platform and normal/build/dev dependency section. A long
+  dependency-output fixture verifies that an early search exit cannot hide it.
+- All checks at `b651c7bd` passed, including all four macOS performance scenarios.
+  Echo-train and steady-scroll now finish with the bounded startup allowance.
+  See [the tracing run](https://github.com/lassejlv/termy/actions/runs/37296537917)
+  and the PR for final-head checks; earlier runs do not prove a later revision.
+- Implemented and evaluated the proposed 2 KiB width cache, including exhaustive
+  scalar/hit/miss tests and collisions. Rejected it after six alternating pairs:
+  repeated Unicode improved only 1.6%, while varied Unicode fell 8.6% and
+  combining fell 6.4% by median. Cloud timings varied substantially. The final
+  engine retains its original width lookup and memory footprint.
+- Added a 16,384-distinct-scalar Unicode workload to the committed allocation
+  benchmark and its existing CI gate. Both repeated and varied Unicode must be
+  measured for future proposals. All six workloads retained zero warmed
+  allocations in the cloud experiment.
+- Local Linux core tests passed (710 unit tests and 46 integration tests;
+  existing ignores retained), as did CLI tests, formatting and architecture
+  boundaries. The prototype's 160 engine tests included two exhaustive/cache
+  regressions; the retained engine still has its original 158 engine tests.
+- Updated the performance report with the rejected experiment and hosted echo
+  evidence, preserving the former Tmon display comparison and its substantial
+  retained-memory/throughput tradeoffs.
+
+## Measurement limits and future performance work
+
+The replacement does not establish a universal performance improvement. Mixed
+Unicode and compact history remain optimization opportunities; the tested width
+cache is not a proven fix. The original native gains must not be presented as
+gains over the former Tmon display facade.
+
+The hosted echo run recorded 40 samples and zero missed echoes per binary, but
+its displayed-frame samples are unavailable. Render callbacks do not establish
+presented-frame or key-to-photon latency. This cloud executor is Linux and cannot
+perform paired focused native macOS window measurements. For future measurement,
+preserve `HOME`, isolate `XDG_CONFIG_HOME` and `TERMY_INSTANCE_HOME`, focus the
+window, then release an explicit workload start gate. Do not claim those
+measurements are complete or replace them with a virtual-display smoke test.
+
+The PR must remain unmerged unless the user asks to merge it. Check final-head
+CI before review/merge; the PR description records the latest verified status.
 
 Local raw measurements, saved binaries and experimental scripts under
 `target/custom-engine-2026-10-05/` are ignored build artifacts and are not part of

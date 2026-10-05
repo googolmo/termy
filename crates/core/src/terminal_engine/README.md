@@ -70,6 +70,10 @@ New combinations still allocate; the benchmark asserts zero allocations for its
 repeated combining workload as well as ordinary text. Timings include
 allocator instrumentation and are not a substitute for PTY/UI latency tests.
 The heap figures are allocator-requested bytes for the process, not OS RSS.
+The varied-Unicode case cycles through 16,384 distinct CJK scalars to exercise
+width lookups that a small cache cannot retain. Keep it alongside the repeated
+Unicode case when evaluating width optimizations. The cloud evaluation rejected
+a 512-entry width cache because its mixed results did not justify adopting it.
 
 ## Integration validation
 

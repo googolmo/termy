@@ -125,6 +125,24 @@ fn main() {
         64 * 1024,
         true,
     );
+    // More distinct scalars than a small width cache can retain. Keep them
+    // printable and non-combining so this measures width misses and grid writes,
+    // not allocations for previously unseen combining suffixes.
+    let mut varied = String::new();
+    for scalar in 0x4e00..0x8e00 {
+        varied.push(char::from_u32(scalar).unwrap());
+        if scalar % 40 == 39 {
+            varied.push_str("\r\n");
+        }
+    }
+    run(
+        "varied Unicode / 64KiB",
+        varied.as_bytes(),
+        target,
+        64 * 1024,
+        true,
+    );
+    drop(varied);
     run(
         "combining / 64KiB",
         "e\u{301} a\u{308} n\u{303} o\u{302} u\u{30a}\r\n".as_bytes(),

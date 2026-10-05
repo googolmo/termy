@@ -6,9 +6,11 @@ Unicode is slower, and the old compact Tmon display backend is substantially
 faster and smaller than the new dense grid in these workloads. Real PTY latency
 is similar. The measured changes do not establish a reduction in idle CPU.
 
-Measurements stopped at the user's request to push the work for cloud
-continuation. Paired application output CPU and output-to-frame latency remain
-unfinished; no result is claimed for either.
+The original macOS measurements stopped at the user's request to push the work
+for cloud continuation. The cloud follow-up at the end of this report records
+the completed CI tracing runs and a rejected Unicode-width cache experiment.
+Focused-app paired output measurements and presented-frame latency remain
+unmeasured; CI render callbacks do not establish presentation latency.
 
 ## Provenance and method
 
@@ -232,5 +234,79 @@ needed for cloud continuation. Locally retained files include:
   rejected exploratory runs and must not be combined with the accepted samples.
 
 No width-cache optimization or additional application measurement is included
-in these results. Resume those gates from the cloud handoff rather than treating
-this report as evidence they are complete.
+in the original macOS results above. The following cloud evaluation is separate.
+
+## Cloud completion: dependency removal and Unicode evaluation
+
+The cloud audit found no Alacritty packages in Cargo.lock or the workspace's
+all-target dependency tree. The boundary gate now checks **all workspace
+packages, features, target platforms, and normal/build/dev dependencies** for
+Alacritty packages. It captures Cargo output before matching, avoiding an early
+`rg -q` exit masking a forbidden dependency under `pipefail`. A fixture with an
+Alacritty entry followed by 100,000 unrelated entries was correctly rejected.
+The legacy Tmon implementation remains outside the compiled module tree and
+unchanged by this follow-up; historical comparisons remain historical evidence.
+
+### Width-cache decision: rejected
+
+The proposed per-grid 512-entry boxed `u32` cache was implemented and tested,
+then removed. Each entry stored the complete scalar shifted left two bits plus
+its width, used the top nine bits of `scalar.wrapping_mul(0x9e3779b1)` as the
+slot, checked the complete scalar on hits, and used `UnicodeWidthChar::width`
+on misses. ASCII bypassed the cache; reflow was unchanged. Exhaustive checks
+covered every Unicode scalar on a miss and hit, width 3 for U+17D8, and collisions
+between scalars of different widths. All 160 prototype engine tests passed.
+
+Six alternating baseline/candidate pairs ran on the Linux x86_64 cloud executor
+(Intel Xeon Platinum 8573C, five virtual CPUs, Rust 1.99.0), with no concurrent
+build or test suite. Each case fed 128 MiB after eight warmup blocks. Both
+binaries used the committed benchmark including its new 16,384-scalar CJK case.
+The baseline engine was `b651c7bd`; the candidate changed only the grid's width
+lookup and added its cache. These are parser/grid comparisons with the existing
+custom engine, **not new comparisons against Alacritty**.
+
+| Workload | Baseline median MiB/s (range) | Cache median MiB/s (range) | Ratio |
+| --- | ---: | ---: | ---: |
+| Plain scrolling, 64 KiB | 115.40 (94.7–119.1) | 145.40 (93.5–157.7) | 1.260× |
+| Styled redraw | 99.40 (83.7–101.6) | 98.55 (59.2–107.3) | 0.991× |
+| Repeated mixed Unicode | 54.65 (46.4–55.4) | 55.55 (38.2–60.1) | 1.016× |
+| Varied Unicode | 62.55 (61.3–66.1) | 57.20 (50.8–63.4) | 0.914× |
+| Combining marks | 16.35 (15.6–17.2) | 15.30 (13.6–18.3) | 0.936× |
+| Plain scrolling, one byte | 16.60 (12.9–17.3) | 16.50 (15.6–17.7) | 0.994× |
+
+All 72 measured cases allocated zero times after warmup. The cache added 2 KiB
+of retained requested heap per engine. Timing varied substantially on the shared
+cloud executor, including workloads that bypass the cache; these samples do not
+establish precise causal speedups. The small repeated-Unicode gain and lower
+varied/combining medians do not justify adopting the cache. The final engine
+therefore retains its original lookup. The varied-Unicode benchmark is retained
+in CI to expose this tradeoff in future proposals. The original mixed-Unicode
+regression and dense-history/Tmon tradeoffs remain unresolved and documented.
+
+Benchmark binary SHA-256 values:
+
+```text
+baseline fe551d09628a5578cba5cc6b38e9816adc86085b9c0e0c9b1c67acd6ef87cd8c
+cache    86d991d0dc212739667c97155a8b5853375a3f10f0f16c17fb53d11837c03ad2
+```
+
+Local raw samples, paired JSON, saved binaries and the rejected prototype are
+under `target/custom-engine-cloud/` (ignored artifacts). Reproduce the retained
+six-case allocation probe with `cargo run --locked --release -p termy_core
+--example terminal_engine_bench -- 128`.
+
+### Completed hosted tracing
+
+All four [macOS performance gates at `b651c7bd`](https://github.com/lassejlv/termy/actions/runs/37296537917)
+passed, including echo-train and steady-scroll. This confirms that the separate
+startup allowance resolves the observed baseline trace timeout in that run.
+The architecture/workspace/platform/tmux checks and parser allocation benchmark
+also passed at that commit. Final-head status belongs to the PR checks.
+
+The hosted echo-train report recorded 40 samples and zero missed echoes for
+both binaries. First render-callback p95 was 23.37 ms baseline and 24.44 ms
+candidate; p99 was 27.13 ms and 79.78 ms respectively. These are single-run
+diagnostics, not a demonstrated latency improvement. Displayed-frame samples
+were unavailable because Animation Hitches tracing was disabled. This Linux
+executor cannot perform the handoff's focused native macOS window measurements;
+neither the hosted callbacks nor a virtual Linux display replaces those checks.
