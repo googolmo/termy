@@ -7801,7 +7801,6 @@ dependencies = [
 name = "termy"
 version = "0.2.81"
 dependencies = [
- "alacritty_terminal",
  "anyhow",
  "bincode",
  "clipboard-rs",

@@ -1012,13 +1012,13 @@ mod tests {
     }
 
     #[test]
-    fn visible_search_line_range_maps_display_offset_to_alacritty_lines() {
+    fn visible_search_line_range_maps_display_offset_to_buffer_lines() {
         assert_eq!(visible_search_line_range(0, 24), (0, 23));
         assert_eq!(visible_search_line_range(10, 24), (-10, 13));
     }
 
     #[test]
-    fn search_line_span_counts_inclusive_alacritty_lines() {
+    fn search_line_span_counts_inclusive_buffer_lines() {
         assert_eq!(search_line_span(0, 23), 24);
         assert_eq!(search_line_span(-10, 13), 24);
         assert_eq!(search_line_span(4, 3), 0);

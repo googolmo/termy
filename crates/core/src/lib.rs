@@ -120,4 +120,6 @@ pub mod themes;
 
 pub mod tmon;
 
+pub mod terminal_engine;
+
 pub mod tmux_control_core;

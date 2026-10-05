@@ -466,15 +466,23 @@ impl AlacrittyBackend {
         self.kitty_clipboard.lock().paste_events_enabled()
     }
 
+    pub fn kitty_clipboard_paste_notification(
+        &self,
+        location: TerminalClipboardLocation,
+        available_formats: &[String],
+    ) -> Option<Vec<u8>> {
+        self.kitty_clipboard
+            .lock()
+            .paste_notification(location, available_formats)
+    }
+
     pub fn send_kitty_clipboard_paste_event(
         &self,
         location: TerminalClipboardLocation,
         available_formats: &[String],
     ) -> bool {
-        let Some(notification) = self
-            .kitty_clipboard
-            .lock()
-            .paste_notification(location, available_formats)
+        let Some(notification) =
+            self.kitty_clipboard_paste_notification(location, available_formats)
         else {
             return false;
         };

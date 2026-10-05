@@ -177,21 +177,30 @@ impl TmonBackend {
         self.terminal.kitty_clipboard_paste_events_mode()
     }
 
-    pub(super) fn send_kitty_clipboard_paste_event(
+    pub(super) fn kitty_clipboard_paste_notification(
         &self,
         location: TerminalClipboardLocation,
         available_formats: &[String],
-    ) -> bool {
+    ) -> Option<Vec<u8>> {
         let enabled = self.terminal.kitty_clipboard_paste_events_mode();
         let mut state = self
             .kitty_clipboard
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         state.set_paste_events_enabled(enabled);
-        let Some(notification) = state.paste_notification(location, available_formats) else {
+        state.paste_notification(location, available_formats)
+    }
+
+    pub(super) fn send_kitty_clipboard_paste_event(
+        &self,
+        location: TerminalClipboardLocation,
+        available_formats: &[String],
+    ) -> bool {
+        let Some(notification) =
+            self.kitty_clipboard_paste_notification(location, available_formats)
+        else {
             return false;
         };
-        drop(state);
         self.terminal.write_protocol_reply_owned(notification);
         true
     }

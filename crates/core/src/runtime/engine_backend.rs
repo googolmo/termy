@@ -320,6 +320,23 @@ impl Backend {
         }
     }
 
+    pub(super) fn kitty_clipboard_paste_notification(
+        &self,
+        location: TerminalClipboardLocation,
+        available_formats: &[String],
+    ) -> Option<Vec<u8>> {
+        match self {
+            Self::Alacritty(backend) => {
+                backend.kitty_clipboard_paste_notification(location, available_formats)
+            }
+            Self::Tmon(backend) => {
+                backend.kitty_clipboard_paste_notification(location, available_formats)
+            }
+            // The session host owns both the grant state and transport remotely.
+            Self::Remote(_) => None,
+        }
+    }
+
     pub(super) fn send_kitty_clipboard_paste_event(
         &self,
         location: TerminalClipboardLocation,

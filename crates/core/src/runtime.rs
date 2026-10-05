@@ -2405,6 +2405,18 @@ impl Terminal {
         self.backend.kitty_clipboard_paste_events_enabled()
     }
 
+    /// Build a paste notification for a local terminal with an external transport,
+    /// retaining its single-use permission grant for the corresponding read.
+    /// Remote terminals use `send_kitty_clipboard_paste_event` through their host.
+    pub fn kitty_clipboard_paste_notification(
+        &self,
+        location: TerminalClipboardLocation,
+        available_formats: &[String],
+    ) -> Option<Vec<u8>> {
+        self.backend
+            .kitty_clipboard_paste_notification(location, available_formats)
+    }
+
     pub fn send_kitty_clipboard_paste_event(
         &self,
         location: TerminalClipboardLocation,

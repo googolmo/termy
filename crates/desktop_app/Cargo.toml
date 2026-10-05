@@ -19,7 +19,6 @@ workspace = true
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 gpui-kit = { workspace = true }
-alacritty_terminal = { workspace = true }
 flume = { workspace = true }
 anyhow = { workspace = true }
 dirs = { workspace = true }

@@ -2,7 +2,6 @@ use super::scrollbar as terminal_scrollbar;
 use super::surface::{terminal_edge_backgrounds, tui_surface_background};
 use super::*;
 use crate::ui::scrollbar::{self as ui_scrollbar, ScrollbarPaintStyle};
-use alacritty_terminal::vte::ansi::{Color as AnsiColor, NamedColor};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::{ElementInputHandler, ObjectFit, StyledImage, canvas};
 use std::sync::Arc;
@@ -243,22 +242,11 @@ struct CellTextAttributes {
     strikethrough: bool,
 }
 
-fn cell_text_attributes(flags: Flags) -> CellTextAttributes {
-    CellTextAttributes {
-        bold: flags.contains(Flags::BOLD),
-        italic: flags.contains(Flags::ITALIC),
-        strikethrough: flags.contains(Flags::STRIKEOUT),
-    }
-}
-
 fn terminal_cell_text_attributes(cell: TerminalCellRef<'_>) -> CellTextAttributes {
-    match cell {
-        TerminalCellRef::Tmux(cell) => cell_text_attributes(cell.flags),
-        TerminalCellRef::Native(cell) => CellTextAttributes {
-            bold: cell.bold,
-            italic: cell.italic,
-            strikethrough: cell.strikethrough,
-        },
+    CellTextAttributes {
+        bold: cell.0.bold,
+        italic: cell.0.italic,
+        strikethrough: cell.0.strikethrough,
     }
 }
 
@@ -289,24 +277,12 @@ fn terminal_cell_underline(
     cell: TerminalCellRef<'_>,
     context: PaneCellBuildContext<'_>,
 ) -> Option<crate::terminal_ui::TerminalUnderline> {
-    match cell {
-        // Preserve the existing tmux presentation policy until PaneTerminal
-        // moves behind core: every underline variant is painted as a single
-        // underline using the effective foreground.
-        TerminalCellRef::Tmux(cell) => cell.flags.intersects(Flags::ALL_UNDERLINES).then_some(
-            crate::terminal_ui::TerminalUnderline {
-                style: crate::terminal_ui::TerminalUnderlineStyle::Single,
-                color: None,
-            },
-        ),
-        TerminalCellRef::Native(cell) => {
-            let style = core_terminal_underline_style(cell.underline_style)?;
-            let color = cell.underline_color.map(|color| {
-                resolve_core_color(color, context.colors, context.core_palette).into()
-            });
-            Some(crate::terminal_ui::TerminalUnderline { style, color })
-        }
-    }
+    let cell = cell.0;
+    let style = core_terminal_underline_style(cell.underline_style)?;
+    let color = cell
+        .underline_color
+        .map(|color| resolve_core_color(color, context.colors, context.core_palette).into());
+    Some(crate::terminal_ui::TerminalUnderline { style, color })
 }
 
 impl CellColorTransform {
@@ -536,10 +512,6 @@ struct ResolvedCellColors {
     uses_terminal_default_bg: bool,
 }
 
-fn uses_terminal_default_background(color: AnsiColor) -> bool {
-    matches!(color, AnsiColor::Named(NamedColor::Background))
-}
-
 fn resolve_core_color(
     color: termy_core::TerminalRenderColor,
     colors: &TerminalColors,
@@ -599,40 +571,20 @@ fn resolve_cell_colors<'a>(
     cell_content: impl Into<TerminalCellRef<'a>>,
     context: PaneCellBuildContext<'_>,
 ) -> ResolvedCellColors {
-    let cell_content = cell_content.into();
-    let (mut fg, mut bg, uses_terminal_default_bg, dim, character) = match cell_content {
-        TerminalCellRef::Tmux(cell) => {
-            let mut fg_source = cell.fg;
-            let mut bg_source = cell.bg;
-            if cell.flags.contains(Flags::INVERSE) {
-                std::mem::swap(&mut fg_source, &mut bg_source);
-            }
-            (
-                context.colors.convert(fg_source),
-                context.colors.convert(bg_source),
-                uses_terminal_default_background(bg_source),
-                cell.flags.contains(Flags::DIM),
-                cell.c,
-            )
-        }
-        TerminalCellRef::Native(cell) => {
-            let mut fg_source = cell.foreground;
-            let mut bg_source = cell.background;
-            if cell.inverse {
-                std::mem::swap(&mut fg_source, &mut bg_source);
-            }
-            (
-                resolve_core_color(fg_source, context.colors, context.core_palette),
-                resolve_core_color(bg_source, context.colors, context.core_palette),
-                matches!(
-                    bg_source,
-                    termy_core::TerminalRenderColor::DefaultBackground
-                ),
-                cell.dim,
-                cell.text.chars().next().unwrap_or('\0'),
-            )
-        }
-    };
+    let cell = cell_content.into().0;
+    let mut fg_source = cell.foreground;
+    let mut bg_source = cell.background;
+    if cell.inverse {
+        std::mem::swap(&mut fg_source, &mut bg_source);
+    }
+    let mut fg = resolve_core_color(fg_source, context.colors, context.core_palette);
+    let mut bg = resolve_core_color(bg_source, context.colors, context.core_palette);
+    let uses_terminal_default_bg = matches!(
+        bg_source,
+        termy_core::TerminalRenderColor::DefaultBackground
+    );
+    let dim = cell.dim;
+    let character = cell.text.chars().next().unwrap_or('\0');
 
     if dim {
         fg.r *= DIM_TEXT_FACTOR;
@@ -4225,58 +4177,54 @@ mod tests {
     }
 
     fn test_term_cell(
-        fg: AnsiColor,
-        bg: AnsiColor,
-        flags: Flags,
-    ) -> alacritty_terminal::term::cell::Cell {
-        alacritty_terminal::term::cell::Cell {
-            fg,
-            bg,
-            flags,
-            ..alacritty_terminal::term::cell::Cell::default()
+        fg: termy_core::TerminalRenderColor,
+        bg: termy_core::TerminalRenderColor,
+        attributes: termy_core::TerminalRenderCell,
+    ) -> termy_core::TerminalRenderCell {
+        termy_core::TerminalRenderCell {
+            foreground: fg,
+            background: bg,
+            ..attributes
         }
     }
 
     #[test]
     fn cell_text_attributes_preserve_sgr_flags() {
-        let attributes =
-            cell_text_attributes(Flags::BOLD | Flags::ITALIC | Flags::UNDERLINE | Flags::STRIKEOUT);
-
+        let cell = termy_core::TerminalRenderCell {
+            bold: true,
+            italic: true,
+            strikethrough: true,
+            underline_style: termy_core::TerminalUnderlineStyle::Single,
+            ..Default::default()
+        };
+        let attributes = terminal_cell_text_attributes((&cell).into());
         assert!(attributes.bold);
         assert!(attributes.italic);
         assert!(attributes.strikethrough);
     }
 
     #[test]
-    fn native_underline_variants_preserve_the_existing_single_foreground_rendering() {
+    fn tmux_underline_variants_preserve_core_styles() {
         let context = test_build_context(1.0);
-        for flags in [
-            Flags::UNDERLINE,
-            Flags::DOUBLE_UNDERLINE,
-            Flags::UNDERCURL,
-            Flags::DOTTED_UNDERLINE,
-            Flags::DASHED_UNDERLINE,
+        for (sgr, expected) in [
+            ("4", crate::terminal_ui::TerminalUnderlineStyle::Single),
+            ("4:2", crate::terminal_ui::TerminalUnderlineStyle::Double),
+            ("4:3", crate::terminal_ui::TerminalUnderlineStyle::Curly),
+            ("4:4", crate::terminal_ui::TerminalUnderlineStyle::Dotted),
+            ("4:5", crate::terminal_ui::TerminalUnderlineStyle::Dashed),
         ] {
-            let cell = test_term_cell(
-                AnsiColor::Named(NamedColor::Foreground),
-                AnsiColor::Named(NamedColor::Background),
-                flags,
-            );
-            let underline = terminal_cell_underline((&cell).into(), context)
-                .expect("native underline flag should render");
-            assert_eq!(
-                underline.style,
-                crate::terminal_ui::TerminalUnderlineStyle::Single
-            );
+            let pane = PaneTerminal::new(TerminalSize::default(), TerminalOptions::default());
+            pane.feed_output(format!("\x1b[{sgr}mU\x1b[0mN").as_bytes());
+            let read = pane.render_read(true);
+            let underline = terminal_cell_underline((&read.cells[0]).into(), context)
+                .expect("underline should render");
+            assert_eq!(underline.style, expected);
             assert_eq!(underline.color, None);
+            assert_eq!(
+                terminal_cell_underline((&read.cells[1]).into(), context),
+                None
+            );
         }
-
-        let cell = test_term_cell(
-            AnsiColor::Named(NamedColor::Foreground),
-            AnsiColor::Named(NamedColor::Background),
-            Flags::empty(),
-        );
-        assert_eq!(terminal_cell_underline((&cell).into(), context), None);
     }
 
     #[test]
@@ -4834,9 +4782,9 @@ mod tests {
 
         let default_background = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Foreground),
-                AnsiColor::Named(NamedColor::Background),
-                Flags::empty(),
+                termy_core::TerminalRenderColor::DefaultForeground,
+                termy_core::TerminalRenderColor::DefaultBackground,
+                termy_core::TerminalRenderCell::default(),
             ),
             context,
         );
@@ -4845,9 +4793,9 @@ mod tests {
 
         let ansi_black_background = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Foreground),
-                AnsiColor::Named(NamedColor::Black),
-                Flags::empty(),
+                termy_core::TerminalRenderColor::DefaultForeground,
+                termy_core::TerminalRenderColor::Indexed(0),
+                termy_core::TerminalRenderCell::default(),
             ),
             context,
         );
@@ -4856,9 +4804,9 @@ mod tests {
 
         let indexed_background = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Foreground),
-                AnsiColor::Indexed(232),
-                Flags::empty(),
+                termy_core::TerminalRenderColor::DefaultForeground,
+                termy_core::TerminalRenderColor::Indexed(232),
+                termy_core::TerminalRenderCell::default(),
             ),
             context,
         );
@@ -4867,13 +4815,13 @@ mod tests {
 
         let rgb_background = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Foreground),
-                AnsiColor::Spec(alacritty_terminal::vte::ansi::Rgb {
+                termy_core::TerminalRenderColor::DefaultForeground,
+                termy_core::TerminalRenderColor::Rgb(TerminalColor {
                     r: 12,
                     g: 34,
                     b: 56,
                 }),
-                Flags::empty(),
+                termy_core::TerminalRenderCell::default(),
             ),
             context,
         );
@@ -4891,11 +4839,11 @@ mod tests {
             ..termy_core::TerminalRenderCell::default()
         };
 
-        let resolved = resolve_cell_colors(TerminalCellRef::Native(&cell), context);
+        let resolved = resolve_cell_colors(TerminalCellRef(&cell), context);
         assert_eq!(resolved.fg, context.colors.ansi[1]);
         assert!(resolved.uses_terminal_default_bg);
         assert!((resolved.bg.a - 0.25).abs() <= f32::EPSILON);
-        assert!(terminal_cell_text_attributes(TerminalCellRef::Native(&cell)).bold);
+        assert!(terminal_cell_text_attributes(TerminalCellRef(&cell)).bold);
     }
 
     #[test]
@@ -4917,7 +4865,7 @@ mod tests {
         terminal.visit_viewport_cells(|_, _, _, cell| {
             if cell.text == "X" {
                 observed = true;
-                let resolved = resolve_cell_colors(TerminalCellRef::Native(cell), context);
+                let resolved = resolve_cell_colors(TerminalCellRef(cell), context);
                 assert!(!resolved.uses_terminal_default_bg);
                 assert_eq!(resolved.bg, context.colors.foreground);
                 assert!((resolved.bg.a - 1.0).abs() <= f32::EPSILON);
@@ -4952,10 +4900,10 @@ mod tests {
         };
 
         assert_eq!(
-            resolve_cell_colors(TerminalCellRef::Native(&indexed), context).fg,
+            resolve_cell_colors(TerminalCellRef(&indexed), context).fg,
             rgb(0x12, 0x34, 0x56)
         );
-        let resolved_defaults = resolve_cell_colors(TerminalCellRef::Native(&defaults), context);
+        let resolved_defaults = resolve_cell_colors(TerminalCellRef(&defaults), context);
         assert_eq!(resolved_defaults.fg, rgb(0xab, 0xcd, 0xef));
         assert_eq!(resolved_defaults.bg, rgb(0x01, 0x02, 0x03));
     }
@@ -4966,9 +4914,9 @@ mod tests {
 
         let ansi_background = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Foreground),
-                AnsiColor::Named(NamedColor::Black),
-                Flags::empty(),
+                termy_core::TerminalRenderColor::DefaultForeground,
+                termy_core::TerminalRenderColor::Indexed(0),
+                termy_core::TerminalRenderCell::default(),
             ),
             context,
         );
@@ -4977,9 +4925,9 @@ mod tests {
 
         let indexed_background = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Foreground),
-                AnsiColor::Indexed(232),
-                Flags::empty(),
+                termy_core::TerminalRenderColor::DefaultForeground,
+                termy_core::TerminalRenderColor::Indexed(232),
+                termy_core::TerminalRenderCell::default(),
             ),
             context,
         );
@@ -4988,13 +4936,13 @@ mod tests {
 
         let rgb_background = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Foreground),
-                AnsiColor::Spec(alacritty_terminal::vte::ansi::Rgb {
+                termy_core::TerminalRenderColor::DefaultForeground,
+                termy_core::TerminalRenderColor::Rgb(TerminalColor {
                     r: 12,
                     g: 34,
                     b: 56,
                 }),
-                Flags::empty(),
+                termy_core::TerminalRenderCell::default(),
             ),
             context,
         );
@@ -5006,11 +4954,13 @@ mod tests {
     fn resolve_cell_colors_keeps_block_element_backgrounds_opaque() {
         let context = test_build_context_with_background_cells(0.2, true);
         let mut block_cell = test_term_cell(
-            AnsiColor::Named(NamedColor::Foreground),
-            AnsiColor::Indexed(232),
-            Flags::empty(),
+            termy_core::TerminalRenderColor::DefaultForeground,
+            termy_core::TerminalRenderColor::Indexed(232),
+            termy_core::TerminalRenderCell::default(),
         );
-        block_cell.c = '\u{2580}';
+        let terminal = NativeTerminal::new_display(TerminalSize::default(), None);
+        terminal.feed_output("\u{2580}".as_bytes());
+        block_cell.text = terminal.render_read(true).cells[0].text.clone();
 
         let resolved = resolve_cell_colors(&block_cell, context);
 
@@ -5023,9 +4973,12 @@ mod tests {
         let context = test_build_context(0.2);
         let inverse_default_background = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Background),
-                AnsiColor::Named(NamedColor::Red),
-                Flags::INVERSE,
+                termy_core::TerminalRenderColor::DefaultBackground,
+                termy_core::TerminalRenderColor::Indexed(1),
+                termy_core::TerminalRenderCell {
+                    inverse: true,
+                    ..Default::default()
+                },
             ),
             context,
         );
@@ -5043,20 +4996,14 @@ mod tests {
             ..termy_core::TerminalRenderCell::default()
         };
 
-        let resolved = resolve_cell_colors(
-            TerminalCellRef::Native(&inverse_default_background),
-            context,
-        );
+        let resolved = resolve_cell_colors(TerminalCellRef(&inverse_default_background), context);
 
         assert!(!resolved.uses_terminal_default_bg);
         assert!((resolved.bg.a - 1.0).abs() <= f32::EPSILON);
 
         inverse_default_background.foreground = termy_core::TerminalRenderColor::Indexed(2);
         inverse_default_background.background = termy_core::TerminalRenderColor::DefaultBackground;
-        let explicit = resolve_cell_colors(
-            TerminalCellRef::Native(&inverse_default_background),
-            context,
-        );
+        let explicit = resolve_cell_colors(TerminalCellRef(&inverse_default_background), context);
         assert!(!explicit.uses_terminal_default_bg);
         assert!((explicit.bg.a - 1.0).abs() <= f32::EPSILON);
     }
@@ -5088,9 +5035,9 @@ mod tests {
         let (_, default_bg) = resolved_default_cell_colors(context);
         let resolved = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Foreground),
-                AnsiColor::Named(NamedColor::Background),
-                Flags::empty(),
+                termy_core::TerminalRenderColor::DefaultForeground,
+                termy_core::TerminalRenderColor::DefaultBackground,
+                termy_core::TerminalRenderCell::default(),
             ),
             context,
         );
@@ -5105,9 +5052,12 @@ mod tests {
         let context = test_build_context(0.2);
         let inverse_explicit_background = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Green),
-                AnsiColor::Named(NamedColor::Background),
-                Flags::INVERSE,
+                termy_core::TerminalRenderColor::Indexed(2),
+                termy_core::TerminalRenderColor::DefaultBackground,
+                termy_core::TerminalRenderCell {
+                    inverse: true,
+                    ..Default::default()
+                },
             ),
             context,
         );
@@ -5121,9 +5071,12 @@ mod tests {
         let context = test_build_context_with_background_cells(0.2, true);
         let inverse_explicit_background = resolve_cell_colors(
             &test_term_cell(
-                AnsiColor::Named(NamedColor::Green),
-                AnsiColor::Named(NamedColor::Background),
-                Flags::INVERSE,
+                termy_core::TerminalRenderColor::Indexed(2),
+                termy_core::TerminalRenderColor::DefaultBackground,
+                termy_core::TerminalRenderCell {
+                    inverse: true,
+                    ..Default::default()
+                },
             ),
             context,
         );
