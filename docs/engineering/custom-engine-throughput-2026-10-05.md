@@ -36,6 +36,8 @@ randomized editing, background changes, history and alternate-screen operations.
 The complete local core and CLI suites also pass: 721 core unit tests and 46 core
 integration tests, with existing ignores retained. Core library/example strict
 Clippy, workspace formatting and architecture boundary checks pass.
+The Linux desktop build and virtual-display smoke also pass: a visible rendered
+window accepts keyboard input and executes a command through a real PTY shell.
 
 ## Comparable measurements
 
@@ -43,8 +45,9 @@ Clippy, workspace formatting and architecture boundary checks pass.
   `TERMY_CORE_TEST_BACKEND=alacritty` selects its historical native engine;
   otherwise the old display facade defaults to Tmon. Every process reports its
   engine, and the runner verifies the labels.
-- Candidate: this performance follow-up to `fed48fda`. Saved binary hashes below
-  identify the measured builds. Both use release `termy_core` libraries and the
+- Candidate runtime: `6b3613b27519f015673ad8ed429a80c901432618`, the performance
+  follow-up to `fed48fda`. Saved binary hashes below identify the measured builds.
+  Both use release `termy_core` libraries and the
   **identical, uninstrumented** `terminal_facade_bench.rs` source.
 - Linux x86_64, Intel Xeon Platinum 8573C, Rust 1.99.0, locked dependencies.
   Timed throughput processes were pinned to CPU 2. No builds or tests overlapped.
@@ -78,6 +81,10 @@ this does not model incremental renderer cadence or render any cells.
 | Repeated combining marks | 37.668 | 54.669 | 1.440× |
 | 112 distinct combining marks | 29.584 | 58.091 | 1.922× |
 | One-byte plain-text fragments | 1.724 | 8.489 | 4.954× |
+
+Cloud timings vary: the mixed-Unicode damage case's individual paired ratios
+range from 0.847× to 1.276×. The claims above concern the six-pair medians,
+not every individual run. Independent hosted comparisons are retained in CI.
 
 Source and executable SHA-256:
 
