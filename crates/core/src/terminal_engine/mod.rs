@@ -181,7 +181,8 @@ impl Engine {
     }
     /// Compact cold scrollback after an output burst. This preserves all cells
     /// and damage; borrowed row views remain available on demand. The native
-    /// runtime schedules bounded steps after 250 ms without output.
+    /// runtime schedules bounded steps after 250 ms without output, or at most
+    /// 2 s after history first needs compaction.
     pub fn compact_history(&mut self) {
         self.state.grid.compact_history(usize::MAX);
     }
@@ -224,6 +225,20 @@ impl Engine {
                 .store(true, std::sync::atomic::Ordering::Relaxed);
         }
         self.state.grid.visible_row(row).map(|row| row.cells())
+    }
+
+    /// Visit a viewport row without retaining a dense copy of cold history.
+    /// Renderers reuse `scratch` across rows and frames.
+    pub(crate) fn with_viewport_row<T>(
+        &self,
+        row: usize,
+        scratch: &mut Vec<Cell>,
+        read: impl FnOnce(&[Cell]) -> T,
+    ) -> Option<T> {
+        self.state
+            .grid
+            .visible_row(row)
+            .map(|row| row.with_cells(scratch, read))
     }
 
     pub fn viewport_row_wrapped(&self, row: usize) -> bool {

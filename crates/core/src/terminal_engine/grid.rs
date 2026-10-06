@@ -187,6 +187,8 @@ pub(super) struct Grid {
     pending_scrolls: Vec<ViewportScroll>,
     combining_cache: CombiningCache,
     grapheme_open: bool,
+    // The last cluster's base was discarded at the margin with autowrap off.
+    grapheme_dropped: bool,
     grapheme_ordinary: bool,
     grapheme_at_margin: bool,
     pub(super) history_activity: bool,
@@ -259,6 +261,7 @@ impl Grid {
             pending_scrolls: Vec::with_capacity(MAX_SCROLL_DAMAGE),
             combining_cache: CombiningCache::default(),
             grapheme_open: false,
+            grapheme_dropped: false,
             grapheme_ordinary: true,
             grapheme_at_margin: false,
             history_activity: false,
@@ -459,6 +462,7 @@ impl Grid {
 
     pub(super) fn end_grapheme(&mut self) {
         self.grapheme_open = false;
+        self.grapheme_dropped = false;
     }
 
     fn motion_done(&mut self, old: Cursor) {
@@ -1090,6 +1094,10 @@ impl Grid {
         self.size = size;
         self.history_limit = Self::bounded_history(size, self.requested_history_limit);
         self.trim_history();
+        self.pending_compaction = self.pending_compaction.min(self.history.len());
+        if self.pending_compaction != 0 {
+            self.history_activity = true;
+        }
         self.scroll_top = 0;
         self.scroll_bottom = size.rows;
         let old_cols = self.tabs.len();
@@ -1112,9 +1120,12 @@ impl Grid {
         if self.primary.rows.len() > size.rows {
             let remove_top = self.primary.cursor.row.saturating_sub(size.rows - 1);
             for _ in 0..remove_top {
-                if let Some(mut row) = self.primary.rows.pop_front() {
-                    row.compact();
+                if let Some(row) = self.primary.rows.pop_front() {
+                    // Compaction walks the newest `pending_compaction` rows,
+                    // so new history joins that window instead of being packed
+                    // here and hiding older dense rows from the idle steps.
                     self.history.push_back(row);
+                    self.pending_compaction += 1;
                 }
             }
             self.primary.cursor.row = self.primary.cursor.row.saturating_sub(remove_top);
@@ -1125,6 +1136,7 @@ impl Grid {
                     let Some(mut row) = self.history.pop_back() else {
                         break;
                     };
+                    self.pending_compaction = self.pending_compaction.saturating_sub(1);
                     row.make_dense();
                     self.primary.rows.push_front(row);
                     self.primary.cursor.row += 1;
@@ -1246,10 +1258,9 @@ impl Grid {
         }
         self.primary.rows = output.rows.split_off(split - output.first);
         self.history = output.rows;
-        self.pending_compaction = 0;
-        for row in &mut self.history {
-            row.compact();
-        }
+        // Reflow leaves every history row dense. Repack them in the bounded
+        // idle steps rather than all at once on the resize path.
+        self.pending_compaction = self.history.len();
         self.primary.cursor.row = cursor.0 - split;
         self.primary.cursor.col = cursor.1;
         self.primary.pending_wrap = cursor.2;

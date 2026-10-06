@@ -19,8 +19,22 @@ pub(super) fn cell_width(cell: &Cell) -> usize {
 // These base characters have a grapheme break between one another, even
 // after a suffix without a trailing ZWJ. Hangul Jamo, Indic scripts, prepend
 // marks, regional indicators, and emoji modifiers use the segmentation tables.
+// Box drawing, braille, arrows, private-use (Powerline/Nerd Font) glyphs, CJK
+// punctuation and fullwidth forms are common in TUIs, so they stay on this path.
 fn ordinary_base(c: char) -> bool {
-    matches!(c, '\u{20}'..='\u{2ff}' | '\u{370}'..='\u{482}' | '\u{48a}'..='\u{52f}' | '\u{3041}'..='\u{3096}' | '\u{30a1}'..='\u{30fa}' | '\u{3400}'..='\u{9fff}' | '\u{ac00}'..='\u{d7a3}' | '\u{2600}'..='\u{27ff}' | '\u{1f300}'..='\u{1f3fa}' | '\u{1f400}'..='\u{1faff}')
+    matches!(c, '\u{20}'..='\u{2ff}' | '\u{370}'..='\u{482}' | '\u{48a}'..='\u{52f}' | '\u{2010}'..='\u{2027}' | '\u{2030}'..='\u{205e}' | '\u{20a0}'..='\u{20cf}' | '\u{2100}'..='\u{2bff}' | '\u{3000}'..='\u{3029}' | '\u{3030}'..='\u{303f}' | '\u{3041}'..='\u{3096}' | '\u{309b}'..='\u{30ff}' | '\u{3400}'..='\u{9fff}' | '\u{ac00}'..='\u{d7a3}' | '\u{e000}'..='\u{f8ff}' | '\u{ff01}'..='\u{ff9d}' | '\u{ffa0}'..='\u{ffef}' | '\u{1f300}'..='\u{1f3fa}' | '\u{1f400}'..='\u{1faff}')
+}
+
+/// Extend, ZWJ and spacing marks join any preceding base, so checking them
+/// against one ASCII letter avoids segmenting a long retained cluster.
+fn always_extends(c: char) -> bool {
+    let mut bytes = [b'a'; 5];
+    let len = 1 + c.encode_utf8(&mut bytes[1..]).len();
+    std::str::from_utf8(&bytes[..len])
+        .expect("grapheme UTF-8")
+        .graphemes(true)
+        .nth(1)
+        .is_none()
 }
 
 impl Grid {
@@ -40,6 +54,12 @@ impl Grid {
             col = col.saturating_sub(1);
         }
         let previous = &self.screen().rows[row].cells[col];
+        // Match the existing bound on untrusted combining sequences. Discard
+        // excess suffixes without moving the cursor or splitting a cluster.
+        let over_limit = previous.combining().len() + character.len_utf8() > MAX_COMBINING_BYTES;
+        if over_limit && always_extends(character) {
+            return true;
+        }
         let mut bytes = [0; MAX_COMBINING_BYTES + 8];
         let mut len = previous.character.encode_utf8(&mut bytes).len();
         bytes[len..len + previous.combining().len()]
@@ -50,9 +70,7 @@ impl Grid {
         if text.graphemes(true).nth(1).is_some() {
             return false;
         }
-        // Match the existing bound on untrusted combining sequences. Discard
-        // excess suffixes without moving the cursor or splitting a cluster.
-        if previous.combining().len() + character.len_utf8() > MAX_COMBINING_BYTES {
+        if over_limit {
             return true;
         }
         let mut width = text.width().clamp(1, 2).min(self.size.cols);
@@ -108,6 +126,11 @@ impl Grid {
             if character == '\u{200d}' {
                 self.grapheme_ordinary = false;
             }
+            if self.grapheme_dropped {
+                // The cluster's base was discarded at the right margin. Its
+                // marks must not attach to the unrelated cell before it.
+                return;
+            }
             let mut row = self.cursor.row;
             let mut col = self.cursor.col;
             if !self.pending_wrap && !(self.grapheme_open && self.grapheme_at_margin) {
@@ -158,6 +181,10 @@ impl Grid {
         let width = width.min(self.size.cols).min(2);
         if width == 2 && self.cursor.col + 1 == self.size.cols {
             if !self.autowrap {
+                // The glyph is discarded, so nothing may extend the cell to
+                // its left as though it were this cluster.
+                self.grapheme_open = false;
+                self.grapheme_dropped = true;
                 return;
             }
             let row = self.cursor.row;
@@ -211,6 +238,7 @@ impl Grid {
             self.cursor.col += width;
         }
         self.grapheme_open = true;
+        self.grapheme_dropped = false;
         if self.full_damage {
             return;
         }
@@ -273,10 +301,47 @@ impl Grid {
                 self.pending_wrap = true;
             }
             self.grapheme_open = true;
+            self.grapheme_dropped = false;
             self.grapheme_ordinary = true;
             self.grapheme_at_margin = self.pending_wrap;
             self.mark(row, col, (col + count + 1).min(self.size.cols));
             text = &text[count..];
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The fast path skips segmentation between two ordinary bases, so every
+    // such base must start a new cluster after another one.
+    #[test]
+    fn ordinary_bases_always_break_from_each_other() {
+        for c in (0..=0x10ffff).filter_map(char::from_u32) {
+            if !ordinary_base(c) || c.width().unwrap_or(0) == 0 {
+                continue;
+            }
+            for text in [format!("a{c}"), format!("{c}a"), format!("{c}{c}")] {
+                assert_eq!(text.graphemes(true).count(), 2, "U+{:04X}", c as u32);
+            }
+        }
+    }
+
+    #[test]
+    fn always_extending_scalars_join_regardless_of_the_base() {
+        for c in [
+            '\u{301}',
+            '\u{200d}',
+            '\u{fe0f}',
+            '\u{20e3}',
+            '\u{1f3fd}',
+            '\u{93f}',
+        ] {
+            assert!(always_extends(c), "U+{:04X}", c as u32);
+        }
+        for c in ['a', '💻', '🇩', '\u{1100}'] {
+            assert!(!always_extends(c), "U+{:04X}", c as u32);
         }
     }
 }

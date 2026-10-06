@@ -133,15 +133,8 @@ pub(super) fn record(mut args: impl Iterator<Item = String>) -> Result<()> {
                 summary.displayed_frame_capture_status,
                 FrameCaptureStatus::Parsed
             ) || summary.displayed_frame_count < 2
-                || (matches!(
-                    run.scenario.as_str(),
-                    "cjk-scroll"
-                        | "heavy-tui"
-                        | "resize"
-                        | "graphics"
-                        | "steady-scroll"
-                        | "alt-screen-anim"
-                ) && summary.steady_presentation.is_none())
+                || (Scenario::parse(&run.scenario).is_ok_and(Scenario::is_continuous)
+                    && summary.steady_presentation.is_none())
         })
     }) {
         bail!(

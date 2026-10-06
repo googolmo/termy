@@ -31,7 +31,7 @@ use std::{
         Arc, Condvar, Mutex, MutexGuard, Weak,
         atomic::{AtomicBool, Ordering},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 mod maintenance;
@@ -43,6 +43,8 @@ const MAX_EVENTS: usize = 65_536;
 const MAX_EVENT_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PENDING_REPLIES: usize = 2 * 1024 * 1024;
 const PARSE_BATCH: usize = 4096;
+const HISTORY_COMPACTION_IDLE_DELAY: Duration = Duration::from_millis(250);
+const HISTORY_COMPACTION_MAX_DELAY: Duration = Duration::from_secs(2);
 
 pub(super) struct CustomBackend {
     shared: Arc<Shared>,
@@ -96,6 +98,9 @@ struct State {
     force_full_damage: bool,
     last_damage_cursor: Option<TerminalCursorState>,
     history_deadline: Option<Instant>,
+    // First output that left history uncompacted. Bounds how long steady
+    // output can keep postponing the idle compaction deadline.
+    history_pending_since: Option<Instant>,
 }
 
 enum PendingEvent {
@@ -160,10 +165,7 @@ impl Shared {
             replies.clear();
         }
         if state.engine.take_history_activity() {
-            state.history_deadline = state
-                .engine
-                .needs_history_compaction()
-                .then(|| Instant::now() + std::time::Duration::from_millis(250));
+            state.defer_history_compaction(Instant::now());
         }
         let should_notify = !state.engine.modes().synchronized_update || !state.events.is_empty();
         // Publish while the engine lock still protects this deadline: a later
@@ -178,6 +180,19 @@ impl Shared {
 }
 
 impl State {
+    /// Compact after output has been quiet for a short delay, but never wait
+    /// longer than the maximum delay, so a steady trickle still gets packed.
+    fn defer_history_compaction(&mut self, now: Instant) {
+        if !self.engine.needs_history_compaction() {
+            self.history_deadline = None;
+            self.history_pending_since = None;
+            return;
+        }
+        let since = *self.history_pending_since.get_or_insert(now);
+        self.history_deadline =
+            Some((now + HISTORY_COMPACTION_IDLE_DELAY).min(since + HISTORY_COMPACTION_MAX_DELAY));
+    }
+
     fn maintenance_deadline(&self) -> Option<Instant> {
         self.engine
             .synchronized_update_deadline()
@@ -216,6 +231,7 @@ impl State {
             force_full_damage: true,
             last_damage_cursor: None,
             history_deadline: None,
+            history_pending_since: None,
         }
     }
 
@@ -507,13 +523,14 @@ impl State {
         let update = self.take_damage(force_full);
         let mut cells =
             Vec::with_capacity(usize::from(self.size.cols) * usize::from(self.size.rows));
+        let mut scratch = Vec::new();
         for row in 0..usize::from(self.size.rows) {
             let wrapped = self.engine.viewport_row_wrapped(row);
-            if let Some(source) = self.engine.viewport_row(row) {
+            self.engine.with_viewport_row(row, &mut scratch, |source| {
                 for (col, cell) in source.iter().enumerate() {
                     cells.push(render_cell(cell, wrapped && col + 1 == source.len()));
                 }
-            }
+            });
         }
         TerminalRenderRead {
             metadata: self.metadata(),
@@ -706,6 +723,9 @@ impl CustomBackend {
         state
             .engine
             .set_cell_pixels(size.cell_width, size.cell_height);
+        if state.engine.take_history_activity() {
+            state.defer_history_compaction(Instant::now());
+        }
         let actual = state.engine.size();
         let size = TerminalSize {
             cols: actual.cols as u16,
@@ -875,18 +895,20 @@ impl CustomBackend {
         let palette = state.palette();
         let mut cells =
             Vec::with_capacity(usize::from(state.size.cols) * usize::from(state.size.rows));
+        let query_colors = state.query_colors;
+        let mut scratch = Vec::new();
         for row in 0..usize::from(state.size.rows) {
             let wrapped = state.engine.viewport_row_wrapped(row);
-            if let Some(line) = state.engine.viewport_row(row) {
+            state.engine.with_viewport_row(row, &mut scratch, |line| {
                 for (col, cell) in line.iter().enumerate() {
                     cells.push(legacy_cell(
                         cell,
                         wrapped && col + 1 == line.len(),
                         &palette,
-                        state.query_colors,
+                        query_colors,
                     ));
                 }
-            }
+            });
         }
         TermyFrame {
             cols: state.size.cols,
@@ -913,19 +935,23 @@ impl CustomBackend {
             TerminalDamageSnapshot::Partial(spans) => spans.clone(),
         };
         let mut cells = Vec::new();
+        let query_colors = state.query_colors;
+        let mut scratch = Vec::new();
         for span in spans {
             let wrapped = state.engine.viewport_row_wrapped(span.row);
-            if let Some(line) = state.engine.viewport_row(span.row) {
-                let right = span.right_col.min(line.len() - 1);
-                for col in span.left_col..=right {
-                    cells.push(legacy_cell(
-                        &line[col],
-                        wrapped && col + 1 == line.len(),
-                        &palette,
-                        state.query_colors,
-                    ));
-                }
-            }
+            state
+                .engine
+                .with_viewport_row(span.row, &mut scratch, |line| {
+                    let right = span.right_col.min(line.len() - 1);
+                    for col in span.left_col..=right {
+                        cells.push(legacy_cell(
+                            &line[col],
+                            wrapped && col + 1 == line.len(),
+                            &palette,
+                            query_colors,
+                        ));
+                    }
+                });
         }
         TermyFrameUpdate {
             cols: state.size.cols,
@@ -979,9 +1005,10 @@ impl CustomBackend {
     ) -> TerminalViewportMetadata {
         let state = self.shared.state();
         let offset = state.engine.display_offset();
+        let mut scratch = Vec::new();
         for row in 0..usize::from(state.size.rows) {
             let wrapped = state.engine.viewport_row_wrapped(row);
-            if let Some(line) = state.engine.viewport_row(row) {
+            state.engine.with_viewport_row(row, &mut scratch, |line| {
                 for (col, cell) in line.iter().enumerate() {
                     visitor(
                         offset,
@@ -990,7 +1017,7 @@ impl CustomBackend {
                         &render_cell(cell, wrapped && col + 1 == line.len()),
                     );
                 }
-            }
+            });
         }
         state.metadata()
     }
@@ -1024,20 +1051,23 @@ impl CustomBackend {
             return false;
         }
         let offset = state.engine.display_offset();
+        let mut scratch = Vec::new();
         for span in spans {
             let wrapped = state.engine.viewport_row_wrapped(span.row);
-            if let Some(line) = state.engine.viewport_row(span.row) {
-                let end = span.right_col.saturating_add(1).min(line.len());
-                for col in span.left_col.min(end)..end {
-                    visitor(
-                        span.row,
-                        offset,
-                        span.row as i32 - offset as i32,
-                        col,
-                        &render_cell(&line[col], wrapped && col + 1 == line.len()),
-                    );
-                }
-            }
+            state
+                .engine
+                .with_viewport_row(span.row, &mut scratch, |line| {
+                    let end = span.right_col.saturating_add(1).min(line.len());
+                    for col in span.left_col.min(end)..end {
+                        visitor(
+                            span.row,
+                            offset,
+                            span.row as i32 - offset as i32,
+                            col,
+                            &render_cell(&line[col], wrapped && col + 1 == line.len()),
+                        );
+                    }
+                });
         }
         true
     }

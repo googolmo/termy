@@ -1149,3 +1149,49 @@ fn alternate_width_growth_and_height_shrink_preserve_only_surviving_rows() {
     assert_eq!(grid.primary.rows.len(), 1);
     assert_eq!(grid.primary.rows[0].cells.len(), 4096);
 }
+
+fn assert_history_compacted(grid: &mut Grid) {
+    while grid.needs_compaction() {
+        grid.compact_history(256);
+    }
+    let dense = grid
+        .history
+        .iter()
+        .filter(|row| row.packed.is_none())
+        .count();
+    assert_eq!(
+        dense,
+        0,
+        "{dense} of {} history rows stayed dense",
+        grid.history.len()
+    );
+}
+
+#[test]
+fn height_shrink_keeps_older_history_in_the_compaction_window() {
+    let mut grid = grid(120, 10, 100);
+    for line in 0..30 {
+        print(&mut grid, &format!("line {line}\r\n"));
+    }
+    grid.resize(Size { cols: 120, rows: 4 });
+    assert!(grid.history_activity);
+    assert_history_compacted(&mut grid);
+    grid.resize(Size { cols: 120, rows: 8 });
+    grid.resize(Size { cols: 120, rows: 3 });
+    assert_history_compacted(&mut grid);
+}
+
+#[test]
+fn width_resize_defers_history_compaction_to_idle_steps() {
+    let mut grid = grid(120, 4, 100);
+    for line in 0..60 {
+        print(&mut grid, &format!("line {line}\r\n"));
+    }
+    assert_history_compacted(&mut grid);
+    grid.history_activity = false;
+    grid.resize(Size { cols: 100, rows: 4 });
+    assert!(grid.history.iter().all(|row| row.packed.is_none()));
+    assert!(grid.history_activity);
+    assert!(grid.needs_compaction());
+    assert_history_compacted(&mut grid);
+}

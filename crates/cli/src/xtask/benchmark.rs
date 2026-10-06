@@ -858,6 +858,19 @@ impl Scenario {
         }
     }
 
+    /// Continuous workloads report steady presented-frame intervals.
+    fn is_continuous(self) -> bool {
+        matches!(
+            self,
+            Self::CjkScroll
+                | Self::HeavyTui
+                | Self::Resize
+                | Self::Graphics
+                | Self::SteadyScroll
+                | Self::AltScreenAnim
+        )
+    }
+
     fn as_str(self) -> &'static str {
         match self {
             Self::IdleBlink => "idle-blink",
@@ -1387,22 +1400,12 @@ fn run_single_benchmark(
             Some("/trace-toc/run[@number=\"1\"]/data/table[@schema=\"hitches\"]"),
             &hitches_path,
         )?;
-        let mut summary =
-            parse_animation_summary(&displayed_frames_path, &hitches_path, launched_pid)?;
-        if matches!(
-            scenario,
-            Scenario::CjkScroll
-                | Scenario::HeavyTui
-                | Scenario::Resize
-                | Scenario::Graphics
-                | Scenario::SteadyScroll
-                | Scenario::AltScreenAnim
-        ) {
-            let xml = fs::read_to_string(&displayed_frames_path)?;
-            if let Ok(starts) = parse_displayed_frame_starts(&xml, launched_pid) {
-                summary.steady_presentation = presentation::summarize(&starts);
-            }
-        }
+        let summary = parse_animation_summary(
+            &displayed_frames_path,
+            &hitches_path,
+            launched_pid,
+            scenario.is_continuous(),
+        )?;
         write_json(&animation_dir.join("animation-summary.json"), &summary)?;
         Some(summary)
     } else {
@@ -1799,6 +1802,7 @@ fn parse_animation_summary(
     displayed_frames_path: &Path,
     hitches_path: &Path,
     launched_pid: u32,
+    continuous: bool,
 ) -> Result<AnimationSummary> {
     let displayed_frames_xml = fs::read_to_string(displayed_frames_path)
         .with_context(|| format!("failed to read {}", displayed_frames_path.display()))?;
@@ -1822,6 +1826,11 @@ fn parse_animation_summary(
             ),
         };
     let hitch_durations = parse_hitch_durations(&hitches_xml, launched_pid)?;
+    let steady_presentation = if continuous && !frame_starts.is_empty() {
+        presentation::summarize(&frame_starts)
+    } else {
+        None
+    };
 
     let mut frame_intervals = Vec::new();
     for window in frame_starts.windows(2) {
@@ -1841,7 +1850,7 @@ fn parse_animation_summary(
     sorted_hitches.sort_unstable();
 
     Ok(AnimationSummary {
-        steady_presentation: None,
+        steady_presentation,
         trace_template: "Animation Hitches".to_string(),
         launched_pid: Some(launched_pid),
         displayed_frame_capture_status: frame_capture_status,
@@ -3547,7 +3556,8 @@ mod tests {
         fs::write(&displayed_frames_path, displayed_frames).unwrap();
         fs::write(&hitches_path, hitches).unwrap();
 
-        let summary = parse_animation_summary(&displayed_frames_path, &hitches_path, 42).unwrap();
+        let summary =
+            parse_animation_summary(&displayed_frames_path, &hitches_path, 42, true).unwrap();
         assert!(matches!(
             summary.displayed_frame_capture_status,
             FrameCaptureStatus::ParserError

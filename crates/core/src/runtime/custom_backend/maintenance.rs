@@ -66,10 +66,13 @@ impl Shared {
                             .is_some_and(|deadline| deadline <= now)
                         {
                             state.engine.compact_history_step(256);
-                            state.history_deadline = state
-                                .engine
-                                .needs_history_compaction()
-                                .then(|| now + std::time::Duration::from_millis(8));
+                            if state.engine.needs_history_compaction() {
+                                state.history_deadline =
+                                    Some(now + std::time::Duration::from_millis(8));
+                            } else {
+                                state.history_deadline = None;
+                                state.history_pending_since = None;
+                            }
                         }
                         let committed = state
                             .engine
@@ -78,9 +81,8 @@ impl Shared {
                             && state.engine.stop_synchronized_update();
                         let mut replies = Vec::new();
                         if committed {
-                            if state.engine.needs_history_compaction() {
-                                state.history_deadline =
-                                    Some(now + std::time::Duration::from_millis(250));
+                            if state.engine.take_history_activity() {
+                                state.defer_history_compaction(now);
                             }
                             while let Some(event) = state.engine.pop_event() {
                                 state.engine_event(event);

@@ -141,3 +141,29 @@ fn emoji_at_right_margin_is_retained_when_autowrap_is_disabled() {
     term.feed("\x1b[?7labc❤️".as_bytes());
     assert_eq!(cell_text(&term.viewport_row(0).unwrap()[3]), "❤️");
 }
+
+#[test]
+fn dropped_emoji_at_right_margin_does_not_extend_the_previous_cell() {
+    for text in ["abc👩🏽", "abc👩‍💻", "abc👩\u{fe0f}"] {
+        let mut term = engine(4);
+        term.feed(b"\x1b[?7l");
+        term.feed(text.as_bytes());
+        let row = term.viewport_row(0).unwrap();
+        assert_eq!(cell_text(&row[2]), "c", "{text:?}");
+        assert_eq!(row[2].flags, 0, "{text:?}");
+        assert_eq!(cell_text(&row[3]), " ", "{text:?}");
+    }
+}
+
+#[test]
+fn overlong_combining_suffix_still_prints_the_next_base() {
+    let mut term = engine(40);
+    term.feed("❤".as_bytes());
+    for _ in 0..200 {
+        term.feed("\u{fe0f}".as_bytes());
+    }
+    term.feed(b"X");
+    let row = term.viewport_row(0).unwrap();
+    assert!(row[0].combining().len() <= super::types::MAX_COMBINING_BYTES);
+    assert_eq!(row[2].character, 'X');
+}
