@@ -101,6 +101,8 @@ struct State {
     // First output that left history uncompacted. Bounds how long steady
     // output can keep postponing the idle compaction deadline.
     history_pending_since: Option<Instant>,
+    // Whether the pending deadline is the idle delay rather than the cap.
+    history_quiet: bool,
 }
 
 enum PendingEvent {
@@ -189,8 +191,10 @@ impl State {
             return;
         }
         let since = *self.history_pending_since.get_or_insert(now);
-        self.history_deadline =
-            Some((now + HISTORY_COMPACTION_IDLE_DELAY).min(since + HISTORY_COMPACTION_MAX_DELAY));
+        let idle = now + HISTORY_COMPACTION_IDLE_DELAY;
+        let cap = since + HISTORY_COMPACTION_MAX_DELAY;
+        self.history_quiet = idle <= cap;
+        self.history_deadline = Some(idle.min(cap));
     }
 
     fn maintenance_deadline(&self) -> Option<Instant> {
@@ -232,6 +236,7 @@ impl State {
             last_damage_cursor: None,
             history_deadline: None,
             history_pending_since: None,
+            history_quiet: true,
         }
     }
 

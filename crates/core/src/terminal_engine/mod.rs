@@ -194,8 +194,14 @@ impl Engine {
     pub(crate) fn needs_history_compaction(&self) -> bool {
         self.state.grid.needs_compaction()
     }
-    pub(crate) fn compact_history_step(&mut self, rows: usize) {
-        self.state.grid.compact_history(rows);
+    /// `quiet` steps follow an idle period, so later scrolled rows are packed
+    /// as they enter history. Steps forced during output only drain the queue.
+    pub(crate) fn compact_history_step(&mut self, rows: usize, quiet: bool) {
+        if quiet {
+            self.state.grid.compact_history(rows);
+        } else {
+            self.state.grid.compact_pending_history(rows);
+        }
     }
 
     pub fn history_size(&self) -> usize {

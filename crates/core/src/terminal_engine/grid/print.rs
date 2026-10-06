@@ -22,11 +22,24 @@ pub(super) fn cell_width(cell: &Cell) -> usize {
 // Box drawing, braille, arrows, private-use (Powerline/Nerd Font) glyphs, CJK
 // punctuation and fullwidth forms are common in TUIs, so they stay on this path.
 fn ordinary_base(c: char) -> bool {
-    matches!(c, '\u{20}'..='\u{2ff}' | '\u{370}'..='\u{482}' | '\u{48a}'..='\u{52f}' | '\u{2010}'..='\u{2027}' | '\u{2030}'..='\u{205e}' | '\u{20a0}'..='\u{20cf}' | '\u{2100}'..='\u{2bff}' | '\u{3000}'..='\u{3029}' | '\u{3030}'..='\u{303f}' | '\u{3041}'..='\u{3096}' | '\u{309b}'..='\u{30ff}' | '\u{3400}'..='\u{9fff}' | '\u{ac00}'..='\u{d7a3}' | '\u{e000}'..='\u{f8ff}' | '\u{ff01}'..='\u{ff9d}' | '\u{ffa0}'..='\u{ffef}' | '\u{1f300}'..='\u{1f3fa}' | '\u{1f400}'..='\u{1faff}')
+    // Branch on the block first so CJK and Hangul text, the common non-ASCII
+    // case, tests only the ranges of its own plane.
+    match c {
+        '\u{3400}'..='\u{9fff}' | '\u{ac00}'..='\u{d7a3}' => true,
+        '\u{0}'..='\u{2fff}' => {
+            matches!(c, '\u{20}'..='\u{2ff}' | '\u{370}'..='\u{482}' | '\u{48a}'..='\u{52f}' | '\u{2010}'..='\u{2027}' | '\u{2030}'..='\u{205e}' | '\u{20a0}'..='\u{20cf}' | '\u{2100}'..='\u{2bff}')
+        }
+        '\u{3000}'..='\u{ffff}' => {
+            matches!(c, '\u{3000}'..='\u{3029}' | '\u{3030}'..='\u{303f}' | '\u{3041}'..='\u{3096}' | '\u{309b}'..='\u{30ff}' | '\u{e000}'..='\u{f8ff}' | '\u{ff01}'..='\u{ff9d}' | '\u{ffa0}'..='\u{ffef}')
+        }
+        _ => matches!(c, '\u{1f300}'..='\u{1f3fa}' | '\u{1f400}'..='\u{1faff}'),
+    }
 }
 
 /// Extend, ZWJ and spacing marks join any preceding base, so checking them
 /// against one ASCII letter avoids segmenting a long retained cluster.
+#[cold]
+#[inline(never)]
 fn always_extends(c: char) -> bool {
     let mut bytes = [b'a'; 5];
     let len = 1 + c.encode_utf8(&mut bytes[1..]).len();
@@ -126,14 +139,14 @@ impl Grid {
             if character == '\u{200d}' {
                 self.grapheme_ordinary = false;
             }
-            if self.grapheme_dropped {
-                // The cluster's base was discarded at the right margin. Its
-                // marks must not attach to the unrelated cell before it.
-                return;
-            }
             let mut row = self.cursor.row;
             let mut col = self.cursor.col;
             if !self.pending_wrap && !(self.grapheme_open && self.grapheme_at_margin) {
+                if self.grapheme_at_margin {
+                    // A closed grapheme at the margin had its wide base
+                    // dropped. Its marks must not attach to the cell before.
+                    return;
+                }
                 if col > 0 {
                     col -= 1;
                 } else if row > 0 && self.screen().rows[row - 1].wrapped {
@@ -184,7 +197,7 @@ impl Grid {
                 // The glyph is discarded, so nothing may extend the cell to
                 // its left as though it were this cluster.
                 self.grapheme_open = false;
-                self.grapheme_dropped = true;
+                self.grapheme_at_margin = true;
                 return;
             }
             let row = self.cursor.row;
@@ -238,7 +251,6 @@ impl Grid {
             self.cursor.col += width;
         }
         self.grapheme_open = true;
-        self.grapheme_dropped = false;
         if self.full_damage {
             return;
         }
@@ -255,6 +267,7 @@ impl Grid {
     }
 
     /// Ordinary ASCII uses one bounds/damage update per row-local run.
+    #[inline]
     pub(in crate::terminal_engine) fn write_ascii(&mut self, mut text: &[u8]) {
         debug_assert!(text.iter().all(|byte| (0x20..=0x7e).contains(byte)));
         // A prepend character can absorb the first ASCII scalar. Ordinary
@@ -301,7 +314,6 @@ impl Grid {
                 self.pending_wrap = true;
             }
             self.grapheme_open = true;
-            self.grapheme_dropped = false;
             self.grapheme_ordinary = true;
             self.grapheme_at_margin = self.pending_wrap;
             self.mark(row, col, (col + count + 1).min(self.size.cols));

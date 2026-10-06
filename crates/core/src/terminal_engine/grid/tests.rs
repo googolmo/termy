@@ -1195,3 +1195,20 @@ fn width_resize_defers_history_compaction_to_idle_steps() {
     assert!(grid.needs_compaction());
     assert_history_compacted(&mut grid);
 }
+
+#[test]
+fn forced_compaction_does_not_pack_rows_as_they_scroll() {
+    let mut grid = grid(120, 4, 100);
+    for line in 0..20 {
+        print(&mut grid, &format!("line {line}\r\n"));
+    }
+    while grid.needs_compaction() {
+        grid.compact_pending_history(256);
+    }
+    assert!(grid.history.iter().all(|row| row.packed.is_some()));
+    print(&mut grid, "next\r\n");
+    assert!(grid.history.back().unwrap().packed.is_none());
+    grid.compact_history(256);
+    print(&mut grid, "quiet\r\n");
+    assert!(grid.history.back().unwrap().packed.is_some());
+}

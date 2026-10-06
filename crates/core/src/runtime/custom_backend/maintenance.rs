@@ -65,14 +65,15 @@ impl Shared {
                             .history_deadline
                             .is_some_and(|deadline| deadline <= now)
                         {
-                            state.engine.compact_history_step(256);
-                            if state.engine.needs_history_compaction() {
-                                state.history_deadline =
-                                    Some(now + std::time::Duration::from_millis(8));
-                            } else {
-                                state.history_deadline = None;
-                                state.history_pending_since = None;
-                            }
+                            let quiet = state.history_quiet;
+                            state.engine.compact_history_step(256, quiet);
+                            // Output that keeps arriving restarts the cap, so a
+                            // flood gets at most one forced step per interval.
+                            state.history_pending_since = None;
+                            state.history_deadline = state
+                                .engine
+                                .needs_history_compaction()
+                                .then(|| now + std::time::Duration::from_millis(8));
                         }
                         let committed = state
                             .engine

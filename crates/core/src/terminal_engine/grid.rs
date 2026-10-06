@@ -187,9 +187,9 @@ pub(super) struct Grid {
     pending_scrolls: Vec<ViewportScroll>,
     combining_cache: CombiningCache,
     grapheme_open: bool,
-    // The last cluster's base was discarded at the margin with autowrap off.
-    grapheme_dropped: bool,
     grapheme_ordinary: bool,
+    // Only meaningful while a grapheme is open. A closed grapheme at the
+    // margin marks a wide base dropped there with autowrap disabled.
     grapheme_at_margin: bool,
     pub(super) history_activity: bool,
     pub(super) history_read_cache: AtomicBool,
@@ -219,6 +219,13 @@ impl Grid {
     }
 
     pub(super) fn compact_history(&mut self, limit: usize) {
+        self.compact_pending_history(limit);
+        self.compact_on_scroll = true;
+    }
+
+    /// Pack queued history without switching scrolling rows to immediate
+    /// packing, for steps forced while output is still arriving.
+    pub(super) fn compact_pending_history(&mut self, limit: usize) {
         self.pending_compaction = self.pending_compaction.min(self.history.len());
         let start = self.history.len() - self.pending_compaction;
         let count = limit.min(self.pending_compaction);
@@ -226,7 +233,6 @@ impl Grid {
             row.compact();
         }
         self.pending_compaction -= count;
-        self.compact_on_scroll = true;
     }
 
     pub(super) fn release_history_read_cache(&mut self) {
@@ -261,7 +267,6 @@ impl Grid {
             pending_scrolls: Vec::with_capacity(MAX_SCROLL_DAMAGE),
             combining_cache: CombiningCache::default(),
             grapheme_open: false,
-            grapheme_dropped: false,
             grapheme_ordinary: true,
             grapheme_at_margin: false,
             history_activity: false,
@@ -462,7 +467,7 @@ impl Grid {
 
     pub(super) fn end_grapheme(&mut self) {
         self.grapheme_open = false;
-        self.grapheme_dropped = false;
+        self.grapheme_at_margin = false;
     }
 
     fn motion_done(&mut self, old: Cursor) {
