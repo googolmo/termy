@@ -54,8 +54,8 @@ transfers, chunking, PNG/RGB/RGBA data, zlib compression, placements, deletion,
 quiet-mode replies, source rectangles, cursor movement, and storage limits. The
 desktop renderer handles clipping, cell/pixel sizing, z-index ordering, and GPU
 image caching. Unicode placeholder placements and relative placement chains are
-supported across the native, experimental Tmon, and tmux-pane paths, including
-placeholder-driven clearing. Animations and shared-memory transfers are not
+supported across the native and tmux-pane paths, including placeholder-driven
+clearing. Animations and shared-memory transfers are not
 currently supported.
 
 Natural-size placements (no `c`/`r`) use 1:1 image pixels and **truncate** on
@@ -74,6 +74,11 @@ Finder icon requires that. Config reloads skip reapplying an unchanged icon.
 `TERMY_LAUNCH_PROBE_FILE` records the first usable frame and optional startup-stage
 timings. Measurements and limitations are recorded in
 [`performance-2026-09-11.md`](../../docs/engineering/performance-2026-09-11.md).
+
+CJK runs share shaped lines across wide spacers, with explicit cell-column
+positioning for wide and composed glyphs. Native CJK/TUI/resize/graphics frame
+captures and the reproducible command are documented in the
+[Unicode and performance follow-up](../../docs/engineering/unicode-history-performance-2026-10-05.md).
 
 ```sh
 cargo test -p termy

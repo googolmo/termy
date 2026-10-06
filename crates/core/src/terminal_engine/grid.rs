@@ -1,15 +1,16 @@
 //! Row-oriented terminal storage. Scrolling moves row handles, not cells.
 
-use std::collections::VecDeque;
-
-use unicode_width::UnicodeWidthChar;
+use std::{collections::VecDeque, sync::atomic::AtomicBool};
 
 use super::types::{
     Cell, Color, Cursor, Damage, DirtySpan, GridEffect, Size, Style, ViewportScroll,
 };
 
 mod combining;
+mod print;
+mod row;
 use combining::CombiningCache;
+use row::PackedCells;
 
 const MAX_HISTORY_ROWS: usize = 20_000;
 const MAX_SCROLL_DAMAGE: usize = 32;
@@ -17,6 +18,7 @@ const MAX_SCROLL_DAMAGE: usize = 32;
 #[derive(Clone, Debug)]
 pub(super) struct Row {
     cells: Vec<Cell>,
+    packed: Option<Box<PackedCells>>,
     // Cells after this prefix still equal the blank used by the last clear.
     // Keeping a conservative upper bound avoids rewriting an entire row when
     // short output lines recycle it through scrollback.
@@ -31,17 +33,15 @@ impl Row {
     fn new(cols: usize, blank: &Cell) -> Self {
         Self {
             cells: vec![blank.clone(); cols],
+            packed: None,
             occupied: 0,
             clear_background: blank.style.background,
             wrapped: false,
         }
     }
 
-    pub(super) fn cells(&self) -> &[Cell] {
-        &self.cells
-    }
-
     fn clear(&mut self, cols: usize, blank: &Cell) {
+        self.make_dense();
         let end = if self.clear_background == blank.style.background {
             self.occupied.min(cols)
         } else {
@@ -56,9 +56,9 @@ impl Row {
 
     fn content_len(&self) -> usize {
         if self.wrapped {
-            return self.cells.len();
+            return self.cells().len();
         }
-        self.cells
+        self.cells()
             .iter()
             .rposition(|cell| cell != &Cell::default())
             .map_or(0, |index| index + 1)
@@ -172,6 +172,8 @@ pub(super) struct Grid {
     history: VecDeque<Row>,
     requested_history_limit: usize,
     history_limit: usize,
+    pending_compaction: usize,
+    compact_on_scroll: bool,
     display_offset: usize,
     tabs: Vec<bool>,
     scroll_top: usize,
@@ -184,6 +186,13 @@ pub(super) struct Grid {
     dirty: Vec<Option<(usize, usize)>>,
     pending_scrolls: Vec<ViewportScroll>,
     combining_cache: CombiningCache,
+    grapheme_open: bool,
+    grapheme_ordinary: bool,
+    // Only meaningful while a grapheme is open. A closed grapheme at the
+    // margin marks a wide base dropped there with autowrap disabled.
+    grapheme_at_margin: bool,
+    pub(super) history_activity: bool,
+    pub(super) history_read_cache: AtomicBool,
     track_effects: bool,
     effects: Vec<GridEffect>,
     #[cfg(test)]
@@ -197,6 +206,44 @@ pub(super) struct Grid {
 }
 
 impl Grid {
+    pub(super) fn prepare_output(&mut self, bytes: usize) {
+        // Compress quiet history, not each row of a sustained output flood.
+        if bytes >= 4096 {
+            self.compact_on_scroll = false;
+        }
+        self.release_history_read_cache();
+    }
+
+    pub(super) fn needs_compaction(&self) -> bool {
+        self.pending_compaction.min(self.history.len()) != 0
+    }
+
+    pub(super) fn compact_history(&mut self, limit: usize) {
+        self.compact_pending_history(limit);
+        self.compact_on_scroll = true;
+    }
+
+    /// Pack queued history without switching scrolling rows to immediate
+    /// packing, for steps forced while output is still arriving.
+    pub(super) fn compact_pending_history(&mut self, limit: usize) {
+        self.pending_compaction = self.pending_compaction.min(self.history.len());
+        let start = self.history.len() - self.pending_compaction;
+        let count = limit.min(self.pending_compaction);
+        for row in self.history.iter_mut().skip(start).take(count) {
+            row.compact();
+        }
+        self.pending_compaction -= count;
+    }
+
+    pub(super) fn release_history_read_cache(&mut self) {
+        if *self.history_read_cache.get_mut() {
+            for row in &mut self.history {
+                row.release_read_cache();
+            }
+            *self.history_read_cache.get_mut() = false;
+        }
+    }
+
     pub(super) fn new(size: Size, history_limit: usize) -> Self {
         let size = size.clamped();
         Self {
@@ -207,6 +254,8 @@ impl Grid {
             history: VecDeque::new(),
             requested_history_limit: history_limit.min(MAX_HISTORY_ROWS),
             history_limit: Self::bounded_history(size, history_limit),
+            pending_compaction: 0,
+            compact_on_scroll: false,
             display_offset: 0,
             tabs: Self::default_tabs(size.cols),
             scroll_top: 0,
@@ -217,6 +266,11 @@ impl Grid {
             dirty: vec![None; size.rows],
             pending_scrolls: Vec::with_capacity(MAX_SCROLL_DAMAGE),
             combining_cache: CombiningCache::default(),
+            grapheme_open: false,
+            grapheme_ordinary: true,
+            grapheme_at_margin: false,
+            history_activity: false,
+            history_read_cache: AtomicBool::new(false),
             track_effects: false,
             effects: Vec::new(),
             #[cfg(test)]
@@ -411,7 +465,13 @@ impl Grid {
         }
     }
 
+    pub(super) fn end_grapheme(&mut self) {
+        self.grapheme_open = false;
+        self.grapheme_at_margin = false;
+    }
+
     fn motion_done(&mut self, old: Cursor) {
+        self.end_grapheme();
         self.pending_wrap = false;
         self.mark_cursor(old);
         self.mark_cursor(self.cursor);
@@ -480,164 +540,6 @@ impl Grid {
         row.cells[col] = blank.clone();
         row.occupied = row.occupied.max(end);
         (start, end)
-    }
-
-    pub(super) fn put_char(&mut self, character: char) {
-        self.observe_output();
-        let width = character.width().unwrap_or(0);
-        if width == 0 {
-            let mut row = self.cursor.row;
-            let mut col = self.cursor.col;
-            if !self.pending_wrap {
-                if col > 0 {
-                    col -= 1;
-                } else if row > 0 && self.screen().rows[row - 1].wrapped {
-                    row -= 1;
-                    col = self.size.cols - 1;
-                } else {
-                    return;
-                }
-            }
-            if self.screen().rows[row].cells[col].flags & Cell::WIDE_SPACER != 0 && col > 0 {
-                col -= 1;
-            }
-            let active = if self.alternate_active {
-                &mut self
-                    .alternate
-                    .as_mut()
-                    .expect("active alternate screen")
-                    .rows[row]
-            } else {
-                &mut self.primary.rows[row]
-            };
-            active.occupied = active.occupied.max(col + 1);
-            let cell = &mut active.cells[col];
-            self.combining_cache.append(cell, character);
-            self.mark(row, col, col + 1);
-            return;
-        }
-
-        let old = self.cursor;
-        if self.pending_wrap {
-            if self.autowrap {
-                self.screen_mut().rows[old.row].wrapped = true;
-                self.cursor.col = 0;
-                self.linefeed();
-            }
-            self.pending_wrap = false;
-        }
-        let width = width.min(self.size.cols).min(2);
-        if width == 2 && self.cursor.col + 1 == self.size.cols {
-            if !self.autowrap {
-                return;
-            }
-            let row = self.cursor.row;
-            let col = self.cursor.col;
-            let blank = self.blank();
-            let active = &mut self.screen_mut().rows[row];
-            Self::clear_wide_at(active, col, &blank);
-            active.cells[col].flags = Cell::LEADING_WIDE_SPACER;
-            active.wrapped = true;
-            self.mark(row, col.saturating_sub(1), col + 1);
-            self.cursor.col = 0;
-            self.linefeed();
-        }
-        if self.insert_mode {
-            self.insert_chars(width);
-        }
-
-        let row = self.cursor.row;
-        let col = self.cursor.col;
-        let blank = self.blank();
-        let mut cell = self.pen.clone();
-        cell.character = character;
-        cell.flags = if width == 2 { Cell::WIDE } else { 0 };
-        let active = &mut self.screen_mut().rows[row];
-        let mut start = col;
-        let mut end = col + width;
-        // Only the outside halves of overwritten wide glyphs need erasing.
-        // The destination cells are replaced below, so blanking them first
-        // would write/drop each cell twice on ordinary Unicode output.
-        if active.cells[col].flags & Cell::WIDE_SPACER != 0 && col > 0 {
-            start -= 1;
-            active.cells[start] = blank.clone();
-        }
-        if active.cells[end - 1].flags & Cell::WIDE != 0 && end < active.cells.len() {
-            active.cells[end] = blank;
-            end += 1;
-        }
-        if width == 2 {
-            active.cells[col + 1] = Cell {
-                character: ' ',
-                style: cell.style,
-                flags: Cell::WIDE_SPACER,
-                extra: None,
-            };
-        }
-        active.cells[col] = cell;
-        active.occupied = active.occupied.max(end);
-        if col + width >= self.size.cols {
-            self.cursor.col = self.size.cols - 1;
-            self.pending_wrap = self.autowrap;
-        } else {
-            self.cursor.col += width;
-        }
-        if self.full_damage {
-            return;
-        }
-        if self.cursor.visible {
-            end = end.max(self.cursor.col + 1);
-            if old.row == row {
-                start = start.min(old.col);
-                end = end.max(old.col + 1);
-            } else {
-                self.mark_cursor(old);
-            }
-        }
-        self.mark(row, start, end);
-    }
-
-    /// Ordinary ASCII uses one bounds/damage update per row-local run.
-    pub(super) fn write_ascii(&mut self, mut text: &[u8]) {
-        debug_assert!(text.iter().all(|byte| (0x20..=0x7e).contains(byte)));
-        while !text.is_empty() {
-            self.observe_output();
-            if self.pending_wrap || self.insert_mode || !self.autowrap {
-                self.put_char(char::from(text[0]));
-                text = &text[1..];
-                continue;
-            }
-            let row = self.cursor.row;
-            let col = self.cursor.col;
-            let count = text.len().min(self.size.cols - col);
-            // Wide-cell repair is uncommon, and the scalar path handles both
-            // ends of an overwritten glyph without a second general scan.
-            if self.screen().rows[row].cells[col..col + count]
-                .iter()
-                .any(|cell| cell.flags != 0)
-            {
-                for &byte in &text[..count] {
-                    self.put_char(char::from(byte));
-                }
-                text = &text[count..];
-                continue;
-            }
-            let pen = self.pen.clone();
-            let active = &mut self.screen_mut().rows[row];
-            for (cell, &byte) in active.cells[col..col + count].iter_mut().zip(text) {
-                cell.clone_from(&pen);
-                cell.character = char::from(byte);
-                cell.flags = 0;
-            }
-            active.occupied = active.occupied.max(col + count);
-            self.cursor.col += count;
-            if self.cursor.col == self.size.cols {
-                self.cursor.col -= 1;
-                self.pending_wrap = true;
-            }
-            self.mark(row, col, (col + count + 1).min(self.size.cols));
-            text = &text[count..];
-        }
     }
 
     pub(super) fn carriage_return(&mut self) {
@@ -915,11 +817,18 @@ impl Grid {
                 } else {
                     None
                 };
-                self.history.push_back(removed);
+                let (retained, recycled) = if self.compact_on_scroll {
+                    removed.retain(recycled, cols, &blank)
+                } else {
+                    (removed, recycled.unwrap_or_else(|| Row::new(cols, &blank)))
+                };
+                self.history.push_back(retained);
+                self.history_activity = true;
+                self.pending_compaction = (self.pending_compaction + 1).min(self.history.len());
                 if self.display_offset != 0 {
                     self.display_offset = (self.display_offset + 1).min(self.history.len());
                 }
-                recycled.unwrap_or_else(|| Row::new(cols, &blank))
+                recycled
             } else {
                 removed
             };
@@ -1068,6 +977,7 @@ impl Grid {
     }
 
     pub(super) fn scroll_display(&mut self, delta: i32) -> bool {
+        self.release_history_read_cache();
         if self.alternate_active {
             return false;
         }
@@ -1095,6 +1005,7 @@ impl Grid {
         let removed = self.history.len();
         let changed = removed != 0 || self.display_offset != 0;
         self.history.clear();
+        self.pending_compaction = 0;
         self.display_offset = 0;
         if changed {
             self.mark_full_damage();
@@ -1128,6 +1039,7 @@ impl Grid {
         self.alternate_active = false;
         self.alternate = None;
         self.history.clear();
+        self.pending_compaction = 0;
         self.display_offset = 0;
         self.cursor = Cursor::default();
         self.pen = Cell::default();
@@ -1156,6 +1068,8 @@ impl Grid {
     /// Resize reconstructs logical lines only when their width changes. Normal
     /// feed, history reads, and height-only resizes never flatten the buffer.
     pub(super) fn resize(&mut self, size: Size) {
+        self.release_history_read_cache();
+        self.end_grapheme();
         let size = size.clamped();
         if size == self.size {
             return;
@@ -1185,6 +1099,10 @@ impl Grid {
         self.size = size;
         self.history_limit = Self::bounded_history(size, self.requested_history_limit);
         self.trim_history();
+        self.pending_compaction = self.pending_compaction.min(self.history.len());
+        if self.pending_compaction != 0 {
+            self.history_activity = true;
+        }
         self.scroll_top = 0;
         self.scroll_bottom = size.rows;
         let old_cols = self.tabs.len();
@@ -1208,7 +1126,11 @@ impl Grid {
             let remove_top = self.primary.cursor.row.saturating_sub(size.rows - 1);
             for _ in 0..remove_top {
                 if let Some(row) = self.primary.rows.pop_front() {
+                    // Compaction walks the newest `pending_compaction` rows,
+                    // so new history joins that window instead of being packed
+                    // here and hiding older dense rows from the idle steps.
                     self.history.push_back(row);
+                    self.pending_compaction += 1;
                 }
             }
             self.primary.cursor.row = self.primary.cursor.row.saturating_sub(remove_top);
@@ -1216,9 +1138,11 @@ impl Grid {
         } else if self.primary.rows.len() < size.rows {
             if !self.clear_anchor {
                 while self.primary.rows.len() < size.rows {
-                    let Some(row) = self.history.pop_back() else {
+                    let Some(mut row) = self.history.pop_back() else {
                         break;
                     };
+                    self.pending_compaction = self.pending_compaction.saturating_sub(1);
+                    row.make_dense();
                     self.primary.rows.push_front(row);
                     self.primary.cursor.row += 1;
                 }
@@ -1275,7 +1199,8 @@ impl Grid {
         let mut logical_cursor = None;
         let mut logical_boundary = None;
         let mut logical_viewport = None;
-        for (index, row) in source.enumerate() {
+        for (index, mut row) in source.enumerate() {
+            row.make_dense();
             if index == old_history {
                 logical_boundary = Some(logical.len());
             }
@@ -1338,6 +1263,9 @@ impl Grid {
         }
         self.primary.rows = output.rows.split_off(split - output.first);
         self.history = output.rows;
+        // Reflow leaves every history row dense. Repack them in the bounded
+        // idle steps rather than all at once on the resize path.
+        self.pending_compaction = self.history.len();
         self.primary.cursor.row = cursor.0 - split;
         self.primary.cursor.col = cursor.1;
         self.primary.pending_wrap = cursor.2;
@@ -1367,7 +1295,7 @@ impl Grid {
             // when the viewport grows again rather than permanently narrowing
             // the saved text.
             let expanded_wide =
-                cols > 1 && cell.flags & Cell::WIDE == 0 && cell.character.width() == Some(2);
+                cols > 1 && cell.flags & Cell::WIDE == 0 && print::cell_width(&cell) == 2;
             let wide = cell.flags & Cell::WIDE != 0 || expanded_wide;
             if col == cols || (wide && cols > 1 && col + 1 == cols) {
                 if col < cols {

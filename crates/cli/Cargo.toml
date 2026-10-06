@@ -31,6 +31,7 @@ ureq = { workspace = true }
 url = { workspace = true }
 percent-encoding = "2.3"
 roxmltree = "0.20"
+base64 = "0.22"
 termy_core = { path = "../core" }
 
 

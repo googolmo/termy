@@ -31,8 +31,10 @@ use std::{
         Arc, Condvar, Mutex, MutexGuard, Weak,
         atomic::{AtomicBool, Ordering},
     },
-    time::Instant,
+    time::{Duration, Instant},
 };
+
+mod maintenance;
 
 const EVENT_BATCH: usize = 2048;
 const MAX_EVENTS: usize = 65_536;
@@ -41,6 +43,8 @@ const MAX_EVENTS: usize = 65_536;
 const MAX_EVENT_PAYLOAD_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PENDING_REPLIES: usize = 2 * 1024 * 1024;
 const PARSE_BATCH: usize = 4096;
+const HISTORY_COMPACTION_IDLE_DELAY: Duration = Duration::from_millis(250);
+const HISTORY_COMPACTION_MAX_DELAY: Duration = Duration::from_secs(2);
 
 pub(super) struct CustomBackend {
     shared: Arc<Shared>,
@@ -93,6 +97,12 @@ struct State {
     palette_epoch: u64,
     force_full_damage: bool,
     last_damage_cursor: Option<TerminalCursorState>,
+    history_deadline: Option<Instant>,
+    // First output that left history uncompacted. Bounds how long steady
+    // output can keep postponing the idle compaction deadline.
+    history_pending_since: Option<Instant>,
+    // Whether the pending deadline is the idle delay rather than the cap.
+    history_quiet: bool,
 }
 
 enum PendingEvent {
@@ -156,110 +166,45 @@ impl Shared {
             state.append_replies(&replies);
             replies.clear();
         }
+        if state.engine.take_history_activity() {
+            state.defer_history_compaction(Instant::now());
+        }
         let should_notify = !state.engine.modes().synchronized_update || !state.events.is_empty();
         // Publish while the engine lock still protects this deadline: a later
         // feed must not have its timer replaced by an earlier feed's deadline.
-        self.schedule_sync_timeout(&state);
+        self.schedule_maintenance(&state);
         drop(state);
         if should_notify {
             self.notify();
         }
         replies
     }
-    fn schedule_sync_timeout(self: &Arc<Self>, state: &State) {
-        let deadline = state.engine.synchronized_update_deadline();
-        let mut signal = self
-            .sync_signal
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if signal.deadline == deadline {
-            return;
-        }
-        signal.deadline = deadline;
-        self.sync_signal.changed.notify_one();
-        drop(signal);
-        if deadline.is_none() || self.sync_watchdog_started.swap(true, Ordering::AcqRel) {
-            return;
-        }
-        let shared = Arc::downgrade(self);
-        let signal = self.sync_signal.clone();
-        if let Err(error) = std::thread::Builder::new()
-            .name("termy-sync-watchdog".into())
-            .spawn(move || {
-                loop {
-                    let mut pending = signal
-                        .state
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    loop {
-                        if pending.shutdown {
-                            return;
-                        }
-                        let Some(deadline) = pending.deadline else {
-                            pending = signal
-                                .changed
-                                .wait(pending)
-                                .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            continue;
-                        };
-                        let now = Instant::now();
-                        if now < deadline {
-                            let (next, _) = signal
-                                .changed
-                                .wait_timeout(pending, deadline - now)
-                                .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            pending = next;
-                            continue;
-                        }
-                        pending.deadline = None;
-                        drop(pending);
-                        let Some(shared) = shared.upgrade() else {
-                            return;
-                        };
-                        let mut state = shared.state();
-                        if state.engine.synchronized_update_deadline() != Some(deadline) {
-                            break;
-                        }
-                        let committed = state.engine.stop_synchronized_update();
-                        let mut replies = Vec::new();
-                        if committed {
-                            while let Some(event) = state.engine.pop_event() {
-                                state.engine_event(event);
-                            }
-                            state.engine.drain_replies(&mut replies);
-                            state.generation = state.generation.wrapping_add(1);
-                        }
-                        drop(state);
-                        if !replies.is_empty() {
-                            let transport = shared
-                                .transport
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                                .upgrade();
-                            if let Some(transport) = transport {
-                                if let Err(error) = transport.write_protocol_reply_owned(replies) {
-                                    log::warn!("terminal timeout reply failed: {error}");
-                                }
-                            } else {
-                                shared.state().append_replies(&replies);
-                            }
-                        }
-                        if committed {
-                            shared.notify();
-                        }
-                        break;
-                    }
-                }
-            })
-        {
-            self.sync_watchdog_started.store(false, Ordering::Release);
-            log::warn!("could not start terminal synchronization watchdog: {error}");
-        }
-    }
 }
 
 impl State {
+    /// Compact after output has been quiet for a short delay, but never wait
+    /// longer than the maximum delay, so a steady trickle still gets packed.
+    fn defer_history_compaction(&mut self, now: Instant) {
+        if !self.engine.needs_history_compaction() {
+            self.history_deadline = None;
+            self.history_pending_since = None;
+            return;
+        }
+        let since = *self.history_pending_since.get_or_insert(now);
+        let idle = now + HISTORY_COMPACTION_IDLE_DELAY;
+        let cap = since + HISTORY_COMPACTION_MAX_DELAY;
+        self.history_quiet = idle <= cap;
+        self.history_deadline = Some(idle.min(cap));
+    }
+
+    fn maintenance_deadline(&self) -> Option<Instant> {
+        self.engine
+            .synchronized_update_deadline()
+            .into_iter()
+            .chain(self.history_deadline)
+            .min()
+    }
+
     fn new(size: TerminalSize, config: &TerminalRuntimeConfig) -> Self {
         let mut engine = Engine::new(
             engine_size(size.clamped()),
@@ -289,6 +234,9 @@ impl State {
             palette_epoch: 0,
             force_full_damage: true,
             last_damage_cursor: None,
+            history_deadline: None,
+            history_pending_since: None,
+            history_quiet: true,
         }
     }
 
@@ -580,13 +528,14 @@ impl State {
         let update = self.take_damage(force_full);
         let mut cells =
             Vec::with_capacity(usize::from(self.size.cols) * usize::from(self.size.rows));
+        let mut scratch = Vec::new();
         for row in 0..usize::from(self.size.rows) {
             let wrapped = self.engine.viewport_row_wrapped(row);
-            if let Some(source) = self.engine.viewport_row(row) {
+            self.engine.with_viewport_row(row, &mut scratch, |source| {
                 for (col, cell) in source.iter().enumerate() {
                     cells.push(render_cell(cell, wrapped && col + 1 == source.len()));
                 }
-            }
+            });
         }
         TerminalRenderRead {
             metadata: self.metadata(),
@@ -779,6 +728,9 @@ impl CustomBackend {
         state
             .engine
             .set_cell_pixels(size.cell_width, size.cell_height);
+        if state.engine.take_history_activity() {
+            state.defer_history_compaction(Instant::now());
+        }
         let actual = state.engine.size();
         let size = TerminalSize {
             cols: actual.cols as u16,
@@ -793,7 +745,7 @@ impl CustomBackend {
         }
         let mut replies = Vec::new();
         state.engine.drain_replies(&mut replies);
-        self.shared.schedule_sync_timeout(&state);
+        self.shared.schedule_maintenance(&state);
         drop(state);
         self.send_reply(replies);
         if let Some(transport) = &self.transport
@@ -948,18 +900,20 @@ impl CustomBackend {
         let palette = state.palette();
         let mut cells =
             Vec::with_capacity(usize::from(state.size.cols) * usize::from(state.size.rows));
+        let query_colors = state.query_colors;
+        let mut scratch = Vec::new();
         for row in 0..usize::from(state.size.rows) {
             let wrapped = state.engine.viewport_row_wrapped(row);
-            if let Some(line) = state.engine.viewport_row(row) {
+            state.engine.with_viewport_row(row, &mut scratch, |line| {
                 for (col, cell) in line.iter().enumerate() {
                     cells.push(legacy_cell(
                         cell,
                         wrapped && col + 1 == line.len(),
                         &palette,
-                        state.query_colors,
+                        query_colors,
                     ));
                 }
-            }
+            });
         }
         TermyFrame {
             cols: state.size.cols,
@@ -986,19 +940,23 @@ impl CustomBackend {
             TerminalDamageSnapshot::Partial(spans) => spans.clone(),
         };
         let mut cells = Vec::new();
+        let query_colors = state.query_colors;
+        let mut scratch = Vec::new();
         for span in spans {
             let wrapped = state.engine.viewport_row_wrapped(span.row);
-            if let Some(line) = state.engine.viewport_row(span.row) {
-                let right = span.right_col.min(line.len() - 1);
-                for col in span.left_col..=right {
-                    cells.push(legacy_cell(
-                        &line[col],
-                        wrapped && col + 1 == line.len(),
-                        &palette,
-                        state.query_colors,
-                    ));
-                }
-            }
+            state
+                .engine
+                .with_viewport_row(span.row, &mut scratch, |line| {
+                    let right = span.right_col.min(line.len() - 1);
+                    for col in span.left_col..=right {
+                        cells.push(legacy_cell(
+                            &line[col],
+                            wrapped && col + 1 == line.len(),
+                            &palette,
+                            query_colors,
+                        ));
+                    }
+                });
         }
         TermyFrameUpdate {
             cols: state.size.cols,
@@ -1052,9 +1010,10 @@ impl CustomBackend {
     ) -> TerminalViewportMetadata {
         let state = self.shared.state();
         let offset = state.engine.display_offset();
+        let mut scratch = Vec::new();
         for row in 0..usize::from(state.size.rows) {
             let wrapped = state.engine.viewport_row_wrapped(row);
-            if let Some(line) = state.engine.viewport_row(row) {
+            state.engine.with_viewport_row(row, &mut scratch, |line| {
                 for (col, cell) in line.iter().enumerate() {
                     visitor(
                         offset,
@@ -1063,7 +1022,7 @@ impl CustomBackend {
                         &render_cell(cell, wrapped && col + 1 == line.len()),
                     );
                 }
-            }
+            });
         }
         state.metadata()
     }
@@ -1097,20 +1056,23 @@ impl CustomBackend {
             return false;
         }
         let offset = state.engine.display_offset();
+        let mut scratch = Vec::new();
         for span in spans {
             let wrapped = state.engine.viewport_row_wrapped(span.row);
-            if let Some(line) = state.engine.viewport_row(span.row) {
-                let end = span.right_col.saturating_add(1).min(line.len());
-                for col in span.left_col.min(end)..end {
-                    visitor(
-                        span.row,
-                        offset,
-                        span.row as i32 - offset as i32,
-                        col,
-                        &render_cell(&line[col], wrapped && col + 1 == line.len()),
-                    );
-                }
-            }
+            state
+                .engine
+                .with_viewport_row(span.row, &mut scratch, |line| {
+                    let end = span.right_col.saturating_add(1).min(line.len());
+                    for col in span.left_col.min(end)..end {
+                        visitor(
+                            span.row,
+                            offset,
+                            span.row as i32 - offset as i32,
+                            col,
+                            &render_cell(&line[col], wrapped && col + 1 == line.len()),
+                        );
+                    }
+                });
         }
         true
     }
@@ -1133,9 +1095,10 @@ impl CustomBackend {
             i32::from(state.size.rows) - 1,
             usize::from(state.size.cols),
         );
+        let mut scratch = Vec::new();
         for line in requested_first.max(range.0)..=requested_last.min(range.1) {
             let wrapped = state.engine.line_wrapped(line);
-            if let Some(cells) = state.engine.line(line) {
+            state.engine.with_line(line, &mut scratch, |cells| {
                 for (col, cell) in cells.iter().enumerate() {
                     visitor(
                         range,
@@ -1144,7 +1107,7 @@ impl CustomBackend {
                         &render_cell(cell, wrapped && col + 1 == cells.len()),
                     );
                 }
-            }
+            });
         }
         range
     }
@@ -1174,9 +1137,10 @@ impl CustomBackend {
         }
         let state = self.shared.state();
         let history = state.engine.history_size() as i32;
+        let mut scratch = Vec::new();
         search_lines_shared(
             (-history..i32::from(state.size.rows)).filter_map(|line| {
-                state.engine.line(line).map(|cells| {
+                state.engine.with_line(line, &mut scratch, |cells| {
                     let mut text: String = cells.iter().map(search_character).collect();
                     text.truncate(text.trim_end().len());
                     ((line + history) as usize, text)

@@ -3,13 +3,15 @@
 This report records earlier revisions. The later
 [throughput follow-up](custom-engine-throughput-2026-10-05.md) resolves the
 measured Alacritty Unicode/combining gaps with new uninstrumented paired probes.
-Its results do not replace the historical Tmon comparison or presentation limits.
+Its results do not replace the historical display backend comparison or
+presentation limits.
 
 The replacement improves several measured paths relative to the former native
 Alacritty runtime, but it is **not a uniform performance improvement**. Mixed
-Unicode is slower, and the old compact Tmon display backend is substantially
-faster and smaller than the new dense grid in these workloads. Real PTY latency
-is similar. The measured changes do not establish a reduction in idle CPU.
+Unicode is slower, and the old compact experimental display backend is
+substantially faster and smaller than the new dense grid in these workloads.
+Real PTY latency is similar. The measured changes do not establish a reduction
+in idle CPU.
 
 The original macOS measurements stopped at the user's request to push the work
 for cloud continuation. The cloud follow-up at the end of this report records
@@ -70,11 +72,12 @@ sets a 1,000-row history through `TerminalRuntimeConfig`, calls `feed_output`,
 and observes `cursor_position` after timing. It permits baseline allocations.
 Each case feeds 32 MiB; medians are from five interleaved paired runs.
 
-Baseline `Terminal::new_display` defaults to Tmon, so this comparison explicitly
-sets the baseline's existing `TERMY_CORE_TEST_BACKEND=alacritty` selector. The
-candidate has one engine and ignores that removed selector. The former native
-runtime and desktop pane/tmux path used Alacritty; the old public display facade
-also needs the separate comparison below.
+Baseline `Terminal::new_display` defaults to the experimental display backend,
+so this comparison explicitly sets the baseline's existing
+`TERMY_CORE_TEST_BACKEND=alacritty` selector. The candidate has one engine and
+ignores that removed selector. The former native runtime and desktop pane/tmux
+path used Alacritty; the old public display facade also needs the separate
+comparison below.
 
 | Workload | Baseline MiB/s | Candidate MiB/s | Candidate / baseline |
 | --- | ---: | ---: | ---: |
@@ -99,11 +102,11 @@ both repeated and varied/cache-miss-heavy characters before claiming a fix.
 These are synthetic steady-state workloads, including instrumentation. The
 allocation improvement alone does not prove an application CPU improvement.
 
-## Former public display/Tmon path
+## Former public display path
 
-With no selector, the baseline public display facade used Tmon. That was
-relevant to embedding and multiplexer/display sessions; it must not be confused
-with the former native Alacritty path.
+With no selector, the baseline public display facade used the experimental
+engine. That was relevant to embedding and multiplexer/display sessions; it must
+not be confused with the former native Alacritty path.
 
 | Workload | Former display MiB/s | Candidate MiB/s |
 | --- | ---: | ---: |
@@ -249,8 +252,9 @@ packages, features, target platforms, and normal/build/dev dependencies** for
 Alacritty packages. It captures Cargo output before matching, avoiding an early
 `rg -q` exit masking a forbidden dependency under `pipefail`. A fixture with an
 Alacritty entry followed by 100,000 unrelated entries was correctly rejected.
-The legacy Tmon implementation remains outside the compiled module tree and
-unchanged by this follow-up; historical comparisons remain historical evidence.
+The former experimental display implementation was outside the compiled module
+tree at this checkpoint and was later removed; historical comparisons remain
+historical evidence.
 
 ### Width-cache decision: rejected
 
@@ -286,7 +290,8 @@ establish precise causal speedups. The small repeated-Unicode gain and lower
 varied/combining medians do not justify adopting the cache. The final engine
 therefore retains its original lookup. The varied-Unicode benchmark is retained
 in CI to expose this tradeoff in future proposals. The original mixed-Unicode
-regression and dense-history/Tmon tradeoffs remain unresolved and documented.
+regression and the dense-history tradeoffs relative to the former display
+backend remain unresolved and documented.
 
 Benchmark binary SHA-256 values:
 

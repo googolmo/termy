@@ -279,9 +279,6 @@ check_forbidden_all_target_dep "termy_core" "gpui(-kit|-pre)?"
 check_forbidden_all_target_dep "termy_core" "termy"
 check_forbidden_all_target_dep "termy_cli" "gpui(-kit|-pre)?"
 check_forbidden_all_target_dep "termy_cli" "termy"
-forbid_pattern 'termy_core::|crate::(multiplexer|ffi|runtime|config_core|plugin_runtime)' \
-  "crates/core/src/tmon" \
-  "the terminal engine must remain independent of its host modules"
 forbid_pattern 'termy_core::|crate::(multiplexer|ffi|runtime|config_core|plugin_runtime)|alacritty_terminal' \
   "crates/core/src/terminal_engine" \
   "the custom terminal engine must remain independent of host modules and external engines"

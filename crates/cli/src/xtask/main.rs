@@ -9,7 +9,7 @@ use termy_core::config_core::{
 mod benchmark;
 mod dependency_policy;
 
-const XTASK_USAGE: &str = "usage: cargo run -p termy_cli --bin xtask -- <generate-keybindings-doc|generate-config-doc|check-dependency-policy|benchmark-driver|benchmark-compare|benchmark-gate> [options]";
+const XTASK_USAGE: &str = "usage: cargo run -p termy_cli --bin xtask -- <generate-keybindings-doc|generate-config-doc|check-dependency-policy|benchmark-driver|benchmark-record|benchmark-compare|benchmark-gate> [options]";
 
 fn main() {
     if let Err(error) = run() {
@@ -26,7 +26,7 @@ fn run() -> Result<()> {
 
     if matches!(
         command.as_str(),
-        "benchmark-driver" | "benchmark-compare" | "benchmark-gate"
+        "benchmark-driver" | "benchmark-compare" | "benchmark-gate" | "benchmark-record"
     ) {
         return benchmark::run(std::iter::once(command).chain(args));
     }

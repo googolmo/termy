@@ -95,6 +95,14 @@ fn run(label: &str, line: &[u8], target: usize, fragmentation: usize, zero_alloc
         retained / 1024,
         peak / 1024
     );
+    let settle_start = Instant::now();
+    engine.compact_history();
+    let settle_us = settle_start.elapsed().as_micros();
+    let settled = LIVE.load(Ordering::Relaxed);
+    println!(
+        "  settled history: {} KiB retained process heap; {settle_us} us compaction",
+        settled / 1024
+    );
     if zero_allocations {
         assert_eq!(allocations, 0, "{label} should reuse warmed storage");
     }

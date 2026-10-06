@@ -10,9 +10,8 @@ complete; the cloud results and measurement limits are recorded below.
 - Replace Alacritty everywhere with `crates/core/src/terminal_engine`, including
   native PTYs, display terminals, desktop tmux panes and persistent sessions.
 - Keep performance and bounded memory central to the implementation.
-- Leave the legacy `crates/core/src/tmon` implementation untouched. Only two
-  legacy test files changed to remove their obsolete Alacritty oracle while
-  retaining explicit expected-byte assertions. Tmon is outside the module tree.
+- The former experimental display implementation, including its tests and
+  tooling, was removed after the engine replacement.
 - The user explicitly waived the repository's Grok-only model requirement for
   this work. Do not ask for that approval again.
 - Do not record videos. Do not merge the PR unless the user requests it.
@@ -22,8 +21,8 @@ complete; the cloud results and measurement limits are recorded below.
 The replacement is integrated throughout the application. Alacritty's Cargo
 dependencies, runtime adapters, desktop bridge, conversion helpers, comparison
 examples and engine-selection switches are removed. A boundary check rejects
-reintroducing the dependency. Historical documentation and untouched legacy
-Tmon comments still mention the former engine.
+reintroducing the dependency. Historical documentation still records the former
+engines and their performance comparisons.
 
 The new engine has streaming VT/UTF-8 parsing, Unicode and combining text,
 primary/alternate grids, bounded scrollback, reflow, protocol queries, clipboard
@@ -61,7 +60,7 @@ limits and measured regressions as well as improvements.
 
 - Audited the workspace, Cargo.lock, native/display construction, tmux panes and
   persistent-session construction: no active Alacritty dependency or adapter
-  remains. Historical reports and untouched legacy Tmon references are retained.
+  remains. Historical reports retain the former display backend comparisons.
 - Strengthened the dependency boundary to reject Alacritty in every workspace
   package, feature, platform and normal/build/dev dependency section. A long
   dependency-output fixture verifies that an early search exit cannot hide it.
@@ -83,8 +82,8 @@ limits and measured regressions as well as improvements.
   boundaries. The prototype's 160 engine tests included two exhaustive/cache
   regressions; the retained engine still has its original 158 engine tests.
 - Updated the performance report with the rejected experiment and hosted echo
-  evidence, preserving the former Tmon display comparison and its substantial
-  retained-memory/throughput tradeoffs.
+  evidence, preserving the former experimental display comparison and its
+  substantial retained-memory/throughput tradeoffs.
 
 ## Performance follow-up
 
@@ -106,7 +105,8 @@ The PR description records the final verified CI revision and results.
 The replacement does not establish a universal performance improvement. The
 measured Unicode throughput gap is addressed; compact history remains an
 optimization opportunity, and the tested width cache is still rejected. Native
-Alacritty gains must not be presented as gains over the former Tmon display facade.
+Alacritty gains must not be presented as gains over the former experimental
+display facade.
 
 The hosted echo run recorded 40 samples and zero missed echoes per binary, but
 its displayed-frame samples are unavailable. Render callbacks do not establish

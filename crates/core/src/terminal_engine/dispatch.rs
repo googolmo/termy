@@ -393,6 +393,7 @@ impl Handler for State {
     }
 
     fn execute(&mut self, byte: u8) {
+        self.grid.end_grapheme();
         match byte {
             0x07 => self.event(Event::Bell),
             0x08 => self.grid.backspace(),
@@ -406,6 +407,7 @@ impl Handler for State {
     }
 
     fn escape(&mut self, intermediates: &[u8], final_byte: u8) {
+        self.grid.end_grapheme();
         match (intermediates, final_byte) {
             ([], b'D') => {
                 let newline_mode = self.grid.newline_mode;
@@ -455,6 +457,9 @@ impl Handler for State {
     }
 
     fn csi(&mut self, params: &[Param], private: Option<u8>, intermediates: &[u8], final_byte: u8) {
+        if final_byte != b'm' || private.is_some() || !intermediates.is_empty() {
+            self.grid.end_grapheme();
+        }
         let count = count(params, 0);
         if intermediates == b"$" && final_byte == b'p' && matches!(private, None | Some(b'?')) {
             for param in params {
@@ -649,6 +654,7 @@ impl Handler for State {
     }
 
     fn osc(&mut self, bytes: &[u8]) {
+        self.grid.end_grapheme();
         let Ok(text) = std::str::from_utf8(bytes) else {
             return;
         };

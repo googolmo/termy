@@ -1,3 +1,6 @@
+mod presentation;
+mod workloads;
+
 use anyhow::{Context, Result, bail};
 use roxmltree::{Document, Node};
 use serde::{Deserialize, Serialize};
@@ -45,6 +48,7 @@ pub(crate) fn run(mut args: impl Iterator<Item = String>) -> Result<()> {
 
     match command.as_str() {
         "benchmark-driver" => run_driver(args),
+        "benchmark-record" => presentation::record(args),
         "benchmark-compare" => run_compare(args),
         "benchmark-gate" => run_gate(args),
         other => bail!("unknown benchmark command `{other}`"),
@@ -822,6 +826,10 @@ enum Scenario {
     EchoTrain,
     SteadyScroll,
     AltScreenAnim,
+    CjkScroll,
+    HeavyTui,
+    Resize,
+    Graphics,
 }
 
 impl Scenario {
@@ -842,8 +850,25 @@ impl Scenario {
             "echo-train" => Ok(Self::EchoTrain),
             "steady-scroll" => Ok(Self::SteadyScroll),
             "alt-screen-anim" => Ok(Self::AltScreenAnim),
+            "cjk-scroll" => Ok(Self::CjkScroll),
+            "heavy-tui" => Ok(Self::HeavyTui),
+            "resize" => Ok(Self::Resize),
+            "graphics" => Ok(Self::Graphics),
             other => bail!("unknown benchmark scenario `{other}`"),
         }
+    }
+
+    /// Continuous workloads report steady presented-frame intervals.
+    fn is_continuous(self) -> bool {
+        matches!(
+            self,
+            Self::CjkScroll
+                | Self::HeavyTui
+                | Self::Resize
+                | Self::Graphics
+                | Self::SteadyScroll
+                | Self::AltScreenAnim
+        )
     }
 
     fn as_str(self) -> &'static str {
@@ -853,6 +878,10 @@ impl Scenario {
             Self::EchoTrain => "echo-train",
             Self::SteadyScroll => "steady-scroll",
             Self::AltScreenAnim => "alt-screen-anim",
+            Self::CjkScroll => "cjk-scroll",
+            Self::HeavyTui => "heavy-tui",
+            Self::Resize => "resize",
+            Self::Graphics => "graphics",
         }
     }
 
@@ -866,6 +895,9 @@ impl Scenario {
             Self::EchoTrain => run_echo_train(duration),
             Self::SteadyScroll => run_steady_scroll(duration),
             Self::AltScreenAnim => run_alt_screen_anim(duration),
+            Self::CjkScroll | Self::HeavyTui | Self::Resize | Self::Graphics => {
+                workloads::run(self, duration)
+            }
         }
     }
 }
@@ -1109,6 +1141,8 @@ enum FrameCaptureStatus {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct AnimationSummary {
+    #[serde(default)]
+    steady_presentation: Option<presentation::SteadyPresentation>,
     trace_template: String,
     launched_pid: Option<u32>,
     displayed_frame_capture_status: FrameCaptureStatus,
@@ -1366,7 +1400,12 @@ fn run_single_benchmark(
             Some("/trace-toc/run[@number=\"1\"]/data/table[@schema=\"hitches\"]"),
             &hitches_path,
         )?;
-        let summary = parse_animation_summary(&displayed_frames_path, &hitches_path, launched_pid)?;
+        let summary = parse_animation_summary(
+            &displayed_frames_path,
+            &hitches_path,
+            launched_pid,
+            scenario.is_continuous(),
+        )?;
         write_json(&animation_dir.join("animation-summary.json"), &summary)?;
         Some(summary)
     } else {
@@ -1550,6 +1589,11 @@ fn termy_trace_command(
         .arg(target_log_path)
         .arg("--env")
         .arg(format!("XDG_CONFIG_HOME={}", config_root.display()))
+        .arg("--env")
+        .arg(format!(
+            "TERMY_INSTANCE_HOME={}",
+            config_root.join("instance").display()
+        ))
         .arg("--env")
         .arg(format!("TERMY_BENCHMARK_COMMAND={benchmark_command}"))
         .arg("--env")
@@ -1758,6 +1802,7 @@ fn parse_animation_summary(
     displayed_frames_path: &Path,
     hitches_path: &Path,
     launched_pid: u32,
+    continuous: bool,
 ) -> Result<AnimationSummary> {
     let displayed_frames_xml = fs::read_to_string(displayed_frames_path)
         .with_context(|| format!("failed to read {}", displayed_frames_path.display()))?;
@@ -1781,6 +1826,11 @@ fn parse_animation_summary(
             ),
         };
     let hitch_durations = parse_hitch_durations(&hitches_xml, launched_pid)?;
+    let steady_presentation = if continuous && !frame_starts.is_empty() {
+        presentation::summarize(&frame_starts)
+    } else {
+        None
+    };
 
     let mut frame_intervals = Vec::new();
     for window in frame_starts.windows(2) {
@@ -1800,6 +1850,7 @@ fn parse_animation_summary(
     sorted_hitches.sort_unstable();
 
     Ok(AnimationSummary {
+        steady_presentation,
         trace_template: "Animation Hitches".to_string(),
         launched_pid: Some(launched_pid),
         displayed_frame_capture_status: frame_capture_status,
@@ -2147,9 +2198,13 @@ fn summarize_micro_latency(
                 echo_train: Some(summarize_echo_train_latency(&markers, &frames)?),
             })
         }
-        Scenario::IdleBlink | Scenario::SteadyScroll | Scenario::AltScreenAnim => {
-            Ok(MicroLatencySummary::default())
-        }
+        Scenario::IdleBlink
+        | Scenario::SteadyScroll
+        | Scenario::AltScreenAnim
+        | Scenario::CjkScroll
+        | Scenario::HeavyTui
+        | Scenario::Resize
+        | Scenario::Graphics => Ok(MicroLatencySummary::default()),
     }
 }
 
@@ -3359,6 +3414,11 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(args.iter().any(|arg| arg == "--launch"));
+        let instance_env = format!(
+            "TERMY_INSTANCE_HOME={}",
+            PathBuf::from("/tmp/config").join("instance").display()
+        );
+        assert!(args.contains(&instance_env));
         assert!(!args.iter().any(|arg| arg == "--attach"));
         assert!(
             args.iter()
@@ -3496,7 +3556,8 @@ mod tests {
         fs::write(&displayed_frames_path, displayed_frames).unwrap();
         fs::write(&hitches_path, hitches).unwrap();
 
-        let summary = parse_animation_summary(&displayed_frames_path, &hitches_path, 42).unwrap();
+        let summary =
+            parse_animation_summary(&displayed_frames_path, &hitches_path, 42, true).unwrap();
         assert!(matches!(
             summary.displayed_frame_capture_status,
             FrameCaptureStatus::ParserError
@@ -3669,6 +3730,7 @@ mod tests {
                         disk_bytes_written: Some(6),
                     },
                     animation_summary: Some(super::AnimationSummary {
+                        steady_presentation: None,
                         trace_template: "Animation Hitches".to_string(),
                         launched_pid: Some(1),
                         displayed_frame_capture_status: super::FrameCaptureStatus::Parsed,
@@ -3707,6 +3769,7 @@ mod tests {
                         disk_bytes_written: Some(9),
                     },
                     animation_summary: Some(super::AnimationSummary {
+                        steady_presentation: None,
                         trace_template: "Animation Hitches".to_string(),
                         launched_pid: Some(2),
                         displayed_frame_capture_status: super::FrameCaptureStatus::Parsed,
@@ -3861,6 +3924,7 @@ mod tests {
         baseline.animation_summary = Some(super::AnimationSummary::default());
         let mut candidate = run_result("candidate", 3.0, 10, 10 * 1024 * 1024);
         candidate.animation_summary = Some(super::AnimationSummary {
+            steady_presentation: None,
             displayed_frame_capture_status: super::FrameCaptureStatus::ParserError,
             displayed_frame_capture_detail: Some("unparseable timestamp".to_string()),
             ..super::AnimationSummary::default()
@@ -3890,6 +3954,7 @@ mod tests {
         baseline.animation_summary = Some(super::AnimationSummary::default());
         let mut candidate = run_result("candidate", 3.0, 10, 10 * 1024 * 1024);
         candidate.animation_summary = Some(super::AnimationSummary {
+            steady_presentation: None,
             displayed_frame_capture_status: super::FrameCaptureStatus::ParserError,
             displayed_frame_capture_detail: Some("no timestamps on hosted runner".to_string()),
             ..super::AnimationSummary::default()

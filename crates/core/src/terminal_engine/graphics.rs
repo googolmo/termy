@@ -55,31 +55,35 @@ impl State {
         if !self.graphics.state.has_virtual_placements() {
             return;
         }
+        let mut scratch = Vec::new();
         for row in 0..self.grid.size().rows {
             let Some(line) = self.grid.visible_row(row) else {
                 continue;
             };
-            let mut previous = None;
-            for (col, cell) in line.cells().iter().enumerate() {
-                if cell.character != unicode::PLACEHOLDER {
-                    previous = None;
-                    continue;
+            let placeholders = &mut self.graphics.placeholders;
+            line.with_cells(&mut scratch, |cells| {
+                let mut previous = None;
+                for (col, cell) in cells.iter().enumerate() {
+                    if cell.character != unicode::PLACEHOLDER {
+                        previous = None;
+                        continue;
+                    }
+                    let mut diacritics = [None; 3];
+                    for (slot, character) in diacritics.iter_mut().zip(cell.combining().chars()) {
+                        *slot = unicode::diacritic_index(character);
+                    }
+                    let placeholder = KittyGraphicsPlaceholder::from_cell(
+                        row as i64,
+                        col,
+                        placeholder_id(cell.style.foreground),
+                        placeholder_id(cell.style.underline_color),
+                        diacritics,
+                        previous,
+                    );
+                    placeholders.push(placeholder);
+                    previous = Some(placeholder);
                 }
-                let mut diacritics = [None; 3];
-                for (slot, character) in diacritics.iter_mut().zip(cell.combining().chars()) {
-                    *slot = unicode::diacritic_index(character);
-                }
-                let placeholder = KittyGraphicsPlaceholder::from_cell(
-                    row as i64,
-                    col,
-                    placeholder_id(cell.style.foreground),
-                    placeholder_id(cell.style.underline_color),
-                    diacritics,
-                    previous,
-                );
-                self.graphics.placeholders.push(placeholder);
-                previous = Some(placeholder);
-            }
+            });
         }
     }
 

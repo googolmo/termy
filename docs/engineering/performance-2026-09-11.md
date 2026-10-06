@@ -13,16 +13,18 @@
   text. It can recognize unchanged and shifted rows even when the engine reports
   full damage. Row equality includes colors, styles, selection, combining text,
   and wide-cell state; cursor and hovered-link decorations are checked separately.
-- Tmon scroll damage moves cached rows directly, including partial regions and
-  successive scrolls. Exposed rows and displaced cursor decorations are rebuilt.
+- Experimental display engine scroll damage moves cached rows directly,
+  including partial regions and successive scrolls. Exposed rows and displaced
+  cursor decorations are rebuilt.
 - Background fills use direct comparisons instead of retaining a hash map of
   resolved colors. Hidden-pane eviction releases the retained source rows too.
 - The opt-in launch probe records individual startup stages alongside the first
   usable frame, making future startup regressions easier to locate.
 
-The shared renderer benefits native Alacritty, experimental Tmon, and tmux.
-Explicit scroll metadata is currently supplied by Tmon. GPU painting still
-draws all visible rows each frame, as required by GPUI.
+At this checkpoint, the shared renderer benefits native Alacritty, the
+experimental display engine, and tmux. Explicit scroll metadata is supplied by
+the experimental display engine. GPU painting still draws all visible rows each
+frame, as required by GPUI.
 
 ## Measurement setup
 
