@@ -496,3 +496,46 @@ fn configured_apc_limit_does_not_expand_osc_or_dcs_limits() {
     }
     assert_eq!(Parser::with_apc_limit(usize::MAX).apc_limit, MAX_APC_BYTES);
 }
+
+#[test]
+fn large_apc_storage_is_released_after_completion_or_interruption() {
+    for ending in [
+        b"\x1b\\".as_slice(),
+        b"\x18",
+        b"\x1a",
+        b"\x1b[2J",
+        b"\x1bc",
+    ] {
+        let mut parser = Parser::with_apc_limit(MAX_STRING_BYTES * 2);
+        let mut recorder = Recorder::default();
+        parser.advance(&mut recorder, b"\x1b_");
+        parser.advance(&mut recorder, &vec![b'x'; MAX_STRING_BYTES + 1]);
+        assert!(parser.string.capacity() > MAX_STRING_BYTES);
+        parser.advance(&mut recorder, ending);
+        assert_eq!(parser.string.capacity(), 0, "ending {ending:?}");
+        parser.advance(&mut recorder, b"OK");
+        assert_eq!(printed(&recorder.events), "OK");
+    }
+}
+
+#[test]
+fn large_apc_storage_is_released_on_overflow_and_parser_reset() {
+    for overflow in [false, true] {
+        let mut parser = Parser::with_apc_limit(MAX_STRING_BYTES * 2);
+        let mut recorder = Recorder::default();
+        parser.advance(&mut recorder, b"\x1b_");
+        parser.advance(&mut recorder, &vec![b'x'; MAX_STRING_BYTES + 1]);
+        assert!(parser.string.capacity() > MAX_STRING_BYTES);
+        if overflow {
+            parser.advance(&mut recorder, &vec![b'x'; MAX_STRING_BYTES]);
+            assert!(parser.discarded);
+            assert_eq!(parser.string.capacity(), 0);
+            parser.advance(&mut recorder, b"\x1b\\");
+        } else {
+            parser.reset();
+        }
+        assert_eq!(parser.string.capacity(), 0);
+        parser.advance(&mut recorder, b"OK");
+        assert_eq!(recorder.events, vec![Event::Print('O'), Event::Print('K')]);
+    }
+}

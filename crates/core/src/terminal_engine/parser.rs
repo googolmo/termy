@@ -142,14 +142,14 @@ impl Parser {
         }
     }
 
-    /// Reset protocol state while retaining the reusable string allocation.
+    /// Reset protocol state while retaining ordinary-sized string allocations.
     pub(super) fn reset(&mut self) {
         self.state = State::Ground;
         self.param_len = 0;
         self.private = None;
         self.intermediate_len = 0;
         self.discarded = false;
-        self.string.clear();
+        self.clear_string();
         self.utf8_remaining = 0;
     }
 
@@ -243,7 +243,7 @@ impl Parser {
                 } else {
                     // ESC interrupts an unfinished string. Reconsume the byte
                     // as part of the new escape sequence, including C0 and CSI.
-                    self.string.clear();
+                    self.clear_string();
                     self.begin_escape();
                     self.sequence_byte(handler, byte);
                 }
@@ -340,7 +340,7 @@ impl Parser {
                         _ => None,
                     };
                     if let Some(kind) = string_kind {
-                        self.string.clear();
+                        self.clear_string();
                         self.state = State::String(kind);
                         return;
                     }
@@ -429,7 +429,7 @@ impl Parser {
         };
         if bytes.len() > limit - self.string.len() {
             self.discarded = true;
-            self.string.clear();
+            self.clear_string();
             return;
         }
         let required = self.string.len() + bytes.len();
@@ -451,15 +451,25 @@ impl Parser {
                 StringKind::Ignore => {}
             }
         }
-        self.string.clear();
+        self.clear_string();
         self.discarded = false;
         self.state = State::Ground;
     }
 
     fn cancel(&mut self) {
-        self.string.clear();
+        self.clear_string();
         self.discarded = false;
         self.state = State::Ground;
+    }
+
+    fn clear_string(&mut self) {
+        // Large APC transfers must not permanently raise every session's
+        // retained heap. Ordinary OSC/DCS buffers still reuse their allocation.
+        if self.string.capacity() > MAX_STRING_BYTES {
+            self.string = Vec::new();
+        } else {
+            self.string.clear();
+        }
     }
 }
 
