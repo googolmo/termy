@@ -9,7 +9,9 @@ by native, display-only, tmux and persistent Termy sessions.
   to the screen in runs. Complete UTF-8 scalars within a chunk use one dispatch;
   malformed and fragmented sequences retain the streaming fallback. CSI
   parameters use fixed arrays; OSC/DCS/APC share a reusable, bounded buffer.
-  Fragment boundaries must never change behavior.
+  Completed or aborted strings release buffers larger than 64 KiB. Fragment
+  boundaries must never change behavior; the synchronized-output scanner uses
+  the same string limits without retaining a second copy of each payload.
 - `grid.rs` owns primary/alternate screens, scrollback, wide characters,
   cursor state and dirty ranges. Scrolling moves row ownership and reuses
   evicted row allocations once history is full. Rows track a conservative
@@ -34,23 +36,31 @@ by native, display-only, tmux and persistent Termy sessions.
 - `dispatch.rs` applies control sequences and owns modes, palette changes,
   hyperlinks and bounded event/reply queues. Clipboard controls share the parser
   and synchronized commits, avoiding a second scan and filtered input copy.
+  DECSTR resets VT state while preserving screen contents. Supported DEC private
+  modes can be saved and restored, including synchronized output.
   `queries.rs` reports live VT state.
 - `sync.rs` buffers synchronized output with a 2 MiB limit and a 150 ms timeout.
   A syntax-aware marker scanner preserves ordering across fragmented strings.
 - `graphics.rs` applies image commands and ordered scroll/clear effects inside
-  the same parser commits as text. Animation revision polling allocates nothing.
+  the same parser commits as text. Upload chunks do not scan the viewport for
+  Unicode placeholders; visual mutations invalidate placeholder placement state.
+  Animation revision polling allocates nothing.
 - `transport/` provides bounded native PTY input/output on Unix and Windows.
   The runtime maintenance thread sleeps until a synchronized-output deadline or
   a pending history-compaction step. History compaction starts 250 ms after the
-  last added history row and processes at most 256 rows per step.
+  last added history row and processes at most 256 rows per step. Windows control
+  workers wait on child-exit and resize/close events instead of polling a timer.
 - `Engine` is single-owner state. Transport/runtime synchronization belongs
   outside it. Active viewport reads borrow row slices. Cold history is expanded
-  on demand for borrowed reads; search and bulk visitors reuse scratch storage.
+  on demand for borrowed reads; invalidation visits only the interval containing
+  those reads. Search and bulk visitors reuse scratch storage.
 
 Sustained output retains the dense scrolling fast path. Quiet history compacts
 without changing damage or generation. Direct engine hosts can explicitly call
 `compact_history()` after a burst. Allocation benchmarks report active and
 settled retained heap separately from parsing throughput.
+The transition out of quiet compaction counts output bytes across feeds, so
+fragmenting a burst into small writes does not keep packing new history rows.
 Grid dimensions are clamped to 4,096 per axis and 1,048,576 cells in total.
 History retains at most 20,000 rows and 1,048,576 cells, so wide grids can retain
 fewer rows than the configured history count. Combining suffixes, CSI parameters,
@@ -70,6 +80,9 @@ fragmentation checks, without an Alacritty test oracle.
 
 The Unicode, CJK rendering, memory, and native presented-frame measurements are
 documented in the [follow-up report](../../../../docs/engineering/unicode-history-performance-2026-10-05.md).
+The [October 7 audit report](../../../../docs/engineering/terminal-engine-audit-fixes-2026-10-07.md)
+records the subsequent correctness fixes, targeted regression measurements, and
+remaining throughput and presentation limitations.
 
 ```sh
 cargo test -p termy_core terminal_engine
