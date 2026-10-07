@@ -255,6 +255,9 @@ impl Grid {
         }
         self.grapheme_open = true;
         if self.full_damage {
+            // Graphics revisions must observe scalar edits even while text
+            // consumers already need a full redraw and the cursor is hidden.
+            self.mark(row, start, end);
             return;
         }
         if self.cursor.visible {

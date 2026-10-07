@@ -331,6 +331,21 @@ mod tests {
     }
 
     #[test]
+    fn hidden_cursor_unicode_overwrite_invalidates_virtual_graphics_with_full_damage() {
+        let mut engine = Engine::new(Size { cols: 10, rows: 4 }, Options::default());
+        engine.feed(b"\x1b[?25l\x1b_Ga=T,f=32,s=1,v=1,i=1,c=1,r=1,U=1,q=2;AQID/w==\x1b\\");
+        engine.feed("\x1b[38;5;1m\u{10eeee}\u{0305}\u{0305}".as_bytes());
+        let (before, placements) = engine.graphics_snapshot();
+        assert_eq!(placements.len(), 1);
+
+        // A scalar write takes a separate full-damage fast path. With the
+        // cursor hidden, neither carriage return nor cursor damage covers it.
+        engine.feed("\r界".as_bytes());
+        assert_ne!(engine.graphics_revision(), before);
+        assert!(engine.graphics_placements().is_empty());
+    }
+
+    #[test]
     fn placement_deletion_still_resolves_virtual_parent_cells() {
         let mut engine = Engine::new(Size { cols: 10, rows: 4 }, Options::default());
         engine.feed(b"\x1b_Ga=T,f=32,s=1,v=1,i=1,p=1,c=1,r=1,U=1,q=2;AQID/w==\x1b\\");
