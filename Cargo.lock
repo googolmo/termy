@@ -7780,6 +7780,7 @@ dependencies = [
  "webbrowser",
  "windows 0.61.3",
  "winresource",
+ "x11rb",
  "zed-font-kit",
 ]
 

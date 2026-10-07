@@ -355,12 +355,12 @@ Platform note: the Agent Sidebar/Workspace is currently unavailable on Windows b
 
 `window_width`
 - Default: `1280`
-- Default startup window width in pixels
+- Startup window width in pixels before a window size has been saved
 - Group: `WINDOW`
 
 `window_height`
 - Default: `820`
-- Default startup window height in pixels
+- Startup window height in pixels before a window size has been saved
 - Group: `WINDOW`
 
 `inspector_height`

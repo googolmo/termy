@@ -174,6 +174,7 @@ pub struct SettingsWindow {
     system_appearance: SystemAppearance,
     appearance_subscription: Option<gpui_kit::Subscription>,
     last_window_background_appearance: Option<WindowBackgroundAppearance>,
+    native_titlebar: crate::native_titlebar::NativeTitlebarTheme,
     theme_store_themes: Vec<ThemeStoreTheme>,
     theme_store_loaded: bool,
     theme_store_loading: bool,
@@ -281,6 +282,7 @@ impl SettingsWindow {
             system_appearance,
             appearance_subscription: None,
             last_window_background_appearance: None,
+            native_titlebar: crate::native_titlebar::NativeTitlebarTheme::for_window(window),
             theme_store_themes: Vec::new(),
             theme_store_loaded: false,
             theme_store_loading: false,
@@ -1234,6 +1236,7 @@ impl gpui_kit::EntityInputHandler for SettingsWindow {
 impl Render for SettingsWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_window_background_appearance(window);
+        self.native_titlebar.sync(&self.colors);
         // Components from `termy_ui` read their colors from a global, so refresh
         // it before building this frame's element tree.
         self.sync_ui_tokens(cx);

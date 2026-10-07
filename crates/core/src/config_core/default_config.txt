@@ -87,9 +87,9 @@ term = xterm-256color
 colorterm = truecolor
 # Send macOS Option plus printable keys as escape-prefixed terminal Alt input
 macos_option_as_alt = false
-# Default startup window width in pixels
+# Startup window width in pixels before a window size has been saved
 window_width = 1280
-# Default startup window height in pixels
+# Startup window height in pixels before a window size has been saved
 window_height = 820
 # Remembered height in pixels of the developer inspector panel
 inspector_height = 280
