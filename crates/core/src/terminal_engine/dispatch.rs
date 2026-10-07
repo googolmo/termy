@@ -539,11 +539,10 @@ impl Handler for State {
             }
             return;
         }
-        if intermediates == b"!" && private.is_none() && final_byte == b'p' {
-            self.soft_reset();
-            return;
-        }
         if !intermediates.is_empty() {
+            if intermediates == b"!" && private.is_none() && final_byte == b'p' {
+                self.soft_reset();
+            }
             return;
         }
         match (private, final_byte) {
