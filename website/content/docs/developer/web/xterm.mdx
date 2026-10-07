@@ -1,0 +1,87 @@
+---
+title: Migrate from xterm.js
+description: Replace @xterm/xterm with @termysh/xterm and keep your existing code.
+---
+
+`@termysh/xterm` implements the xterm.js `Terminal` API on top of
+`@termysh/web`. In most apps, migrating means changing imports.
+
+```sh
+npm uninstall @xterm/xterm @xterm/addon-fit @xterm/addon-web-links @xterm/addon-search
+npm install @termysh/xterm
+```
+
+```diff
+-import { Terminal } from '@xterm/xterm'
+-import { FitAddon } from '@xterm/addon-fit'
+-import { WebLinksAddon } from '@xterm/addon-web-links'
+-import '@xterm/xterm/css/xterm.css'
++import { Terminal, FitAddon, WebLinksAddon } from '@termysh/xterm'
+
+ const term = new Terminal({ cursorBlink: true, fontSize: 13 })
+ const fit = new FitAddon()
+ term.loadAddon(fit)
+ term.loadAddon(new WebLinksAddon())
+ term.open(container)
+ fit.fit()
+ term.onData((data) => socket.send(data))
+```
+
+No stylesheet is needed. An unthemed terminal uses xterm.js's default colors,
+so it looks the same after the switch.
+
+## What carries over
+
+- `Terminal` options, including `theme` (`ITheme`), cursor, font, scrolling,
+  input and link options. Options without a Termy equivalent (`logLevel`,
+  `windowsMode`, `tabStopWidth`, `smoothScrollDuration`, ...) are accepted and
+  ignored.
+- `term.options.fontSize = 16` and `term.options = { ... }` update live.
+- Methods: `open`, `write`, `writeln`, `paste`, `input`, `resize`, `focus`,
+  `blur`, `clear`, `reset`, `scroll*`, `select*`, `getSelection`,
+  `getSelectionPosition`, `attachCustomKeyEventHandler`,
+  `attachCustomWheelEventHandler`, `registerMarker`, `loadAddon`, `dispose`.
+- Events: `onData`, `onBinary`, `onKey`, `onResize`, `onTitleChange`,
+  `onBell`, `onScroll`, `onRender`, `onSelectionChange`, `onCursorMove`,
+  `onLineFeed`, `onWriteParsed`.
+- `buffer.active` with `getLine(y).translateToString()`, `getCell(x)` and
+  cell attribute and color getters; `modes`.
+
+## Addons
+
+| xterm.js addon | With @termysh/xterm |
+| --- | --- |
+| `@xterm/addon-fit` | `FitAddon` (same API) |
+| `@xterm/addon-web-links` | `WebLinksAddon` (same API) |
+| `@xterm/addon-search` | `SearchAddon`: `findNext`, `findPrevious`, `onDidChangeResults` |
+| `@xterm/addon-webgl`, `@xterm/addon-canvas` | `WebglAddon`, `CanvasAddon` no-ops; Termy has its own renderer |
+| `@xterm/addon-unicode11` | `Unicode11Addon` no-op; the engine measures widths |
+| `@xterm/addon-image` | Not needed for kitty graphics, which are built in. Sixel is not supported yet |
+
+Third-party addons that reach into xterm.js internals (`terminal._core`) will
+not work.
+
+## Termy extras
+
+The adapter accepts a few extra options:
+
+| Option | Description |
+| --- | --- |
+| `termyTheme` | Start from a bundled Termy theme; `theme` then overrides individual colors |
+| `images` | Render kitty graphics (default `true`) |
+| `allowClipboardWrite` | Let OSC 52 write the clipboard |
+| `autoFit` | Follow the container without `FitAddon` |
+| `padding`, `copyOnSelect` | As in `@termysh/web` |
+
+`term.termy` is the underlying `@termysh/web` terminal, and `term.ready`
+resolves once the engine is loaded.
+
+## Differences
+
+- Writes made before the WebAssembly module loads are queued; they render
+  once it is ready.
+- Not supported yet: `registerDecoration`, custom `registerLinkProvider`
+  providers, `parser.register*Handler` hooks and character joiners. They are
+  accepted and do nothing.
+- `buffer.normal` cannot read the main screen while a full-screen app is using
+  the alternate screen.

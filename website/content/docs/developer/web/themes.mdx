@@ -1,0 +1,62 @@
+---
+title: Web terminal themes
+description: Use bundled Termy themes, xterm.js themes, or override individual colors.
+---
+
+The `theme` option accepts three forms.
+
+```ts
+// A bundled Termy theme
+new Terminal({ theme: 'catppuccin-mocha' })
+
+// A full theme object (the same shape as xterm.js ITheme)
+new Terminal({ theme: { background: '#0b0b0f', foreground: '#e6e6e6', cursor: '#7aa2f7' } })
+
+// A bundled theme with overrides
+new Terminal({ theme: { extends: 'nord', cursor: '#ebcb8b', selectionBackground: '#88c0d055' } })
+```
+
+Change it at any time with `term.setOptions({ theme: 'dracula' })`.
+
+## Bundled themes
+
+`builtinThemeIds()` lists the themes compiled into the engine, the same ones
+the desktop app ships:
+
+`termy`, `termy-light`, `tokyo-night`, `catppuccin-mocha`, `dracula`,
+`gruvbox-dark`, `nord`, `solarized-dark`, `one-dark`, `monokai`,
+`material-dark`, `palenight`, `tomorrow-night`, `oceanic-next`.
+
+```ts
+import { builtinTheme, builtinThemeIds } from '@termysh/web'
+
+await term.ready
+builtinThemeIds()              // ['termy', 'termy-light', ...]
+builtinTheme('tokyo-night')    // { foreground, background, cursor, ansi: [16 colors] }
+```
+
+Ids ignore case and separators, so `'Tokyo Night'` and `tokyo_night` work too.
+
+## Theme keys
+
+Colors accept any CSS color: `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()`
+or a named color.
+
+| Key | Used for |
+| --- | --- |
+| `foreground`, `background` | Default text and background |
+| `cursor`, `cursorAccent` | Cursor color and the text under a block cursor |
+| `selectionBackground` | Selection while focused; alpha blends with the cell |
+| `selectionInactiveBackground` | Selection while unfocused |
+| `selectionForeground` | Selected text (defaults to the cell's own color) |
+| `black` ... `white` | ANSI colors 0-7 |
+| `brightBlack` ... `brightWhite` | ANSI colors 8-15 |
+| `extendedAnsi` | Palette entries 16-255; missing entries use the standard 256-color cube |
+| `scrollbarThumb` | Overlay scrollbar |
+
+## Colors set by applications
+
+Programs can still change colors at runtime with OSC 4 (palette), OSC 10
+(foreground), OSC 11 (background) and OSC 12 (cursor). When a program queries
+colors, the terminal answers with the active theme, so tools that detect light
+or dark backgrounds pick the right colors.

@@ -40,6 +40,10 @@ export function baseOptions(): BaseLayoutProps {
         active: 'nested-url',
       },
       {
+        text: 'Demo',
+        url: '/demo',
+      },
+      {
         text: 'Releases',
         url: '/releases',
       },

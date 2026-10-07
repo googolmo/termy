@@ -29,6 +29,11 @@ at the library root. Supporting modules are grouped by responsibility:
 - `cli_install_core/` and `release_core/`: installation and release helpers.
 - `ffi/`: C ABI, with its public header at `include/termy.h`.
 
+The default `native` feature carries the PTY runtime, config files, plugins,
+multiplexer, SSH and the C ABI. `--no-default-features` builds only the headless
+engine (parser, grid, input encoding, kitty protocols, glyph geometry, themes),
+which is what `crates/wasm` compiles for `wasm32-unknown-unknown`.
+
 `termy-session-host` remains a standalone binary target inside this package.
 The shared library artifact is `libtermy_core` (`termy_core.dll` on Windows);
 C exports and header contracts are unchanged.
@@ -40,6 +45,15 @@ C exports and header contracts are unchanged.
 
 The default binary is `termy-cli`. Run repository tooling with
 `cargo run -p termy_cli --bin xtask -- <command>`.
+
+## Web: `crates/wasm` (`termy_wasm`) and `packages/`
+
+`crates/wasm` is the wasm-bindgen surface over the engine-only `termy_core`.
+`packages/` is a Bun workspace of npm packages built with tsdown:
+`@termysh/core` (wasm + headless API), `@termysh/web` (browser terminal) and
+`@termysh/xterm` (xterm.js-compatible adapter). See `packages/README.md`.
+They are published manually by `.github/workflows/npm-publish.yml`, separate
+from desktop releases.
 
 ## Repository support
 

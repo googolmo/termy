@@ -1,0 +1,18 @@
+{
+  "name": "termysh-packages",
+  "private": true,
+  "type": "module",
+  "workspaces": ["core", "web", "xterm"],
+  "scripts": {
+    "build:wasm": "node core/scripts/build-wasm.mjs",
+    "build": "bun run build:wasm && bun run --filter '@termysh/core' build && bun run --filter '@termysh/web' build && bun run --filter '@termysh/xterm' build",
+    "typecheck": "tsc -p core --noEmit && tsc -p web --noEmit && tsc -p xterm --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.0.0",
+    "tsdown": "^0.23.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.3"
+  }
+}

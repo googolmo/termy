@@ -1,13 +1,7 @@
 use compact_str::CompactString;
 
 use crate::runtime::{TerminalCursorState, TerminalDamageSnapshot};
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct TerminalColor {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-}
+pub use crate::terminal_types::TerminalColor;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TermyColor {

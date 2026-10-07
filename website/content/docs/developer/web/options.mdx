@@ -1,0 +1,113 @@
+---
+title: Web terminal options
+description: Every option for @termysh/web, with defaults.
+---
+
+Pass options to the constructor, or change them later. Every option applies at
+runtime: font and padding changes re-measure the cell and re-fit the grid, and
+everything else repaints.
+
+```ts
+const term = new Terminal({ fontSize: 14, cursorStyle: 'bar' })
+term.setOptions({ fontSize: 16, theme: 'nord' })
+term.setOption('cursorBlink', true)
+```
+
+## Font
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `fontFamily` | JetBrains Mono, SF Mono, Menlo, ... `monospace` | CSS font family |
+| `fontSize` | `14` | CSS pixels |
+| `fontWeight` | `'normal'` | Weight for regular text |
+| `fontWeightBold` | `'bold'` | Weight for bold text |
+| `lineHeight` | `1` | Multiplier of the font's natural line height |
+| `letterSpacing` | `0` | Extra CSS pixels between cells |
+
+The cell size is re-measured when web fonts finish loading and when the window
+moves to a display with a different pixel ratio.
+
+## Colors
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `theme` | `'termy'` | Bundled theme id, theme object, or `{ extends, ...overrides }`. See [Themes](/docs/developer/web/themes) |
+| `drawBoldTextInBrightColors` | `true` | Bold text in ANSI colors 0-7 uses colors 8-15 |
+| `minimumContrastRatio` | `1` | WCAG contrast ratio enforced for text, from `1` (off) to `21` |
+| `allowTransparency` | `false` | Let the page show through cells with the default background |
+
+## Cursor
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `cursorStyle` | `'block'` | `'block'`, `'bar'` or `'underline'` |
+| `cursorBlink` | `false` | Blink while focused |
+| `cursorWidth` | `1` | Bar cursor width in CSS pixels |
+| `cursorInactiveStyle` | `'outline'` | Cursor while unfocused: `'outline'`, `'block'`, `'bar'`, `'underline'` or `'none'` |
+
+Applications can still change the cursor shape with `DECSCUSR`; `cursorStyle`
+is the shape it returns to after a reset.
+
+## Layout
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `cols`, `rows` | `80`, `24` | Initial grid size; `autoFit` replaces it once the terminal is open |
+| `autoFit` | `true` | Follow the container's size |
+| `padding` | `0` | Inner padding in CSS pixels |
+| `scrollback` | `1000` | Lines kept in history |
+| `scrollbar` | `true` | Show the overlay scrollbar on hover |
+| `devicePixelRatio` | `window.devicePixelRatio` | Override the render scale |
+
+## Rendering
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `customGlyphs` | `true` | Draw box drawing, block elements, sextants and Braille with Termy's pixel-exact geometry instead of the font |
+| `images` | `true` | Render kitty graphics protocol images |
+
+## Scrolling
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `scrollSensitivity` | `1` | Wheel multiplier |
+| `fastScrollSensitivity` | `5` | Wheel multiplier while `fastScrollModifier` is held |
+| `fastScrollModifier` | `'alt'` | `'alt'`, `'ctrl'`, `'shift'` or `'none'` |
+| `alternateScroll` | `true` | In full-screen apps without mouse tracking, the wheel sends arrow keys |
+| `scrollOnUserInput` | `true` | Jump to the bottom when the user types |
+
+## Input
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `macOptionIsMeta` | `false` | On macOS, Option acts as Alt instead of composing characters |
+| `macOptionClickForcesSelection` | `false` | On macOS, Option+click selects text even when the app tracks the mouse |
+| `rightClickSelectsWord` | `false` | Right-click selects the word under the pointer |
+| `altClickMovesCursor` | `true` | Alt+click on the prompt line moves the cursor there |
+| `disableStdin` | `false` | Ignore all user input |
+| `ignoreBracketedPasteMode` | `false` | Never wrap pastes in bracketed paste markers |
+| `convertEol` | `false` | Treat `\n` written to the terminal as `\r\n` |
+
+Hold Shift to select text while an application tracks the mouse. On macOS,
+Cmd+C and Cmd+V copy and paste; elsewhere use Ctrl+Shift+C and Ctrl+Shift+V.
+
+## Selection and links
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `wordSeparator` | `` ()[]{}',"` `` and space | Characters that end a double-click word selection |
+| `copyOnSelect` | `false` | Copy to the clipboard when a selection finishes |
+| `linkHandler` | Opens links in a new tab | `{ activate, hover?, leave?, allowNonHttpProtocols? }`, or `null` to disable links |
+| `linkDetection` | `true` | Detect plain-text URLs in addition to OSC 8 hyperlinks |
+
+Only `http`, `https` and `mailto` links are activated unless the handler sets
+`allowNonHttpProtocols`.
+
+## Integration
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `allowClipboardWrite` | `false` | Let OSC 52 write the system clipboard. `onClipboard` fires either way |
+| `bellStyle` | `'none'` | `'visual'` flashes the terminal on BEL |
+| `screenReaderMode` | `false` | Mirror output into an `aria-live` region |
+| `wasm` | next to `@termysh/core` | Where to load `termy.wasm` from |

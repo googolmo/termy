@@ -4,7 +4,8 @@
 //! mutations. This keeps fragmented CSI, UTF-8 and string termination semantics
 //! identical to normal parsing while holding a strictly bounded byte buffer.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use super::parser::{Handler, MAX_APC_BYTES, Param, Parser};
 

@@ -1,7 +1,7 @@
 //! Shell integration support for OSC 133 command lifecycle tracking
 //! and OSC 9;4 progress indicators.
 
-use std::time::Instant;
+use web_time::Instant;
 
 /// OSC 133 command lifecycle state machine.
 ///

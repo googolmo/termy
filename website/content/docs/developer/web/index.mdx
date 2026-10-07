@@ -1,0 +1,139 @@
+---
+title: Web terminal
+description: Run Termy's terminal engine in the browser with the @termysh npm packages.
+---
+
+<Callout type="info">
+  The `@termysh` packages are new and pre-1.0. The API can change between
+  releases; pin a version and test upgrades.
+</Callout>
+
+The `@termysh` packages bring Termy's terminal engine to the web. The parser,
+grid, scrollback, keyboard and mouse encoders, kitty protocols, box-drawing
+geometry and themes are the same Rust code the desktop app runs, compiled to
+WebAssembly. Use them to build a browser terminal or to replace xterm.js.
+
+## Choose a package
+
+| Package | What it is | Use it when |
+| --- | --- | --- |
+| `@termysh/web` | Browser terminal with renderer, input, selection, links and images | You are building something new |
+| `@termysh/xterm` | xterm.js-compatible API on top of `@termysh/web` | You are replacing `@xterm/xterm` |
+| `@termysh/core` | WebAssembly engine with a typed headless API | You render yourself, run in a worker or Node, or test terminal output |
+
+<Cards>
+  <Card title="Live demo" description="Try the web terminal in your browser." href="/demo" />
+  <Card title="Options" description="Fonts, cursor, scrolling, input, links and every other setting." href="/docs/developer/web/options" />
+  <Card title="Themes" description="Bundled Termy themes, xterm.js themes and overrides." href="/docs/developer/web/themes" />
+  <Card title="Migrate from xterm.js" description="Swap the import and keep your existing code." href="/docs/developer/web/xterm" />
+  <Card title="Headless core" description="Drive the engine directly from a worker, Node or your own renderer." href="/docs/developer/web/core" />
+</Cards>
+
+## Install
+
+```sh
+npm install @termysh/web
+# or: bun add @termysh/web / pnpm add @termysh/web
+```
+
+`@termysh/web` depends on `@termysh/core`, which ships the `termy.wasm` module.
+
+## Connect a terminal
+
+The terminal does no I/O of its own. Bytes go in through `write`, and
+everything the user types (plus protocol replies such as cursor reports) comes
+out through `onData`, so any transport works: a WebSocket to a PTY server,
+WebRTC, a worker, or a shell running in the page.
+
+```ts
+import { Terminal } from '@termysh/web'
+
+const term = new Terminal({ theme: 'tokyo-night', fontSize: 13, cursorBlink: true })
+term.open(document.getElementById('terminal')!)
+
+const socket = new WebSocket('wss://example.com/pty')
+socket.binaryType = 'arraybuffer'
+socket.onmessage = (event) => term.write(new Uint8Array(event.data))
+term.onData((data) => socket.send(data))
+term.onResize(({ cols, rows }) => socket.send(JSON.stringify({ type: 'resize', cols, rows })))
+```
+
+The terminal fills its parent element and, with `autoFit` (on by default),
+resizes its grid whenever the parent changes size.
+
+The constructor is synchronous. The WebAssembly module loads in the
+background, and calls made before it is ready (`write`, `resize`, `paste`) are
+queued. Use `await term.ready`, or `await Terminal.create(options)`, when you
+need the engine immediately.
+
+## Load the WebAssembly module
+
+By default `termy.wasm` is resolved next to `@termysh/core` with
+`new URL('./termy.wasm', import.meta.url)`, which Vite, webpack 5, Rspack,
+esbuild, Node and Bun understand. To serve it from your own location, pass the
+`wasm` option or call `init` yourself:
+
+```ts
+import wasmUrl from '@termysh/core/termy.wasm?url' // Vite
+import { Terminal, init } from '@termysh/web'
+
+new Terminal({ wasm: wasmUrl })
+// or, once at startup:
+await init(fetch('/assets/termy.wasm'))
+```
+
+## API
+
+```ts
+term.open(parent)
+term.write(data, callback?)          // string or Uint8Array
+term.writeln(data)
+term.paste(text)                     // honors bracketed paste
+term.input(text)                     // as if the user typed it
+term.resize(cols, rows)
+term.fit()                           // resize to the container now
+term.setOptions({ fontSize: 15 })    // any option, at runtime
+term.focus() / term.blur()
+term.clear() / term.reset()
+term.scrollLines(n) / term.scrollToBottom() / term.scrollToLine(line)
+term.select(col, line, length) / term.selectAll() / term.getSelection()
+term.getLine(line) / term.cursor / term.historySize / term.viewportY
+term.attachCustomKeyEventHandler((event) => true)
+term.dispose()
+```
+
+Buffer lines are absolute: `0` is the oldest scrollback line and `historySize`
+is the first line of the live screen.
+
+Every event returns a disposable:
+
+| Event | Fires when |
+| --- | --- |
+| `onData` | Input for the host: keys, paste, protocol replies |
+| `onBinary` | Legacy X10 mouse reports that are not valid UTF-8 |
+| `onBytes` | Every byte sent to the host, regardless of encoding |
+| `onResize` | The grid size changes |
+| `onTitleChange` | The application sets the title (OSC 0/2) |
+| `onBell` | BEL |
+| `onCwdChange` | OSC 7 working directory |
+| `onProgress` | OSC 9;4 progress |
+| `onShellIntegration` | OSC 133 prompt and command marks |
+| `onClipboard` | OSC 52 clipboard write |
+| `onSelectionChange`, `onScroll`, `onRender`, `onKey`, `onCursorMove`, `onWriteParsed`, `onFocus`, `onBlur` | As named |
+
+## Protocol support
+
+The web terminal inherits the desktop engine's protocol support:
+
+- xterm and VT control sequences, 256-color and truecolor
+- Styled and colored underlines (curly, dotted, dashed, double)
+- OSC 8 hyperlinks, plus plain URL detection
+- OSC 4/10/11/12 color changes and queries, OSC 7, OSC 52, OSC 133, OSC 9;4
+- Synchronized output (mode 2026), bracketed paste, focus events
+- Mouse tracking with default, UTF-8 and SGR encodings
+- The kitty keyboard protocol, including release events
+- The kitty graphics protocol: RGBA, RGB and PNG images, placements,
+  z-index layering, animation and Unicode placeholders
+
+Not yet supported: sixel and iTerm2 inline images, kitty OSC 5522 clipboard,
+and xterm.js decorations, custom link providers and parser hooks.

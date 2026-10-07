@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/core", "crates/desktop_app", "crates/cli"]
+members = ["crates/core", "crates/desktop_app", "crates/cli", "crates/wasm"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -66,3 +66,11 @@ strip = "symbols"
 inherits = "release"
 debug = 1
 strip = "none"
+
+# Size-optimized wasm build for the @termysh/* npm packages.
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"

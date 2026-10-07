@@ -2484,8 +2484,8 @@ mod tests {
         let rect = geometry.rects()[0];
         assert_f32_eq(rect.left, 0.0);
         assert_f32_eq(rect.right, 1.0);
-        assert_f32_eq(rect.top, 0.475);
-        assert_f32_eq(rect.bottom, 0.525);
+        assert_f32_eq(rect.top, 0.5);
+        assert_f32_eq(rect.bottom, 0.55);
         assert_eq!(rect.alpha, 1.0);
     }
 
@@ -2496,16 +2496,16 @@ mod tests {
 
         assert_eq!(geometry.rects().len(), 2);
         let vertical = geometry.rects()[0];
-        assert_f32_eq(vertical.left, 0.45);
+        assert_f32_eq(vertical.left, 0.5);
         assert_f32_eq(vertical.top, 0.0);
-        assert_f32_eq(vertical.right, 0.55);
+        assert_f32_eq(vertical.right, 0.6);
         assert_f32_eq(vertical.bottom, 1.0);
 
         let horizontal = geometry.rects()[1];
         assert_f32_eq(horizontal.left, 0.0);
-        assert_f32_eq(horizontal.top, 0.475);
+        assert_f32_eq(horizontal.top, 0.5);
         assert_f32_eq(horizontal.right, 1.0);
-        assert_f32_eq(horizontal.bottom, 0.525);
+        assert_f32_eq(horizontal.bottom, 0.55);
     }
 
     #[test]
@@ -2516,34 +2516,34 @@ mod tests {
         assert_eq!(geometry.rects().len(), 8);
 
         let top_left_vertical = geometry.rects()[0];
-        assert_f32_eq(top_left_vertical.left, 0.35);
-        assert_f32_eq(top_left_vertical.right, 0.45);
+        assert_f32_eq(top_left_vertical.left, 0.4);
+        assert_f32_eq(top_left_vertical.right, 0.5);
         assert_f32_eq(top_left_vertical.top, 0.0);
-        assert_f32_eq(top_left_vertical.bottom, 0.475);
+        assert_f32_eq(top_left_vertical.bottom, 0.5);
 
         let top_right_vertical = geometry.rects()[1];
-        assert_f32_eq(top_right_vertical.left, 0.55);
-        assert_f32_eq(top_right_vertical.right, 0.65);
+        assert_f32_eq(top_right_vertical.left, 0.6);
+        assert_f32_eq(top_right_vertical.right, 0.7);
         assert_f32_eq(top_right_vertical.top, 0.0);
-        assert_f32_eq(top_right_vertical.bottom, 0.475);
+        assert_f32_eq(top_right_vertical.bottom, 0.5);
 
         let top_right = geometry.rects()[2];
-        assert_f32_eq(top_right.left, 0.55);
+        assert_f32_eq(top_right.left, 0.6);
         assert_f32_eq(top_right.right, 1.0);
-        assert_f32_eq(top_right.top, 0.425);
-        assert_f32_eq(top_right.bottom, 0.475);
+        assert_f32_eq(top_right.top, 0.45);
+        assert_f32_eq(top_right.bottom, 0.5);
 
         let bottom_left = geometry.rects()[7];
         assert_f32_eq(bottom_left.left, 0.0);
-        assert_f32_eq(bottom_left.right, 0.45);
-        assert_f32_eq(bottom_left.top, 0.525);
-        assert_f32_eq(bottom_left.bottom, 0.575);
+        assert_f32_eq(bottom_left.right, 0.5);
+        assert_f32_eq(bottom_left.top, 0.55);
+        assert_f32_eq(bottom_left.bottom, 0.6);
 
         let bottom_right = geometry.rects()[3];
-        assert_f32_eq(bottom_right.left, 0.55);
+        assert_f32_eq(bottom_right.left, 0.6);
         assert_f32_eq(bottom_right.right, 1.0);
-        assert_f32_eq(bottom_right.top, 0.525);
-        assert_f32_eq(bottom_right.bottom, 0.575);
+        assert_f32_eq(bottom_right.top, 0.55);
+        assert_f32_eq(bottom_right.bottom, 0.6);
     }
 
     #[test]
@@ -2554,13 +2554,13 @@ mod tests {
         assert_eq!(geometry.rects().len(), 2);
 
         let vertical = geometry.rects()[0];
-        assert_f32_eq(vertical.left, 0.45);
-        assert_f32_eq(vertical.right, 0.55);
+        assert_f32_eq(vertical.left, 0.5);
+        assert_f32_eq(vertical.right, 0.6);
         assert_f32_eq(vertical.top, 0.0);
         assert_f32_eq(vertical.bottom, 1.0);
 
         let horizontal = geometry.rects()[1];
-        assert_f32_eq(horizontal.left, 0.55);
+        assert_f32_eq(horizontal.left, 0.6);
         assert_f32_eq(horizontal.right, 1.0);
         assert_f32_eq(horizontal.top, 0.45);
         assert_f32_eq(horizontal.bottom, 0.55);
@@ -2574,22 +2574,22 @@ mod tests {
         assert_eq!(geometry.rects().len(), 3);
 
         let vertical = geometry.rects()[0];
-        assert_f32_eq(vertical.left, 0.45);
-        assert_f32_eq(vertical.right, 0.55);
+        assert_f32_eq(vertical.left, 0.5);
+        assert_f32_eq(vertical.right, 0.6);
         assert_f32_eq(vertical.top, 0.0);
         assert_f32_eq(vertical.bottom, 1.0);
 
         let top_double = geometry.rects()[1];
-        assert_f32_eq(top_double.left, 0.55);
+        assert_f32_eq(top_double.left, 0.6);
         assert_f32_eq(top_double.right, 1.0);
-        assert_f32_eq(top_double.top, 0.425);
-        assert_f32_eq(top_double.bottom, 0.475);
+        assert_f32_eq(top_double.top, 0.45);
+        assert_f32_eq(top_double.bottom, 0.5);
 
         let bottom_double = geometry.rects()[2];
-        assert_f32_eq(bottom_double.left, 0.55);
+        assert_f32_eq(bottom_double.left, 0.6);
         assert_f32_eq(bottom_double.right, 1.0);
-        assert_f32_eq(bottom_double.top, 0.525);
-        assert_f32_eq(bottom_double.bottom, 0.575);
+        assert_f32_eq(bottom_double.top, 0.55);
+        assert_f32_eq(bottom_double.bottom, 0.6);
     }
 
     #[test]

@@ -191,8 +191,8 @@ pub struct KittyGraphicsRenderPlacement<I = Arc<crate::terminal_engine::media::G
     pub image_width: u32,
     pub image_height: u32,
     pub image_generation: u64,
-    #[serde(with = "crate::remote::serde_deadline")]
-    pub animation_deadline: Option<std::time::Instant>,
+    #[serde(with = "crate::serde_deadline")]
+    pub animation_deadline: Option<web_time::Instant>,
     pub viewport_row: i32,
     pub col: usize,
     pub col_offset: i32,

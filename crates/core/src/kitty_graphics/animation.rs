@@ -2,7 +2,7 @@ use super::*;
 use crate::terminal_engine::media::{
     GraphicsAnimation, GraphicsAnimationControl, GraphicsComposition, GraphicsFrameUpdate,
 };
-use std::time::Instant;
+use web_time::Instant;
 
 impl KittyGraphicsState {
     pub(super) fn edit_animation(

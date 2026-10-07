@@ -1,0 +1,83 @@
+---
+title: Headless core
+description: Drive Termy's WebAssembly engine directly from a worker, Node or your own renderer.
+---
+
+`@termysh/core` is the engine without a renderer. It runs in browsers, web
+workers, Node and Bun, does no I/O, and has no DOM dependency. Use it to
+render with your own stack (WebGL, React, a canvas in a worker), to snapshot
+terminal output on a server, or to test programs that draw to a terminal.
+
+```ts
+import { Slot, TermyCore, decodeColor, init } from '@termysh/core'
+
+await init()
+const term = new TermyCore({ cols: 80, rows: 24, scrollback: 1000 })
+
+term.write('\x1b[1;32mready\x1b[0m\r\n$ ')
+term.lineText(0)           // 'ready'
+term.cursor()              // { row: 1, col: 2, visible: true, shape: 'block', blinking: false }
+```
+
+In Node or Bun, `init()` reads `termy.wasm` from disk. In a worker you can
+pass bytes or a compiled module to `initSync`.
+
+## Rendering loop
+
+```ts
+const damage = term.takeDamage()          // { full, scrolls, spans }
+const rows = term.readRows(0, term.rows)  // flat cells for the viewport
+
+for (let row = 0; row < rows.rowCount; row++) {
+  for (let col = 0; col < rows.cols; col++) {
+    const text = rows.text(row, col)
+    const at = rows.offset(row, col)
+    const fg = decodeColor(rows.data[at + Slot.Foreground])
+    const style = rows.data[at + Slot.Style]
+    // draw ...
+  }
+}
+```
+
+Each cell is six `u32` slots: text, foreground, background, underline color,
+style bits and hyperlink. Colors keep their kind (`default`, `indexed` or
+`rgb`) so you resolve them against your own theme. Reads are copies, so they
+stay valid however the engine's memory changes.
+
+## Input
+
+Encode input with the engine so it follows the modes the application enabled
+(application cursor keys, bracketed paste, mouse tracking, the kitty keyboard
+protocol), then send the bytes to your host:
+
+```ts
+import { Modifier } from '@termysh/core'
+
+term.encodeKey('up', undefined, 0)                      // '\x1b[A' or '\x1bOA'
+term.encodeKey('c', 'c', Modifier.Ctrl)                 // '\x03'
+term.encodePaste(text)                                  // bracketed when enabled
+term.encodeMouse('press', 'left', col, row, 0)          // undefined unless tracking
+term.encodeFocus(true)
+```
+
+Protocol replies (device attributes, cursor position reports, color queries)
+are collected after each write; forward them to the host too:
+
+```ts
+term.write(output)
+const replies = term.takeReplies()
+if (replies.length) host.send(replies)
+for (const event of term.takeEvents()) {
+  // { type: 'title' | 'bell' | 'cwd' | 'progress' | 'clipboard' | 'shellIntegration', ... }
+}
+```
+
+## Images and glyphs
+
+- `readGraphics(cellWidth, cellHeight)` returns visible kitty graphics
+  placements with pixel clip and draw rectangles; `graphicsImage(index)`
+  returns their RGBA or PNG data.
+- `glyphPlan(codePoint, neighbors, cellWidth, cellHeight, fontSize)` returns
+  Termy's rectangles and strokes for box drawing, block elements, sextants and
+  Braille, so they line up exactly across cells.
+- `builtinTheme(id)` and `builtinThemeIds()` expose the bundled themes.

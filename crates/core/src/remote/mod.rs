@@ -2,7 +2,7 @@
 //! clients cache only the viewport and send input or history queries to it.
 mod backend;
 pub mod graphics;
-pub(crate) mod serde_deadline;
+pub(crate) use crate::serde_deadline;
 pub(crate) mod serde_image;
 pub(crate) mod serde_palette;
 

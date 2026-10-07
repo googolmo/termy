@@ -753,15 +753,15 @@ fn box_drawing_plan(character: char, metrics: TerminalGlyphMetrics) -> Option<Te
     let segments = box_draw_segments(character)?;
     let light = (metrics.font_size * 0.0675).ceil().max(1.0);
     let heavy = light * 2.0;
-    let h_light_top = ((metrics.cell_height - light).max(0.0)) / 2.0;
+    let h_light_top = snapped_line_start(metrics.cell_height, light);
     let h_light_bottom = (h_light_top + light).min(metrics.cell_height);
-    let h_heavy_top = ((metrics.cell_height - heavy).max(0.0)) / 2.0;
+    let h_heavy_top = snapped_line_start(metrics.cell_height, heavy);
     let h_heavy_bottom = (h_heavy_top + heavy).min(metrics.cell_height);
     let h_double_top = (h_light_top - light).max(0.0);
     let h_double_bottom = (h_light_bottom + light).min(metrics.cell_height);
-    let v_light_left = ((metrics.cell_width - light).max(0.0)) / 2.0;
+    let v_light_left = snapped_line_start(metrics.cell_width, light);
     let v_light_right = (v_light_left + light).min(metrics.cell_width);
-    let v_heavy_left = ((metrics.cell_width - heavy).max(0.0)) / 2.0;
+    let v_heavy_left = snapped_line_start(metrics.cell_width, heavy);
     let v_heavy_right = (v_heavy_left + heavy).min(metrics.cell_width);
     let v_double_left = (v_light_left - light).max(0.0);
     let v_double_right = (v_light_right + light).min(metrics.cell_width);
@@ -1012,6 +1012,16 @@ fn box_drawing_plan(character: char, metrics: TerminalGlyphMetrics) -> Option<Te
     Some(plan)
 }
 
+/// Leading edge of a centered line, on the same whole pixel that
+/// `snapped_stroke_center` uses for rounded corners. Centering on a half pixel
+/// (odd line in an even cell) makes host edge rounding collapse thin lines,
+/// which dropped one stroke of double-line glyphs.
+fn snapped_line_start(size: f32, width: f32) -> f32 {
+    (size / 2.0 - width / 2.0)
+        .round()
+        .clamp(0.0, (size - width).max(0.0))
+}
+
 fn snapped_stroke_center(size: f32, stroke_width: f32) -> f32 {
     let center = size / 2.0;
     let min = (center - stroke_width / 2.0).round();
@@ -1216,5 +1226,71 @@ mod tests {
                 .iter()
                 .all(|rect| rect.left == 0.0 && rect.right == 1.0)
         );
+    }
+
+    /// Hosts round each rect edge to device pixels. Every edge must already sit
+    /// on a whole pixel, or a 1px line centered on a half pixel can round to
+    /// zero height and drop one stroke of a double line.
+    #[test]
+    fn box_lines_land_on_whole_pixels_and_survive_host_rounding() {
+        let sizes = [
+            (8.0, 18.0, 14.0),
+            (9.0, 19.0, 14.0),
+            (17.0, 37.0, 28.0),
+            (16.0, 36.0, 28.0),
+        ];
+        for (cell_width, cell_height, font_size) in sizes {
+            let metrics = TerminalGlyphMetrics {
+                cell_width,
+                cell_height,
+                font_size,
+            };
+            for code in 0x2500..=0x257F_u32 {
+                let character = char::from_u32(code).unwrap();
+                let Some(plan) =
+                    terminal_glyph_plan(character, metrics, TerminalGlyphNeighbors::default())
+                else {
+                    continue;
+                };
+                if plan.kind() != TerminalGlyphRenderKind::BoxDrawing {
+                    continue;
+                }
+                for rect in plan.rects() {
+                    let edges = [
+                        rect.left * cell_width,
+                        rect.right * cell_width,
+                        rect.top * cell_height,
+                        rect.bottom * cell_height,
+                    ];
+                    for edge in edges {
+                        assert!(
+                            (edge - edge.round()).abs() < 1e-3,
+                            "{character:?} edge {edge} at {cell_width}x{cell_height}"
+                        );
+                    }
+                    assert!(
+                        edges[1].round() > edges[0].round() && edges[3].round() > edges[2].round(),
+                        "{character:?} collapses at {cell_width}x{cell_height}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn double_lines_keep_two_equal_strokes_with_a_gap() {
+        let metrics = TerminalGlyphMetrics {
+            cell_width: 8.0,
+            cell_height: 18.0,
+            font_size: 14.0,
+        };
+        let plan = terminal_glyph_plan('\u{2550}', metrics, TerminalGlyphNeighbors::default())
+            .expect("double horizontal");
+        let rows: Vec<_> = plan
+            .rects()
+            .iter()
+            .map(|rect| ((rect.top * 18.0).round(), (rect.bottom * 18.0).round()))
+            .collect();
+        assert_eq!(rows, vec![(8.0, 9.0), (10.0, 11.0)]);
     }
 }

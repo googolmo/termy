@@ -1,8 +1,6 @@
 use super::GraphicsImage;
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Duration};
+use web_time::Instant;
 
 #[derive(Clone, Debug)]
 pub struct GraphicsFrame {

@@ -1,0 +1,42 @@
+{
+  "name": "@termysh/core",
+  "version": "0.1.0",
+  "description": "Termy's terminal engine compiled to WebAssembly: headless parser, grid, input encoding, kitty protocols and themes.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/termylabs/termy.git",
+    "directory": "packages/core"
+  },
+  "keywords": [
+    "terminal",
+    "wasm",
+    "xterm",
+    "vt100",
+    "kitty"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./termy.wasm": "./dist/termy.wasm",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "prepack": "test -f dist/termy.wasm"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
