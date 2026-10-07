@@ -219,6 +219,6 @@ fn serve_client(mut stream: TcpStream, server: &Server) -> anyhow::Result<()> {
         let response = server
             .execute(request)
             .unwrap_or_else(|error| Response::Error(error.to_string()));
-        write_message(&mut stream, &response)?;
+        write_response(&mut stream, &response)?;
     }
 }

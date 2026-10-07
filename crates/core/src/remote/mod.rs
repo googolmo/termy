@@ -106,7 +106,10 @@ pub enum RemoteReply {
     Search(Vec<TermySearchMatch>),
     Hyperlink(Option<DetectedLink>),
     Link(Option<DetectedViewportLink>),
-    Graphics(u64, Vec<KittyGraphicsRenderPlacement>),
+    Graphics(
+        u64,
+        #[serde(with = "serde_image::placements")] Vec<KittyGraphicsRenderPlacement>,
+    ),
 }
 
 /// A clipboard operation is executed by the attached UI using its existing
