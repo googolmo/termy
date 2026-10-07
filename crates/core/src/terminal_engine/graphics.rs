@@ -19,7 +19,10 @@ pub(super) struct Graphics {
     effects: Vec<GridEffect>,
     placeholders: Vec<KittyGraphicsPlaceholder>,
     last_view: Option<(bool, usize, usize, usize, usize)>,
+    last_visual_revision: u64,
     size: Option<TerminalSize>,
+    #[cfg(test)]
+    placeholder_scans: usize,
 }
 
 impl Graphics {
@@ -52,8 +55,14 @@ impl State {
 
     fn collect_placeholders(&mut self) {
         self.graphics.placeholders.clear();
-        if !self.graphics.state.has_virtual_placements() {
+        if !self.graphics.state.has_virtual_placements_on_screen(
+            KittyGraphicsScreen::from_alternate_screen(self.alternate_screen),
+        ) {
             return;
+        }
+        #[cfg(test)]
+        {
+            self.graphics.placeholder_scans += 1;
         }
         let mut scratch = Vec::new();
         for row in 0..self.grid.size().rows {
@@ -168,7 +177,12 @@ impl State {
         self.graphics.last_view = Some(view);
         // A text edit may remove/recolor a Unicode placeholder without changing
         // any image commands or scroll geometry. Direct images avoid this cost.
-        changed |= self.graphics.state.has_virtual_placements();
+        let visual_revision = self.grid.visual_revision();
+        changed |= self.graphics.last_visual_revision != visual_revision
+            && self.graphics.state.has_virtual_placements_on_screen(
+                KittyGraphicsScreen::from_alternate_screen(self.alternate_screen),
+            );
+        self.graphics.last_visual_revision = visual_revision;
         if changed {
             self.graphics.changed();
         }
@@ -182,8 +196,14 @@ impl State {
         };
         self.flush_graphics_effects();
         self.resize_graphics();
-        self.collect_placeholders();
         let command = KittyGraphicsCommand::parse(body.to_vec(), false);
+        // Only placement deletion resolves positions from placeholder cells.
+        // In particular, upload continuations must not scan the whole viewport.
+        if command.needs_placeholder_positions() {
+            self.collect_placeholders();
+        } else {
+            self.graphics.placeholders.clear();
+        }
         let screen = KittyGraphicsScreen::from_alternate_screen(self.alternate_screen);
         let result = self.graphics.state.apply_on_screen_with_placeholders(
             command,
@@ -262,6 +282,67 @@ fn placeholder_id(color: Color) -> u32 {
 #[cfg(test)]
 mod tests {
     use crate::terminal_engine::{Engine, Options, Size};
+
+    #[test]
+    fn chunked_uploads_do_not_scan_virtual_placeholder_cells() {
+        let mut engine = Engine::new(
+            Size {
+                cols: 120,
+                rows: 40,
+            },
+            Options::default(),
+        );
+        engine.feed(b"\x1b_Ga=T,f=32,s=1,v=1,i=1,c=1,r=1,U=1,q=2;AQID/w==\x1b\\");
+        for _ in 0..128 {
+            engine.feed(b"\x1b_Ga=t,f=32,s=1,v=1,i=2,m=1,q=2;AQID\x1b\\");
+            engine.feed(b"\x1b_Gm=0;/w==\x1b\\");
+        }
+        assert_eq!(engine.state.graphics.placeholder_scans, 0);
+        assert!(engine.graphics_placements().is_empty());
+        assert_eq!(engine.state.graphics.placeholder_scans, 1);
+
+        engine.feed(b"\x1b[?1049h");
+        assert!(engine.graphics_placements().is_empty());
+        assert_eq!(engine.state.graphics.placeholder_scans, 1);
+    }
+
+    #[test]
+    fn virtual_graphics_revision_tracks_cell_edits_without_query_invalidations() {
+        let mut engine = Engine::new(Size { cols: 10, rows: 4 }, Options::default());
+        engine.feed(b"\x1b_Ga=T,f=32,s=1,v=1,i=1,c=1,r=1,U=1,q=2;AQID/w==\x1b\\");
+        let before_query = engine.graphics_revision();
+        engine.feed(b"\x1b[6n\x1b[38;5;1m");
+        assert_eq!(engine.graphics_revision(), before_query);
+
+        engine.feed("\u{10eeee}\u{0305}\u{0305}".as_bytes());
+        assert_ne!(engine.graphics_revision(), before_query);
+        assert_eq!(engine.graphics_placements().len(), 1);
+        let before_erase = engine.graphics_revision();
+        // Full text damage is still pending, so graphics cannot rely on a
+        // transition from clean to dirty to observe this destructive edit.
+        engine.feed(b"\r ");
+        assert_ne!(engine.graphics_revision(), before_erase);
+        assert!(engine.graphics_placements().is_empty());
+
+        engine.feed(b"\x1b[?1049h");
+        let alternate_revision = engine.graphics_revision();
+        engine.feed(b"\x1b[6ntext");
+        assert_eq!(engine.graphics_revision(), alternate_revision);
+    }
+
+    #[test]
+    fn placement_deletion_still_resolves_virtual_parent_cells() {
+        let mut engine = Engine::new(Size { cols: 10, rows: 4 }, Options::default());
+        engine.feed(b"\x1b_Ga=T,f=32,s=1,v=1,i=1,p=1,c=1,r=1,U=1,q=2;AQID/w==\x1b\\");
+        engine.feed("\x1b[38;5;1m\u{10eeee}\u{0305}\u{0305}".as_bytes());
+        engine.feed(b"\x1b_Ga=T,f=32,s=1,v=1,i=2,c=1,r=1,P=1,Q=1,q=2;AQID/w==\x1b\\");
+        assert_eq!(engine.graphics_placements().len(), 2);
+
+        engine.feed(b"\x1b_Ga=d,d=p,x=1,y=1,q=2;\x1b\\");
+        let placements = engine.graphics_placements();
+        assert_eq!(placements.len(), 1);
+        assert_eq!(placements[0].image_id, 1);
+    }
 
     #[test]
     fn image_commands_observe_preceding_text_and_follow_scrolls() {
