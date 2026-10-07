@@ -929,12 +929,13 @@ fn ffi_bytes_from_string(value: String) -> TermyFfiBytes {
 
 fn ffi_kitty_graphics_placement_from_placement(
     placement: KittyGraphicsRenderPlacement,
+    png: &[u8],
 ) -> TermyFfiKittyGraphicsPlacement {
     TermyFfiKittyGraphicsPlacement {
         placement_serial: placement.placement_serial,
         image_id: placement.image_id,
         placement_id: placement.placement_id,
-        png: ffi_bytes_from_vec(placement.image.png().as_ref().to_vec()),
+        png: ffi_bytes_from_vec(png.to_vec()),
         image_width: placement.image_width,
         image_height: placement.image_height,
         image_generation: placement.image_generation,
@@ -3782,9 +3783,17 @@ pub unsafe extern "C" fn termy_terminal_kitty_graphics_placements(
         }
 
         let (revision, placements) = unsafe { (*terminal).terminal.kitty_graphics_snapshot() };
+        // An image may have thousands of Unicode placeholder placements. Keep
+        // one owned export per image until the entire C batch has been copied.
+        let mut png_exports = HashMap::new();
         let placements = placements
             .into_iter()
-            .map(ffi_kitty_graphics_placement_from_placement)
+            .map(|placement| {
+                let png = png_exports
+                    .entry(std::sync::Arc::as_ptr(&placement.image))
+                    .or_insert_with(|| placement.image.png());
+                ffi_kitty_graphics_placement_from_placement(placement, png.as_slice())
+            })
             .collect::<Vec<_>>();
         let (placements_ptr, placements_len, placements_capacity) = leak_vec(placements);
         unsafe {
@@ -4220,6 +4229,45 @@ pub unsafe extern "C" fn termy_query_color_default_foreground(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn graphics_batch_encodes_each_shared_image_once() {
+        let mut terminal = ptr::null_mut();
+        assert_eq!(
+            unsafe { termy_display_terminal_new(termy_size_default(), &mut terminal) },
+            TermyFfiStatus::Ok
+        );
+        let commands = b"\x1b_Ga=T,f=32,s=1,v=1,i=1,p=1,c=1,r=1,C=1,q=2;AQID/w==\x1b\\\x1b[1;2H\x1b_Ga=p,i=1,p=2,c=1,r=1,C=1,q=2;\x1b\\";
+        assert_eq!(
+            unsafe { termy_terminal_feed_output(terminal, commands.as_ptr(), commands.len()) },
+            TermyFfiStatus::Ok
+        );
+        let image = unsafe {
+            (*terminal).terminal.kitty_graphics_placements()[0]
+                .image
+                .clone()
+        };
+        assert_eq!(image.png_encoding_count(), 0);
+
+        let mut batch = TermyFfiKittyGraphicsBatch::default();
+        assert_eq!(
+            unsafe { termy_terminal_kitty_graphics_placements(terminal, &mut batch) },
+            TermyFfiStatus::Ok
+        );
+        assert_eq!(batch.placements_len, 2);
+        assert_eq!(image.png_encoding_count(), 1);
+        let placements =
+            unsafe { slice::from_raw_parts(batch.placements_ptr, batch.placements_len) };
+        for placement in placements {
+            let png = unsafe { slice::from_raw_parts(placement.png.ptr, placement.png.len) };
+            assert!(png.starts_with(b"\x89PNG"));
+        }
+        assert_eq!(
+            unsafe { termy_kitty_graphics_batch_free(&mut batch) },
+            TermyFfiStatus::Ok
+        );
+        assert_eq!(unsafe { termy_terminal_free(terminal) }, TermyFfiStatus::Ok);
+    }
 
     fn glyph_test_cell(character: char) -> TermyFfiCell {
         TermyFfiCell {

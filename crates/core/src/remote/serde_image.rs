@@ -59,9 +59,12 @@ pub(crate) mod raw {
         image: &Arc<GraphicsImage>,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        let rgba = image.rgba();
-        let bytes = rgba.unwrap_or_else(|| image.png());
-        (image.width, image.height, rgba.is_some(), Bytes(bytes)).serialize(serializer)
+        if let Some(rgba) = image.rgba() {
+            (image.width, image.height, true, Bytes(rgba)).serialize(serializer)
+        } else {
+            let png = image.png();
+            (image.width, image.height, false, Bytes(png.as_slice())).serialize(serializer)
+        }
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(
