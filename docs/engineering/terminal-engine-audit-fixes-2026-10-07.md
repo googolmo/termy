@@ -47,7 +47,7 @@ native execution of the Windows event and output-drain regressions.
 
 ## Measurement method
 
-The local comparison uses baseline `308bc090` and code checkpoint `04abfd8d`,
+The initial local comparison uses baseline `308bc090` and code checkpoint `04abfd8d`,
 release libraries, Rust 1.99.0, and macOS 27.2. Builds and tests finish before
 timing. Both revisions use identical probe source and compiler options.
 
@@ -64,7 +64,7 @@ six 32 MiB pairs. Both retain the same 0.95 threshold, every raw sample, and
 identical baseline/candidate workloads. The local results below use the original
 six-pair 32 MiB method and do not substitute for the larger CI run.
 
-## Local results
+## Initial repair checkpoint results
 
 Median elapsed times; lower is better. Focused probes ran in ABBA order with
 12 samples per compaction case, 10 per graphics case, and 8 per history case.
@@ -111,6 +111,41 @@ release removed four extra register saves/restores per CSI byte on the measured
 ARM64 build, bringing its stack frame back from 48 to 16 bytes. The final styled
 results above include that repair. Graphics also coalesces content invalidation
 and excludes cursor-only damage while preserving real placeholder edits.
+
+## Final Unicode throughput follow-up
+
+Three hosted macOS runs of identical binaries exposed a remaining Unicode
+damage-consumption slowdown: their pooled median paired ratio was 0.943.
+The longer run also failed plain text amid substantial timing dispersion.
+The follow-up resolves uniform width and classification ranges together and
+removes a redundant old-cursor snapshot from scalar cell writes. Both wrapping
+paths already mark that cursor cell before moving or scrolling; grapheme
+extension retains its separate cursor mark. Every valid Unicode scalar is
+checked against the original width and classification functions. No cache or
+additional per-terminal memory is introduced.
+
+All 214 engine tests and all 14 local throughput gates pass for this follow-up.
+The comparison again uses baseline `308bc090`, six alternating 32 MiB pairs,
+identical helper source, and no overlapping builds or tests. These facade
+results supersede the facade table at the earlier checkpoint; the focused
+regression measurements above remain explicitly attributed to `04abfd8d`.
+
+| Facade workload | Feed only | With damage consumption |
+| --- | ---: | ---: |
+| Plain text | 0.993× | 0.997× |
+| Styled redraw | 1.051× | 1.055× |
+| Repeated Unicode | 0.951× | 1.073× |
+| Varied Unicode | 0.965× | 1.087× |
+| Repeated combining marks | 1.046× | 1.015× |
+| Varied combining marks | 1.038× | 1.027× |
+| One-byte fragmented text | 1.021× | 0.997× |
+
+Feed-only Unicode remains up to 4.9% below baseline, close to the existing 5%
+tolerance; passing does not establish parity. The
+[follow-up data](terminal-engine-audit-unicode-followup-2026-10-07.json)
+retains every pair and identifies the candidate through its parent revision,
+modified source hash, and binary/library hashes. The PR checks track the
+hosted result for the final head.
 
 These measurements cover parser/grid work, allocator requests, and graphics
 assembly. They do not measure presented frames, input-to-display latency, or

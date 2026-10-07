@@ -36,6 +36,21 @@ fn ordinary_base(c: char) -> bool {
     }
 }
 
+/// These common character ranges have uniform scalar properties. Resolve both
+/// properties together instead of looking up width and classifying again.
+#[inline]
+fn scalar_properties(character: char) -> (usize, bool) {
+    match character {
+        '\u{300}'..='\u{36f}' => (0, false),
+        '\u{3400}'..='\u{4dbf}' | '\u{4e00}'..='\u{9fff}' | '\u{ac00}'..='\u{d7a3}' => (2, true),
+        '\u{c0}'..='\u{2ff}' | '\u{370}'..='\u{482}' | '\u{48a}'..='\u{52f}' => (1, true),
+        _ => {
+            let width = character.width().unwrap_or(0);
+            (width, width != 0 && ordinary_base(character))
+        }
+    }
+}
+
 /// Extend, ZWJ and spacing marks join any preceding base, so checking them
 /// against one ASCII letter avoids segmenting a long retained cluster.
 #[cold]
@@ -125,8 +140,7 @@ impl Grid {
 
     pub(in crate::terminal_engine) fn put_char(&mut self, character: char) {
         self.observe_output();
-        let width = character.width().unwrap_or(0);
-        let ordinary = width != 0 && ordinary_base(character);
+        let (width, ordinary) = scalar_properties(character);
         if (width != 0 || matches!(character, '\u{fe0e}' | '\u{fe0f}' | '\u{20e3}'))
             && !(self.grapheme_ordinary && ordinary)
             && self.extend_grapheme(character)
@@ -182,13 +196,13 @@ impl Grid {
     }
 
     fn put_cell(&mut self, mut cell: Cell, width: usize) {
-        let old = self.cursor;
         if self.pending_wrap {
             if self.autowrap {
-                self.screen_mut().rows[old.row].wrapped = true;
+                let row = self.cursor.row;
+                self.screen_mut().rows[row].wrapped = true;
                 // Wrap metadata belongs to the last cell even when a hidden
                 // cursor produces no damage at its previous position.
-                self.mark(old.row, self.size.cols - 1, self.size.cols);
+                self.mark(row, self.size.cols - 1, self.size.cols);
                 self.cursor.col = 0;
                 self.linefeed();
             }
@@ -261,13 +275,9 @@ impl Grid {
             return;
         }
         if self.cursor.visible {
+            // The written span covers the old cursor without wrapping; both
+            // wrap paths mark its cell before moving or scrolling the row.
             end = end.max(self.cursor.col + 1);
-            if old.row == row {
-                start = start.min(old.col);
-                end = end.max(old.col + 1);
-            } else {
-                self.mark_cursor(old);
-            }
         }
         self.mark(row, start, end);
     }
@@ -331,6 +341,19 @@ impl Grid {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scalar_properties_match_width_and_classification_for_every_unicode_scalar() {
+        for character in (0..=0x10ffff).filter_map(char::from_u32) {
+            let width = character.width().unwrap_or(0);
+            assert_eq!(
+                scalar_properties(character),
+                (width, width != 0 && ordinary_base(character)),
+                "U+{:04X}",
+                character as u32
+            );
+        }
+    }
 
     // The fast path skips segmentation between two ordinary bases, so every
     // such base must start a new cluster after another one.
