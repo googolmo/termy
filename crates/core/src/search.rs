@@ -133,6 +133,7 @@ fn line_text(frame: &TermyFrame, row: usize, cols: usize) -> String {
 
     let mut text = frame.cells[start..end]
         .iter()
+        .filter(|cell| !cell.wide_character_spacer)
         .map(|cell| if cell.render_text { cell.char } else { ' ' })
         .collect::<String>();
     let trimmed_len = text.trim_end().len();

@@ -912,7 +912,10 @@ fn collect_search_line_texts(
                 *cell_range = snapshot.text.len()..snapshot.text.len();
             }
             let character = cell.character();
-            if character == '\0' || cell.is_trailing_wide_spacer() || character.is_control() {
+            if cell.is_trailing_wide_spacer() {
+                return;
+            }
+            if character == '\0' || character.is_control() {
                 snapshot.text.push(' ');
             } else {
                 snapshot.text.push(character);
@@ -1074,6 +1077,14 @@ mod tests {
 
         let lines = collect_search_line_texts(&terminal, -1, -1);
         assert_eq!(lines.line(-1), Some("e\u{301}   "));
+    }
+
+    #[test]
+    fn terminal_read_adapter_keeps_adjacent_wide_and_joined_text_searchable() {
+        let terminal = Terminal::new_test_display(TerminalSize::default());
+        terminal.hydrate_output("A日本語 e\u{301} 👩🏽‍💻Z".as_bytes());
+        let lines = collect_search_line_texts(&terminal, 0, 0);
+        assert_eq!(lines.line(0).unwrap().trim_end(), "A日本語 e\u{301} 👩🏽‍💻Z");
     }
 
     #[test]

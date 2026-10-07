@@ -566,6 +566,40 @@ fn search_includes_scrollback_rows() {
     assert_eq!(matches[0].end_col, 4);
 }
 
+#[test]
+fn search_preserves_unicode_clusters_and_physical_columns() {
+    let terminal = Terminal::new_display(TerminalSize::default(), None);
+    terminal.feed_output("A日本語 e\u{301} 👩🏽‍💻Z".as_bytes());
+    for (query, first, last) in [
+        ("日本語", 1, 6),
+        ("e\u{301}", 8, 8),
+        ("\u{301}", 8, 8),
+        ("👩🏽‍💻", 10, 11),
+        ("👩", 10, 11),
+        ("Z", 12, 12),
+    ] {
+        let matches = terminal.search(query);
+        assert_eq!(matches.len(), 1, "query {query}");
+        assert_eq!(
+            (matches[0].start_col, matches[0].end_col),
+            (first, last),
+            "query {query}"
+        );
+    }
+    let matches = crate::search::search_frame(&terminal.snapshot(), "日本語");
+    assert_eq!(matches.len(), 1);
+    assert_eq!((matches[0].start_col, matches[0].end_col), (1, 6));
+}
+
+#[test]
+fn search_omits_hidden_wide_text_without_shifting_following_columns() {
+    let terminal = Terminal::new_display(TerminalSize::default(), None);
+    terminal.feed_output("A\x1b[8m界\x1b[0mZ".as_bytes());
+    assert!(terminal.search("界").is_empty());
+    let matches = terminal.search("Z");
+    assert_eq!((matches[0].start_col, matches[0].end_col), (3, 3));
+}
+
 fn cursor_state_after_bytes(
     input: &[u8],
     runtime_config: TerminalRuntimeConfig,
