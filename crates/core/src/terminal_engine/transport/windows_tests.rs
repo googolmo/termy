@@ -631,6 +631,46 @@ fn conpty_delivers_final_child_output_before_exit_callback() {
 }
 
 #[test]
+fn reader_drains_final_output_when_the_reply_lane_is_already_closed() {
+    let (reader, output_writer) = create_pipe().expect("output pipe should open");
+    let (writer, _input_receiver) = writer_harness();
+    writer.close();
+    let (finished_sender, finished_receiver) = mpsc::channel();
+    finished_sender.send(()).unwrap();
+    let (exit_sender, exit_receiver) = mpsc::channel();
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let reader_output = output.clone();
+    let reader_thread = thread::spawn(move || {
+        run_reader(
+            reader,
+            &mut |bytes| {
+                reader_output.lock().unwrap().extend_from_slice(bytes);
+                b"terminal-query-reply".to_vec()
+            },
+            move || exit_sender.send(()).unwrap(),
+            writer,
+            finished_receiver,
+        );
+    });
+
+    // Exceed the reader's 32 KiB buffer so stopping after its first failed
+    // response necessarily loses later output, regardless of pipe chunking.
+    let mut expected = vec![b'x'; 128 * 1024];
+    expected.extend_from_slice(b"<FINAL-OUTPUT-MARKER>");
+    let mut remaining = expected.as_slice();
+    while !remaining.is_empty() {
+        let written = write_handle(&output_writer, remaining).expect("reader must keep draining");
+        remaining = &remaining[written..];
+    }
+    drop(output_writer);
+    exit_receiver
+        .recv_timeout(Duration::from_secs(5))
+        .expect("exit should follow the complete output drain");
+    reader_thread.join().unwrap();
+    assert_eq!(*output.lock().unwrap(), expected);
+}
+
+#[test]
 fn conpty_immediate_resize_and_stdin_round_trip_exit_cleanly() {
     let payload = unique_marker("INPUT");
     let expected = format!("TERMY_NATIVE_ROUND_TRIP_{payload}");

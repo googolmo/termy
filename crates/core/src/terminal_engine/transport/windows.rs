@@ -964,9 +964,10 @@ fn run_reader(
             Ok(0) => break,
             Ok(read) => {
                 let reply = on_output(&buffer[..read]);
-                if !queue_reader_protocol_reply(&writer, reply) {
-                    break;
-                }
+                // A rejected reply starts shutdown, or the child has already
+                // exited. Keep draining in either case: closing this pipe now
+                // would discard buffered output before ClosePseudoConsole ends.
+                let _ = queue_reader_protocol_reply(&writer, reply);
             }
             Err(error) if is_pipe_shutdown(&error) => break,
             Err(_) => break,
