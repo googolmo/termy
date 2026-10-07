@@ -1167,6 +1167,84 @@ fn alternate_width_growth_and_height_shrink_preserve_only_surviving_rows() {
     assert_eq!(grid.primary.rows[0].cells.len(), 4096);
 }
 
+#[test]
+fn alternate_resize_restores_the_reflowed_primary_cursor_and_style() {
+    for (before, after, input) in [
+        (
+            Size { cols: 8, rows: 3 },
+            Size { cols: 4, rows: 3 },
+            "abcdef",
+        ),
+        (
+            Size { cols: 4, rows: 3 },
+            Size { cols: 8, rows: 3 },
+            "abcdef",
+        ),
+        (
+            Size { cols: 8, rows: 3 },
+            Size { cols: 4, rows: 3 },
+            "abcdefgh",
+        ),
+        (Size { cols: 4, rows: 3 }, Size { cols: 8, rows: 3 }, "abcd"),
+        (
+            Size { cols: 8, rows: 4 },
+            Size { cols: 8, rows: 2 },
+            "one\r\ntwo\r\nthree",
+        ),
+        (
+            Size { cols: 8, rows: 2 },
+            Size { cols: 8, rows: 4 },
+            "one\r\ntwo\r\nthree",
+        ),
+    ] {
+        let mut direct = Grid::new(before, 10);
+        let mut alternate = Grid::new(before, 10);
+        for grid in [&mut direct, &mut alternate] {
+            grid.pen.style.foreground = Color::indexed(1);
+            print(grid, input);
+        }
+        alternate.set_alternate(true, true, true);
+        alternate.pen.style.foreground = Color::indexed(2);
+        direct.resize(after);
+        alternate.resize(after);
+        alternate.set_alternate(false, false, true);
+        assert_eq!(alternate.cursor, direct.cursor, "{before:?} -> {after:?}");
+        assert_eq!(alternate.pending_wrap, direct.pending_wrap);
+        assert_eq!(alternate.pen, direct.pen);
+
+        // Output must append to the same logical position after returning
+        // from a fullscreen application, including a pending right-margin wrap.
+        print(&mut direct, "X");
+        print(&mut alternate, "X");
+        assert_eq!(alternate.cursor, direct.cursor);
+        assert_eq!(alternate.history_size(), direct.history_size());
+        for line in -(direct.history_size() as i32)..after.rows as i32 {
+            let actual = alternate.row(line).unwrap();
+            let expected = direct.row(line).unwrap();
+            assert_eq!(actual.cells(), expected.cells(), "line {line}");
+            assert_eq!(actual.wrapped, expected.wrapped, "line {line}");
+        }
+    }
+}
+
+#[test]
+fn alternate_resize_preserves_a_separately_saved_primary_cursor() {
+    let mut grid = grid(8, 3, 10);
+    grid.write_ascii(b"ab");
+    grid.save_cursor();
+    grid.write_ascii(b"cdef");
+    // Mode 47 parks the primary screen without replacing its saved cursor.
+    grid.set_alternate(true, false, false);
+    grid.resize(Size { cols: 4, rows: 3 });
+    grid.set_alternate(false, false, false);
+    assert_eq!((grid.cursor.row, grid.cursor.col), (1, 2));
+    grid.restore_cursor();
+    assert_eq!((grid.cursor.row, grid.cursor.col), (0, 2));
+    grid.write_ascii(b"X");
+    assert_eq!(text(&grid, 0), "abXd");
+    assert_eq!(text(&grid, 1), "ef  ");
+}
+
 fn assert_history_compacted(grid: &mut Grid) {
     while grid.needs_compaction() {
         grid.compact_history(256);

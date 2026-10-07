@@ -1089,6 +1089,13 @@ impl Grid {
         let current_wrap = self.pending_wrap;
         self.screen_mut().cursor = current_cursor;
         self.screen_mut().pending_wrap = current_wrap;
+        // DECSET 1049 saves the primary cursor before parking that screen.
+        // Keep this saved anchor attached to the same text through reflow and
+        // height changes, without replacing an independently saved position.
+        let saved_primary_follows_cursor = self.alternate_active
+            && self.primary.saved.cursor.row == self.primary.cursor.row
+            && self.primary.saved.cursor.col == self.primary.cursor.col
+            && self.primary.saved.pending_wrap == self.primary.pending_wrap;
         if size.cols != self.size.cols {
             self.reflow_primary(size);
             if let Some(alternate) = &mut self.alternate {
@@ -1107,6 +1114,11 @@ impl Grid {
             }
         }
         self.resize_height(size);
+        if saved_primary_follows_cursor {
+            self.primary.saved.cursor.row = self.primary.cursor.row;
+            self.primary.saved.cursor.col = self.primary.cursor.col;
+            self.primary.saved.pending_wrap = self.primary.pending_wrap;
+        }
         self.size = size;
         self.history_limit = Self::bounded_history(size, self.requested_history_limit);
         self.trim_history();
