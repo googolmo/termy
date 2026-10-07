@@ -99,6 +99,18 @@ pub(crate) fn write_message(
     Ok(())
 }
 
+pub(crate) fn write_response(writer: &mut impl Write, response: &Response) -> anyhow::Result<()> {
+    // Bincode performs sizing and writing passes. Keep legacy PNG exports alive
+    // across both; the negotiated graphics stream sends raw image generations.
+    let _exports = match response {
+        Response::Reply(RemoteReply::Graphics(_, placements)) => {
+            Some(crate::remote::serde_image::retain_png_exports(placements))
+        }
+        _ => None,
+    };
+    write_message(writer, response)
+}
+
 pub(crate) fn read_message<T: DeserializeOwned>(reader: &mut impl Read) -> anyhow::Result<T> {
     read_message_limited(reader, MAX_MESSAGE_BYTES)
 }
@@ -119,4 +131,47 @@ pub(crate) fn read_message_limited<T: DeserializeOwned>(
     codec()
         .deserialize(&bytes)
         .context("decode multiplexer message")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::terminal_engine::{Engine, Options, Size};
+
+    fn shared_image_reply() -> (RemoteReply, Arc<GraphicsImage>) {
+        let mut engine = Engine::new(Size { cols: 10, rows: 4 }, Options::default());
+        engine.feed(b"\x1b_Ga=T,f=32,s=1,v=1,i=1,c=1,r=1,C=1,q=2;AQID/w==\x1b\\");
+        let placement = engine.graphics_placements().pop().unwrap();
+        let image = placement.image.clone();
+        (RemoteReply::Graphics(7, vec![placement; 10]), image)
+    }
+
+    #[test]
+    fn legacy_graphics_response_encodes_once_across_bincode_passes() {
+        let (reply, image) = shared_image_reply();
+        let mut wire = Vec::new();
+        write_response(&mut wire, &Response::Reply(reply)).unwrap();
+        assert_eq!(image.png_encoding_count(), 1);
+        let decoded: Response = read_message(&mut wire.as_slice()).unwrap();
+        let Response::Reply(RemoteReply::Graphics(revision, placements)) = decoded else {
+            panic!("graphics response should keep its legacy wire shape");
+        };
+        assert_eq!(revision, 7);
+        assert_eq!(placements.len(), 10);
+        assert!(
+            placements
+                .iter()
+                .all(|p| p.image.png().starts_with(b"\x89PNG"))
+        );
+    }
+
+    #[test]
+    fn direct_legacy_serialization_shares_exports_within_each_pass() {
+        let (reply, image) = shared_image_reply();
+        let wire = bincode::serialize(&reply).unwrap();
+        // Two passes encode twice, not once for each of the ten placements.
+        assert_eq!(image.png_encoding_count(), 2);
+        let decoded: RemoteReply = bincode::deserialize(&wire).unwrap();
+        assert!(matches!(decoded, RemoteReply::Graphics(7, placements) if placements.len() == 10));
+    }
 }

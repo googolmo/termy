@@ -984,6 +984,23 @@ fn ordered_scroll_damage_replays_edits_before_between_and_after_scrolls() {
 }
 
 #[test]
+fn hidden_cursor_deferred_wrap_damages_the_previous_row_metadata() {
+    for next in ["X", "界"] {
+        let mut grid = grid(4, 3, 10);
+        grid.cursor.visible = false;
+        grid.write_ascii(b"abcd");
+        let mut cached = Vec::new();
+        replay_damage(&mut grid, &mut cached);
+        assert!(!cached[0][3].1);
+
+        print(&mut grid, next);
+        assert!(grid.row(0).unwrap().wrapped);
+        replay_damage(&mut grid, &mut cached);
+        assert!(cached[0][3].1);
+    }
+}
+
+#[test]
 fn scroll_damage_coalesces_and_falls_back_at_a_bounded_record_count() {
     let mut grid = grid(8, 5, 0);
     grid.take_damage();
@@ -1150,6 +1167,84 @@ fn alternate_width_growth_and_height_shrink_preserve_only_surviving_rows() {
     assert_eq!(grid.primary.rows[0].cells.len(), 4096);
 }
 
+#[test]
+fn alternate_resize_restores_the_reflowed_primary_cursor_and_style() {
+    for (before, after, input) in [
+        (
+            Size { cols: 8, rows: 3 },
+            Size { cols: 4, rows: 3 },
+            "abcdef",
+        ),
+        (
+            Size { cols: 4, rows: 3 },
+            Size { cols: 8, rows: 3 },
+            "abcdef",
+        ),
+        (
+            Size { cols: 8, rows: 3 },
+            Size { cols: 4, rows: 3 },
+            "abcdefgh",
+        ),
+        (Size { cols: 4, rows: 3 }, Size { cols: 8, rows: 3 }, "abcd"),
+        (
+            Size { cols: 8, rows: 4 },
+            Size { cols: 8, rows: 2 },
+            "one\r\ntwo\r\nthree",
+        ),
+        (
+            Size { cols: 8, rows: 2 },
+            Size { cols: 8, rows: 4 },
+            "one\r\ntwo\r\nthree",
+        ),
+    ] {
+        let mut direct = Grid::new(before, 10);
+        let mut alternate = Grid::new(before, 10);
+        for grid in [&mut direct, &mut alternate] {
+            grid.pen.style.foreground = Color::indexed(1);
+            print(grid, input);
+        }
+        alternate.set_alternate(true, true, true);
+        alternate.pen.style.foreground = Color::indexed(2);
+        direct.resize(after);
+        alternate.resize(after);
+        alternate.set_alternate(false, false, true);
+        assert_eq!(alternate.cursor, direct.cursor, "{before:?} -> {after:?}");
+        assert_eq!(alternate.pending_wrap, direct.pending_wrap);
+        assert_eq!(alternate.pen, direct.pen);
+
+        // Output must append to the same logical position after returning
+        // from a fullscreen application, including a pending right-margin wrap.
+        print(&mut direct, "X");
+        print(&mut alternate, "X");
+        assert_eq!(alternate.cursor, direct.cursor);
+        assert_eq!(alternate.history_size(), direct.history_size());
+        for line in -(direct.history_size() as i32)..after.rows as i32 {
+            let actual = alternate.row(line).unwrap();
+            let expected = direct.row(line).unwrap();
+            assert_eq!(actual.cells(), expected.cells(), "line {line}");
+            assert_eq!(actual.wrapped, expected.wrapped, "line {line}");
+        }
+    }
+}
+
+#[test]
+fn alternate_resize_preserves_a_separately_saved_primary_cursor() {
+    let mut grid = grid(8, 3, 10);
+    grid.write_ascii(b"ab");
+    grid.save_cursor();
+    grid.write_ascii(b"cdef");
+    // Mode 47 parks the primary screen without replacing its saved cursor.
+    grid.set_alternate(true, false, false);
+    grid.resize(Size { cols: 4, rows: 3 });
+    grid.set_alternate(false, false, false);
+    assert_eq!((grid.cursor.row, grid.cursor.col), (1, 2));
+    grid.restore_cursor();
+    assert_eq!((grid.cursor.row, grid.cursor.col), (0, 2));
+    grid.write_ascii(b"X");
+    assert_eq!(text(&grid, 0), "abXd");
+    assert_eq!(text(&grid, 1), "ef  ");
+}
+
 fn assert_history_compacted(grid: &mut Grid) {
     while grid.needs_compaction() {
         grid.compact_history(256);
@@ -1211,4 +1306,112 @@ fn forced_compaction_does_not_pack_rows_as_they_scroll() {
     grid.compact_history(256);
     print(&mut grid, "quiet\r\n");
     assert!(grid.history.back().unwrap().packed.is_some());
+}
+
+#[test]
+fn fragmented_output_leaves_on_scroll_packing_after_a_bounded_burst() {
+    for chunk_size in [1, 17, COMPACT_OUTPUT_BURST_BYTES - 1] {
+        let mut grid = grid(120, 4, 100);
+        for _ in 0..20 {
+            print(&mut grid, "a short line\r\n");
+        }
+        grid.compact_history(usize::MAX);
+        let burst = vec![b'x'; COMPACT_OUTPUT_BURST_BYTES];
+        for chunk in burst.chunks(chunk_size) {
+            grid.prepare_output(chunk.len());
+            grid.write_ascii(chunk);
+        }
+        grid.prepare_output(8);
+        print(&mut grid, "\r\nlast\r\n");
+        assert!(
+            grid.history.back().unwrap().packed.is_none(),
+            "{chunk_size}"
+        );
+
+        // A subsequent quiet interval still packs isolated short log lines.
+        grid.compact_history(usize::MAX);
+        grid.prepare_output(7);
+        print(&mut grid, "quiet\r\n");
+        assert!(grid.history.back().unwrap().packed.is_some());
+    }
+}
+
+#[test]
+fn forced_compaction_does_not_restart_the_fragmented_output_budget() {
+    let mut grid = grid(120, 4, 100);
+    for _ in 0..20 {
+        print(&mut grid, "a short line\r\n");
+    }
+    grid.compact_history(usize::MAX);
+    grid.prepare_output(COMPACT_OUTPUT_BURST_BYTES / 2);
+    grid.compact_pending_history(256);
+    grid.prepare_output(COMPACT_OUTPUT_BURST_BYTES / 2);
+    print(&mut grid, "continued\r\n");
+    assert!(grid.history.back().unwrap().packed.is_none());
+}
+
+#[test]
+fn borrowed_history_caches_release_before_output_trimming_and_clear() {
+    use std::sync::Arc;
+
+    let mut grid = grid(40, 4, 100);
+    for _ in 0..110 {
+        print(&mut grid, "older line\r\n");
+    }
+    let mut marked = Cell::default();
+    marked.push_combining('\u{301}');
+    let extra = marked.extra.take().unwrap();
+    grid.pen.extra = Some(Arc::clone(&extra));
+    print(&mut grid, "x\r\n");
+    grid.pen.extra = None;
+    for _ in 1..grid.size.rows {
+        grid.linefeed();
+    }
+    grid.compact_history(usize::MAX);
+    assert_eq!(Arc::strong_count(&extra), 2);
+
+    assert_eq!(grid.row_cells(-1).unwrap()[0].combining(), "\u{301}");
+    assert_eq!(Arc::strong_count(&extra), 3);
+    grid.set_history_limit(2);
+    assert_eq!(Arc::strong_count(&extra), 2);
+
+    grid.row_cells(-1).unwrap();
+    assert_eq!(Arc::strong_count(&extra), 3);
+    grid.prepare_output(1);
+    assert_eq!(Arc::strong_count(&extra), 2);
+
+    grid.scroll_display(1);
+    assert_eq!(grid.visible_row_cells(0).unwrap()[0].combining(), "\u{301}");
+    assert_eq!(Arc::strong_count(&extra), 3);
+    grid.clear_scrollback();
+    assert_eq!(Arc::strong_count(&extra), 1);
+    grid.prepare_output(1);
+}
+
+#[test]
+fn history_cache_tracking_survives_sparse_reads_resize_and_reset() {
+    let mut grid = grid(40, 4, 100);
+    for line in 0..110 {
+        print(&mut grid, &format!("line {line}\r\n"));
+    }
+    grid.compact_history(usize::MAX);
+    let first = grid.row_cells(-100).unwrap().to_vec();
+    let last = grid.row_cells(-1).unwrap().to_vec();
+    grid.prepare_output(1);
+    assert_eq!(grid.row_cells(-100).unwrap(), first);
+    assert_eq!(grid.row_cells(-1).unwrap(), last);
+
+    grid.resize(Size { cols: 40, rows: 6 });
+    grid.compact_history(usize::MAX);
+    grid.row_cells(-1).unwrap();
+    grid.resize(Size { cols: 80, rows: 4 });
+    grid.compact_history(usize::MAX);
+    grid.scroll_display(2);
+    grid.visible_row_cells(0).unwrap();
+    assert!(grid.visible_row_cells(usize::MAX).is_none());
+    assert!(grid.row_cells(i32::MIN).is_none());
+    grid.reset();
+    grid.prepare_output(1);
+    assert_eq!(grid.history_size(), 0);
+    assert_eq!(text(&grid, 0), " ".repeat(80));
 }

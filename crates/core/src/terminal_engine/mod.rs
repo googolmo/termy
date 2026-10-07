@@ -103,7 +103,7 @@ pub struct Engine {
 impl Engine {
     pub fn new(size: Size, options: Options) -> Self {
         Self {
-            parser: Parser::with_apc_limit(256 * 1024 * 1024),
+            parser: Parser::with_apc_limit(parser::MAX_APC_BYTES),
             synchronized_update: SynchronizedUpdate::default(),
             state: State::new(size, options),
             generation: 0,
@@ -137,7 +137,8 @@ impl Engine {
                 self.state.flush_graphics_effects();
                 self.generation = self.generation.wrapping_add(1);
                 if self.state.modes.synchronized_update {
-                    self.synchronized_update.begin(now);
+                    self.synchronized_update
+                        .begin(now, self.state.saved_private_mode(2026));
                 }
             }
         }
@@ -224,13 +225,7 @@ impl Engine {
 
     /// The lifetime of the slice prevents mutation while the renderer reads it.
     pub fn viewport_row(&self, row: usize) -> Option<&[Cell]> {
-        if self.display_offset() != 0 {
-            self.state
-                .grid
-                .history_read_cache
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-        self.state.grid.visible_row(row).map(|row| row.cells())
+        self.state.grid.visible_row_cells(row)
     }
 
     /// Visit a viewport row without retaining a dense copy of cold history.
@@ -259,13 +254,7 @@ impl Engine {
     /// on the next output, resize, or scroll; the borrowed slice remains valid
     /// until that exclusive mutation.
     pub fn line(&self, line: i32) -> Option<&[Cell]> {
-        if line < 0 {
-            self.state
-                .grid
-                .history_read_cache
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-        self.state.grid.row(line).map(|row| row.cells())
+        self.state.grid.row_cells(line)
     }
 
     /// Visit a line without retaining a dense copy of cold history. Scratch

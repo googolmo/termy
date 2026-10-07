@@ -35,6 +35,7 @@ pub(super) struct State {
     charsets: [bool; 2],
     active_charset: usize,
     saved_charsets: [([bool; 2], usize); 2],
+    saved_private_modes: Vec<(u16, bool)>,
     last_printed: Option<char>,
 }
 
@@ -65,6 +66,7 @@ impl State {
             charsets: [false; 2],
             active_charset: 0,
             saved_charsets: [([false; 2], 0); 2],
+            saved_private_modes: Vec::new(),
             last_printed: None,
         }
     }
@@ -105,6 +107,40 @@ impl State {
             attributes: protected,
             ..Style::default()
         };
+    }
+
+    fn soft_reset(&mut self) {
+        self.grid.soft_reset(self.default_cursor_shape);
+        self.cursor_shape_overridden = false;
+        self.modes.application_cursor = false;
+        self.modes.application_keypad = false;
+        self.charsets = [false; 2];
+        self.active_charset = 0;
+        self.saved_charsets[usize::from(self.alternate_screen)] = ([false; 2], 0);
+        self.last_printed = None;
+    }
+
+    fn save_private_mode(&mut self, mode: u16) {
+        // Only recognized, stateful modes enter the one-level cache. Its size
+        // is bounded by the modes supported by mode_state, not the input.
+        let Some(enabled) = self.mode_state(true, mode) else {
+            return;
+        };
+        if let Some((_, saved)) = self
+            .saved_private_modes
+            .iter_mut()
+            .find(|(saved_mode, _)| *saved_mode == mode)
+        {
+            *saved = enabled;
+        } else {
+            self.saved_private_modes.push((mode, enabled));
+        }
+    }
+
+    pub(super) fn saved_private_mode(&self, mode: u16) -> Option<bool> {
+        self.saved_private_modes
+            .iter()
+            .find_map(|&(saved_mode, enabled)| (saved_mode == mode).then_some(enabled))
     }
 
     fn mouse_tracking(&mut self, mode: MouseTracking, enabled: bool) {
@@ -435,6 +471,7 @@ impl Handler for State {
                 self.charsets = [false; 2];
                 self.active_charset = 0;
                 self.saved_charsets = [([false; 2], 0); 2];
+                self.saved_private_modes.clear();
                 self.last_printed = None;
                 self.keyboard_stack.iter_mut().for_each(Vec::clear);
                 self.keyboard_flags = [0; 2];
@@ -503,6 +540,9 @@ impl Handler for State {
             return;
         }
         if !intermediates.is_empty() {
+            if intermediates == b"!" && private.is_none() && final_byte == b'p' {
+                self.soft_reset();
+            }
             return;
         }
         match (private, final_byte) {
@@ -561,6 +601,19 @@ impl Handler for State {
                 if let Some(character) = self.last_printed {
                     for _ in 0..count {
                         self.grid.put_char(character);
+                    }
+                }
+            }
+            (Some(b'?'), b's' | b'r') => {
+                for param in params {
+                    if !param.subparams().is_empty() {
+                        continue;
+                    }
+                    let mode = param.value().unwrap_or(0);
+                    if final_byte == b's' {
+                        self.save_private_mode(mode);
+                    } else if let Some(enabled) = self.saved_private_mode(mode) {
+                        self.mode(true, mode, enabled);
                     }
                 }
             }

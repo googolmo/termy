@@ -9,7 +9,7 @@ const MAX_PARAMS: usize = 32;
 const MAX_SUBPARAMS: usize = 8;
 const MAX_INTERMEDIATES: usize = 2;
 const MAX_STRING_BYTES: usize = 64 * 1024;
-const MAX_APC_BYTES: usize = 256 * 1024 * 1024;
+pub(super) const MAX_APC_BYTES: usize = 256 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Param {
@@ -105,6 +105,8 @@ pub(super) struct Parser {
     intermediate_len: usize,
     discarded: bool,
     string: Vec<u8>,
+    string_len: usize,
+    collect_strings: bool,
     apc_limit: usize,
     utf8_value: u32,
     utf8_remaining: u8,
@@ -123,6 +125,8 @@ impl Default for Parser {
             intermediate_len: 0,
             discarded: false,
             string: Vec::new(),
+            string_len: 0,
+            collect_strings: true,
             apc_limit: MAX_STRING_BYTES,
             utf8_value: 0,
             utf8_remaining: 0,
@@ -142,14 +146,23 @@ impl Parser {
         }
     }
 
-    /// Reset protocol state while retaining the reusable string allocation.
+    /// Recognize identical string boundaries without retaining their payloads.
+    /// String callbacks receive empty slices; marker scanners ignore them.
+    pub(super) fn scanner(apc_limit: usize) -> Self {
+        Self {
+            collect_strings: false,
+            ..Self::with_apc_limit(apc_limit)
+        }
+    }
+
+    /// Reset protocol state while retaining ordinary-sized string allocations.
     pub(super) fn reset(&mut self) {
         self.state = State::Ground;
         self.param_len = 0;
         self.private = None;
         self.intermediate_len = 0;
         self.discarded = false;
-        self.string.clear();
+        self.clear_string();
         self.utf8_remaining = 0;
     }
 
@@ -243,9 +256,7 @@ impl Parser {
                 } else {
                     // ESC interrupts an unfinished string. Reconsume the byte
                     // as part of the new escape sequence, including C0 and CSI.
-                    self.string.clear();
-                    self.begin_escape();
-                    self.sequence_byte(handler, byte);
+                    self.interrupt_string(handler, byte);
                 }
             }
             State::Escape | State::Csi => self.sequence_byte(handler, byte),
@@ -340,8 +351,7 @@ impl Parser {
                         _ => None,
                     };
                     if let Some(kind) = string_kind {
-                        self.string.clear();
-                        self.state = State::String(kind);
+                        self.begin_string(kind);
                         return;
                     }
                 }
@@ -427,12 +437,16 @@ impl Parser {
         } else {
             MAX_STRING_BYTES
         };
-        if bytes.len() > limit - self.string.len() {
+        if bytes.len() > limit - self.string_len {
             self.discarded = true;
-            self.string.clear();
+            self.clear_string();
             return;
         }
-        let required = self.string.len() + bytes.len();
+        self.string_len += bytes.len();
+        if !self.collect_strings {
+            return;
+        }
+        let required = self.string_len;
         if required > self.string.capacity() {
             // Control geometric growth explicitly so a large chunk cannot
             // double capacity beyond the payload limit.
@@ -442,6 +456,25 @@ impl Parser {
         self.string.extend_from_slice(bytes);
     }
 
+    // Keep allocation cleanup and string dispatch out of the ordinary CSI
+    // byte path, including the registers needed across their allocator calls.
+    #[cold]
+    #[inline(never)]
+    fn begin_string(&mut self, kind: StringKind) {
+        self.clear_string();
+        self.state = State::String(kind);
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn interrupt_string(&mut self, handler: &mut impl Handler, byte: u8) {
+        self.clear_string();
+        self.begin_escape();
+        self.sequence_byte(handler, byte);
+    }
+
+    #[cold]
+    #[inline(never)]
     fn finish_string(&mut self, handler: &mut impl Handler, kind: StringKind, bell: bool) {
         if !self.discarded {
             match kind {
@@ -451,15 +484,34 @@ impl Parser {
                 StringKind::Ignore => {}
             }
         }
-        self.string.clear();
+        self.clear_string();
         self.discarded = false;
         self.state = State::Ground;
     }
 
+    #[cold]
+    #[inline(never)]
     fn cancel(&mut self) {
-        self.string.clear();
+        self.clear_string();
         self.discarded = false;
         self.state = State::Ground;
+    }
+
+    fn clear_string(&mut self) {
+        self.string_len = 0;
+        // Large APC transfers must not permanently raise every session's
+        // retained heap. Ordinary OSC/DCS buffers still reuse their allocation.
+        if self.string.capacity() > MAX_STRING_BYTES {
+            self.release_large_string();
+        } else {
+            self.string.clear();
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn release_large_string(&mut self) {
+        self.string = Vec::new();
     }
 }
 

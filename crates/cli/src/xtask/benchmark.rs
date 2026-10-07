@@ -908,20 +908,19 @@ fn run_idle_burst(duration: Duration) -> Result<()> {
     let mut out = stdout.lock();
     let mut marker_writer = BenchmarkMarkerWriter::new_from_env()?;
 
-    sleep_for_remaining(start, duration, IDLE_BURST_PRE_IDLE);
-    marker_writer.record("burst_start", None)?;
-
     let mut burst = String::new();
     for line in 0..16u64 {
         burst.push_str(&format!(
             "burst line {line:02} 0123456789 abcdefghijklmnopqrstuvwxyz\n"
         ));
     }
-    out.write_all(burst.as_bytes())?;
-    out.flush()?;
-    marker_writer.record("burst_end", None)?;
+    sleep_for_remaining(start, duration, IDLE_BURST_PRE_IDLE);
+    let burst_start = emit_timed_output(&mut out, burst.as_bytes())?;
+    let burst_end = monotonic_now_ns();
 
     thread::sleep(duration.saturating_sub(start.elapsed()));
+    marker_writer.record_at("burst_start", None, burst_start)?;
+    marker_writer.record_at("burst_end", None, burst_end)?;
     marker_writer.flush()?;
     Ok(())
 }
@@ -931,6 +930,7 @@ fn run_echo_train(duration: Duration) -> Result<()> {
     let stdout = io::stdout();
     let mut out = stdout.lock();
     let mut marker_writer = BenchmarkMarkerWriter::new_from_env()?;
+    let mut echo_starts = Vec::with_capacity(ECHO_TRAIN_DEFAULT_ITERATIONS as usize);
 
     sleep_for_remaining(start, duration, ECHO_TRAIN_PRE_IDLE);
 
@@ -942,10 +942,8 @@ fn run_echo_train(duration: Duration) -> Result<()> {
     let glyphs = b"abcdefghijklmnopqrstuvwxyz0123456789";
 
     for seq in 0..iterations {
-        marker_writer.record("echo_start", Some(seq))?;
-        let glyph = glyphs[(seq as usize) % glyphs.len()] as char;
-        write!(out, "{glyph}")?;
-        out.flush()?;
+        let glyph = [glyphs[(seq as usize) % glyphs.len()]];
+        echo_starts.push(emit_timed_output(&mut out, &glyph)?);
         if seq + 1 != iterations {
             thread::sleep(ECHO_TRAIN_INTERVAL);
         }
@@ -954,8 +952,20 @@ fn run_echo_train(duration: Duration) -> Result<()> {
     out.flush()?;
 
     thread::sleep(duration.saturating_sub(start.elapsed()));
+    // Marker serialization and filesystem I/O must not delay the output being
+    // timed or compete with its subsequent render callback.
+    for (seq, monotonic_ns) in echo_starts.into_iter().enumerate() {
+        marker_writer.record_at("echo_start", Some(seq as u64), monotonic_ns)?;
+    }
     marker_writer.flush()?;
     Ok(())
+}
+
+fn emit_timed_output(out: &mut impl Write, bytes: &[u8]) -> io::Result<u64> {
+    let monotonic_ns = monotonic_now_ns();
+    out.write_all(bytes)?;
+    out.flush()?;
+    Ok(monotonic_ns)
 }
 
 fn run_steady_scroll(duration: Duration) -> Result<()> {
@@ -1006,13 +1016,17 @@ impl BenchmarkMarkerWriter {
     }
 
     fn record(&mut self, kind: &str, seq: Option<u64>) -> Result<()> {
+        self.record_at(kind, seq, monotonic_now_ns())
+    }
+
+    fn record_at(&mut self, kind: &str, seq: Option<u64>, monotonic_ns: u64) -> Result<()> {
         let Some(writer) = self.writer.as_mut() else {
             return Ok(());
         };
         let marker = MarkerEvent {
             kind: kind.to_string(),
             seq,
-            monotonic_ns: monotonic_now_ns(),
+            monotonic_ns,
         };
         serde_json::to_writer(&mut *writer, &marker)
             .context("failed to serialize benchmark marker")?;
@@ -1503,6 +1517,7 @@ fn run_launched_termy_trace(
     for attempt in 1..=XCTRACE_ATTEMPTS {
         remove_file_if_present(markers_path)?;
         remove_xctrace_output_if_present(trace_path)?;
+        reset_metrics_dir(metrics_dir)?;
         let mut trace_command = termy_trace_command(
             build,
             template,
@@ -1632,6 +1647,17 @@ fn remove_file_if_present(path: &Path) -> Result<()> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error).with_context(|| format!("failed to remove {}", path.display())),
     }
+}
+
+fn reset_metrics_dir(path: &Path) -> Result<()> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(error).with_context(|| format!("failed to clear {}", path.display()));
+        }
+    }
+    fs::create_dir_all(path).with_context(|| format!("failed to create {}", path.display()))
 }
 
 fn remove_xctrace_output_if_present(path: &Path) -> Result<()> {
@@ -3294,14 +3320,91 @@ fn format_option_f32(value: Option<f32>) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        BenchmarkDriverSpec, BenchmarkTargetKind, BenchmarkTargetSpec, FrameCaptureStatus,
-        FrameEvent, GhosttyVersion, MarkerEvent, Scenario, TERMY_NATIVE_RUNTIME,
-        benchmark_config_contents, create_ghostty_launch_artifacts, marker_file_contains,
-        parse_animation_summary, parse_displayed_frame_starts, parse_ghostty_version,
-        parse_hitch_durations, parse_single_row_table, render_report, resolve_native_executable,
+        BenchmarkDriverSpec, BenchmarkMarkerWriter, BenchmarkTargetKind, BenchmarkTargetSpec,
+        FrameCaptureStatus, FrameEvent, GhosttyVersion, MarkerEvent, Scenario,
+        TERMY_NATIVE_RUNTIME, benchmark_config_contents, create_ghostty_launch_artifacts,
+        emit_timed_output, marker_file_contains, parse_animation_summary,
+        parse_displayed_frame_starts, parse_ghostty_version, parse_hitch_durations,
+        parse_single_row_table, render_report, reset_metrics_dir, resolve_native_executable,
         summarize_echo_train_latency, summarize_idle_burst_latency, termy_trace_command,
     };
-    use std::{fs, path::PathBuf};
+    use std::{
+        fs,
+        io::{self, Write},
+        path::PathBuf,
+    };
+
+    #[test]
+    fn deferred_output_markers_preserve_emission_times() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("markers.ndjson");
+        let mut markers = BenchmarkMarkerWriter {
+            writer: Some(io::BufWriter::new(fs::File::create(&path).unwrap())),
+        };
+        // A buffered output sink also checks that the timed write flushes the
+        // glyph before returning; the marker file remains untouched meanwhile.
+        let mut output = io::BufWriter::new(Vec::new());
+        let mut timestamps = Vec::with_capacity(2);
+        for glyph in *b"ab" {
+            let timestamp = emit_timed_output(&mut output, &[glyph]).unwrap();
+            assert!(timestamp <= super::monotonic_now_ns());
+            assert_eq!(output.get_ref().last(), Some(&glyph));
+            assert!(fs::read(&path).unwrap().is_empty());
+            timestamps.push(timestamp);
+        }
+        for (seq, timestamp) in timestamps.iter().enumerate() {
+            markers
+                .record_at("echo_start", Some(seq as u64), *timestamp)
+                .unwrap();
+        }
+        markers.flush().unwrap();
+        let contents = fs::read_to_string(path).unwrap();
+        let events: Vec<MarkerEvent> = contents
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(events.len(), timestamps.len());
+        for (seq, event) in events.iter().enumerate() {
+            assert_eq!(event.kind, "echo_start");
+            assert_eq!(event.seq, Some(seq as u64));
+            assert_eq!(event.monotonic_ns, timestamps[seq]);
+        }
+    }
+
+    #[test]
+    fn timed_output_propagates_flush_failures() {
+        struct FailedFlush;
+        impl Write for FailedFlush {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Err(io::ErrorKind::BrokenPipe.into())
+            }
+        }
+        assert_eq!(
+            emit_timed_output(&mut FailedFlush, b"a")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::BrokenPipe
+        );
+    }
+
+    #[test]
+    fn trace_retry_removes_previous_metrics() {
+        let temp = tempfile::tempdir().unwrap();
+        let metrics = temp.path().join("app");
+        reset_metrics_dir(&metrics).unwrap();
+        fs::write(metrics.join("summary.json"), "old summary").unwrap();
+        fs::write(metrics.join("frames.ndjson"), "old frames").unwrap();
+        fs::write(temp.path().join("config.txt"), "keep").unwrap();
+        reset_metrics_dir(&metrics).unwrap();
+        assert_eq!(fs::read_dir(&metrics).unwrap().count(), 0);
+        assert_eq!(
+            fs::read_to_string(temp.path().join("config.txt")).unwrap(),
+            "keep"
+        );
+    }
 
     #[test]
     fn parses_scenario_names() {

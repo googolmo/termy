@@ -1,9 +1,12 @@
 //! Row-oriented terminal storage. Scrolling moves row handles, not cells.
 
-use std::{collections::VecDeque, sync::atomic::AtomicBool};
+use std::{
+    collections::VecDeque,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use super::types::{
-    Cell, Color, Cursor, Damage, DirtySpan, GridEffect, Size, Style, ViewportScroll,
+    Cell, Color, Cursor, CursorShape, Damage, DirtySpan, GridEffect, Size, Style, ViewportScroll,
 };
 
 mod combining;
@@ -14,6 +17,7 @@ use row::PackedCells;
 
 const MAX_HISTORY_ROWS: usize = 20_000;
 const MAX_SCROLL_DAMAGE: usize = 32;
+const COMPACT_OUTPUT_BURST_BYTES: usize = 4096;
 
 #[derive(Clone, Debug)]
 pub(super) struct Row {
@@ -174,6 +178,7 @@ pub(super) struct Grid {
     history_limit: usize,
     pending_compaction: usize,
     compact_on_scroll: bool,
+    output_since_compaction: usize,
     display_offset: usize,
     tabs: Vec<bool>,
     scroll_top: usize,
@@ -183,6 +188,7 @@ pub(super) struct Grid {
     // cross when choosing the new live viewport.
     clear_anchor: bool,
     full_damage: bool,
+    visual_dirty: bool,
     dirty: Vec<Option<(usize, usize)>>,
     pending_scrolls: Vec<ViewportScroll>,
     combining_cache: CombiningCache,
@@ -192,7 +198,10 @@ pub(super) struct Grid {
     // margin marks a wide base dropped there with autowrap disabled.
     grapheme_at_margin: bool,
     pub(super) history_activity: bool,
-    pub(super) history_read_cache: AtomicBool,
+    // Borrowed history reads usually decode one contiguous viewport. Track
+    // that interval so the next mutation does not scan untouched history.
+    history_read_start: AtomicUsize,
+    history_read_end: AtomicUsize,
     track_effects: bool,
     effects: Vec<GridEffect>,
     #[cfg(test)]
@@ -207,9 +216,13 @@ pub(super) struct Grid {
 
 impl Grid {
     pub(super) fn prepare_output(&mut self, bytes: usize) {
-        // Compress quiet history, not each row of a sustained output flood.
-        if bytes >= 4096 {
-            self.compact_on_scroll = false;
+        // PTY reads can fragment a sustained burst into small pieces. Count
+        // the whole burst so on-scroll packing stops regardless of chunking.
+        if self.compact_on_scroll {
+            self.output_since_compaction = self.output_since_compaction.saturating_add(bytes);
+            if self.output_since_compaction >= COMPACT_OUTPUT_BURST_BYTES {
+                self.compact_on_scroll = false;
+            }
         }
         self.release_history_read_cache();
     }
@@ -221,6 +234,7 @@ impl Grid {
     pub(super) fn compact_history(&mut self, limit: usize) {
         self.compact_pending_history(limit);
         self.compact_on_scroll = true;
+        self.output_since_compaction = 0;
     }
 
     /// Pack queued history without switching scrolling rows to immediate
@@ -236,11 +250,15 @@ impl Grid {
     }
 
     pub(super) fn release_history_read_cache(&mut self) {
-        if *self.history_read_cache.get_mut() {
-            for row in &mut self.history {
+        if *self.history_read_end.get_mut() == 0 {
+            return;
+        }
+        let start = std::mem::replace(self.history_read_start.get_mut(), usize::MAX);
+        let end = std::mem::take(self.history_read_end.get_mut());
+        if start < end {
+            for row in self.history.range_mut(start..end) {
                 row.release_read_cache();
             }
-            *self.history_read_cache.get_mut() = false;
         }
     }
 
@@ -256,6 +274,7 @@ impl Grid {
             history_limit: Self::bounded_history(size, history_limit),
             pending_compaction: 0,
             compact_on_scroll: false,
+            output_since_compaction: 0,
             display_offset: 0,
             tabs: Self::default_tabs(size.cols),
             scroll_top: 0,
@@ -263,6 +282,7 @@ impl Grid {
             pending_wrap: false,
             clear_anchor: false,
             full_damage: true,
+            visual_dirty: false,
             dirty: vec![None; size.rows],
             pending_scrolls: Vec::with_capacity(MAX_SCROLL_DAMAGE),
             combining_cache: CombiningCache::default(),
@@ -270,7 +290,8 @@ impl Grid {
             grapheme_ordinary: true,
             grapheme_at_margin: false,
             history_activity: false,
-            history_read_cache: AtomicBool::new(false),
+            history_read_start: AtomicUsize::new(usize::MAX),
+            history_read_end: AtomicUsize::new(0),
             track_effects: false,
             effects: Vec::new(),
             #[cfg(test)]
@@ -352,12 +373,32 @@ impl Grid {
         self.row(row as i32 - self.display_offset() as i32)
     }
 
+    pub(super) fn row_cells(&self, line: i32) -> Option<&[Cell]> {
+        let row = self.row(line)?;
+        if line < 0 && row.packed.is_some() {
+            let index = self.history.len() - line.unsigned_abs() as usize;
+            self.history_read_start.fetch_min(index, Ordering::Relaxed);
+            self.history_read_end
+                .fetch_max(index + 1, Ordering::Relaxed);
+        }
+        Some(row.cells())
+    }
+
+    pub(super) fn visible_row_cells(&self, row: usize) -> Option<&[Cell]> {
+        if row >= self.size.rows {
+            return None;
+        }
+        self.row_cells(row as i32 - self.display_offset() as i32)
+    }
+
     pub(super) fn mark_full_damage(&mut self) {
+        self.visual_dirty = true;
         self.full_damage = true;
         self.pending_scrolls.clear();
     }
 
     fn mark_scroll_damage(&mut self, top: usize, bottom: usize, lines: i32) {
+        self.visual_dirty = true;
         if self.full_damage {
             return;
         }
@@ -446,6 +487,11 @@ impl Grid {
     }
 
     fn mark(&mut self, row: usize, start: usize, end: usize) {
+        self.visual_dirty = true;
+        self.mark_damage(row, start, end);
+    }
+
+    fn mark_damage(&mut self, row: usize, start: usize, end: usize) {
         if self.full_damage || row >= self.size.rows || start >= end {
             return;
         }
@@ -461,8 +507,15 @@ impl Grid {
 
     fn mark_cursor(&mut self, cursor: Cursor) {
         if cursor.visible {
-            self.mark(cursor.row, cursor.col, cursor.col.saturating_add(1));
+            // Cursor overlays need text damage but do not edit placeholder cells.
+            self.mark_damage(cursor.row, cursor.col, cursor.col.saturating_add(1));
         }
+    }
+
+    /// Tracks edits independently of damage consumption, including while full
+    /// damage is already pending. Graphics consume it to notice placeholder edits.
+    pub(super) fn take_visual_dirty(&mut self) -> bool {
+        std::mem::take(&mut self.visual_dirty)
     }
 
     pub(super) fn end_grapheme(&mut self) {
@@ -1001,6 +1054,7 @@ impl Grid {
         if self.alternate_active {
             return false;
         }
+        self.release_history_read_cache();
         self.clear_anchor = false;
         let removed = self.history.len();
         let changed = removed != 0 || self.display_offset != 0;
@@ -1017,6 +1071,7 @@ impl Grid {
     }
 
     pub(super) fn set_history_limit(&mut self, limit: usize) {
+        self.release_history_read_cache();
         let previous = self.history.len();
         self.requested_history_limit = limit.min(MAX_HISTORY_ROWS);
         self.history_limit = Self::bounded_history(self.size, limit);
@@ -1035,7 +1090,37 @@ impl Grid {
         self.display_offset = self.display_offset.min(self.history.len());
     }
 
+    pub(super) fn soft_reset(&mut self, cursor_shape: CursorShape) {
+        let old = self.cursor;
+        self.cursor = Cursor {
+            row: old.row,
+            col: old.col,
+            shape: cursor_shape,
+            ..Cursor::default()
+        };
+        self.pen = Cell::default();
+        self.scroll_top = 0;
+        self.scroll_bottom = self.size.rows;
+        self.autowrap = true;
+        self.origin_mode = false;
+        self.insert_mode = false;
+        self.pending_wrap = false;
+        self.end_grapheme();
+        self.screen_mut().saved = SavedCursor {
+            cursor: Cursor {
+                shape: cursor_shape,
+                ..Cursor::default()
+            },
+            autowrap: true,
+            ..SavedCursor::default()
+        };
+        if self.cursor != old {
+            self.cursor_changed(old);
+        }
+    }
+
     pub(super) fn reset(&mut self) {
+        self.release_history_read_cache();
         self.alternate_active = false;
         self.alternate = None;
         self.history.clear();
@@ -1078,6 +1163,13 @@ impl Grid {
         let current_wrap = self.pending_wrap;
         self.screen_mut().cursor = current_cursor;
         self.screen_mut().pending_wrap = current_wrap;
+        // DECSET 1049 saves the primary cursor before parking that screen.
+        // Keep this saved anchor attached to the same text through reflow and
+        // height changes, without replacing an independently saved position.
+        let saved_primary_follows_cursor = self.alternate_active
+            && self.primary.saved.cursor.row == self.primary.cursor.row
+            && self.primary.saved.cursor.col == self.primary.cursor.col
+            && self.primary.saved.pending_wrap == self.primary.pending_wrap;
         if size.cols != self.size.cols {
             self.reflow_primary(size);
             if let Some(alternate) = &mut self.alternate {
@@ -1096,6 +1188,11 @@ impl Grid {
             }
         }
         self.resize_height(size);
+        if saved_primary_follows_cursor {
+            self.primary.saved.cursor.row = self.primary.cursor.row;
+            self.primary.saved.cursor.col = self.primary.cursor.col;
+            self.primary.saved.pending_wrap = self.primary.pending_wrap;
+        }
         self.size = size;
         self.history_limit = Self::bounded_history(size, self.requested_history_limit);
         self.trim_history();

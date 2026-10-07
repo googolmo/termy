@@ -1,6 +1,8 @@
 use regex::{Regex, RegexBuilder};
-use unicode_width::UnicodeWidthChar;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
+use crate::search_engine::SearchLineMapping;
 use crate::search_engine::matcher::{SearchMatch, SearchResults};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -113,8 +115,39 @@ impl SearchEngine {
             .map(|m| {
                 SearchMatch::new(
                     line_idx,
-                    byte_offset_to_cell_column(m.start(), &utf8_char_boundaries, &cell_columns),
-                    byte_offset_to_cell_column(m.end(), &utf8_char_boundaries, &cell_columns),
+                    byte_offset_to_cell_column(
+                        m.start(),
+                        &utf8_char_boundaries,
+                        &cell_columns,
+                        false,
+                    ),
+                    byte_offset_to_cell_column(
+                        m.end(),
+                        &utf8_char_boundaries,
+                        &cell_columns,
+                        !m.is_empty(),
+                    ),
+                )
+            })
+            .collect()
+    }
+
+    pub fn search_line_mapped(
+        &self,
+        line_idx: i32,
+        text: &str,
+        mapping: &SearchLineMapping,
+    ) -> Vec<SearchMatch> {
+        let Some(regex) = &self.compiled_regex else {
+            return Vec::new();
+        };
+        regex
+            .find_iter(text)
+            .map(|found| {
+                SearchMatch::new(
+                    line_idx,
+                    mapping.column(found.start(), false),
+                    mapping.column(found.end(), !found.is_empty()),
                 )
             })
             .collect()
@@ -124,6 +157,29 @@ impl SearchEngine {
     where
         F: Fn(i32) -> Option<&'a str>,
     {
+        self.search_using(start_line, end_line, |line| {
+            line_provider(line).map(|text| (text, None))
+        })
+    }
+
+    pub fn search_mapped<'a, F>(
+        &self,
+        start_line: i32,
+        end_line: i32,
+        line_provider: F,
+    ) -> SearchResults
+    where
+        F: Fn(i32) -> Option<(&'a str, &'a SearchLineMapping)>,
+    {
+        self.search_using(start_line, end_line, |line| {
+            line_provider(line).map(|(text, mapping)| (text, Some(mapping)))
+        })
+    }
+
+    fn search_using<'a, F>(&self, start_line: i32, end_line: i32, line_provider: F) -> SearchResults
+    where
+        F: Fn(i32) -> Option<(&'a str, Option<&'a SearchLineMapping>)>,
+    {
         if !self.has_pattern() {
             return SearchResults::new();
         }
@@ -131,13 +187,17 @@ impl SearchEngine {
         let mut matches = Vec::new();
 
         for line_idx in start_line..=end_line {
-            if let Some(text) = line_provider(line_idx) {
+            if let Some((text, mapping)) = line_provider(line_idx) {
                 if self.config.mode == SearchMode::Literal
                     && literal_line_can_skip(text, &self.pattern)
                 {
                     continue;
                 }
-                let line_matches = self.search_line(line_idx, text);
+                let line_matches = if let Some(mapping) = mapping {
+                    self.search_line_mapped(line_idx, text, mapping)
+                } else {
+                    self.search_line(line_idx, text)
+                };
                 matches.extend(line_matches);
             }
         }
@@ -159,10 +219,10 @@ fn compute_cell_columns(text: &str) -> (Vec<usize>, Vec<usize>) {
     let mut cell_columns = Vec::with_capacity(char_count);
     let mut cell_col = 0usize;
 
-    for (idx, ch) in text.char_indices() {
+    for (idx, grapheme) in text.grapheme_indices(true) {
         utf8_char_boundaries.push(idx);
         cell_columns.push(cell_col);
-        cell_col += UnicodeWidthChar::width(ch).unwrap_or(0);
+        cell_col += UnicodeWidthStr::width(grapheme);
     }
 
     utf8_char_boundaries.push(text.len());
@@ -175,11 +235,12 @@ fn byte_offset_to_cell_column(
     byte_offset: usize,
     utf8_char_boundaries: &[usize],
     cell_columns: &[usize],
+    round_up: bool,
 ) -> usize {
     match utf8_char_boundaries.binary_search(&byte_offset) {
         Ok(index) => cell_columns[index],
         Err(0) => 0,
-        Err(index) => cell_columns[index - 1],
+        Err(index) => cell_columns[if round_up { index } else { index - 1 }],
     }
 }
 
@@ -398,5 +459,22 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].start_col, 2);
         assert_eq!(matches[0].end_col, 4);
+    }
+
+    #[test]
+    fn matches_inside_graphemes_cover_the_complete_cell() {
+        let mut engine = SearchEngine::new(SearchConfig::default());
+        for (text, query, start, end) in [
+            ("A👩🏽‍💻Z", "👩", 1, 3),
+            ("A👩🏽‍💻Z", "💻", 1, 3),
+            ("Ae\u{301}Z", "\u{301}", 1, 2),
+            ("A🇩🇰Z", "Z", 3, 4),
+            ("A1\u{fe0f}\u{20e3}Z", "Z", 3, 4),
+        ] {
+            engine.set_pattern(query).unwrap();
+            let matches = engine.search_line(0, text);
+            assert_eq!(matches.len(), 1);
+            assert_eq!((matches[0].start_col, matches[0].end_col), (start, end));
+        }
     }
 }

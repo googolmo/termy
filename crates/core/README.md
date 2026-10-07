@@ -89,6 +89,11 @@ pixel decoding, placement/deletion, and animation. The engine exposes
 `GraphicsImage` pixels with shared geometry, frame composition, animation timing,
 and shared-memory transport. Raw uploads avoid PNG encoding; PNG uploads decode
 once. `image.png()` is an explicit lazy export for clipboard and C hosts.
+It returns an owned `Arc<Vec<u8>>`. Raw-image exports share their encoding while
+a consumer holds that handle and release the encoded buffer when the last
+consumer drops it; keep the handle alive for a batch of placements. Original
+PNG uploads retain their encoded source within the graphics memory budget.
+The C API continues to return host-owned copies with the existing free functions.
 
 `KittyGraphicsRenderPlacement` includes signed column offsets, optional Unicode
 placeholder cell coordinates, clipped margin rows, and an animation deadline.

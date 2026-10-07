@@ -1,0 +1,2717 @@
+{
+  "schema_version": 1,
+  "baseline_revision": "308bc090b338073e1ba053c1145230521bf9a0c2",
+  "candidate_parent_revision": "be7382f52d6a9e2da6914118dbe22a9f1de404ac",
+  "candidate_modified_production_sources": [
+    {
+      "path": "crates/core/src/terminal_engine/grid/print.rs",
+      "sha256": "e56989de47355c7cf497bc78aa60098e7260d669112ad5e3c5154b36ed7ea0e9"
+    }
+  ],
+  "method": "Six alternating pairs per workload at 32 MiB; builds and tests finished before timing. Same helper source as the initial audit.",
+  "candidate_library_sha256": "0b19889499e0bf2d73d2a8602acc3005e3d08e6782c5ec63fc38efd179cea249",
+  "reports": {
+    "feed": {
+      "schema_version": 1,
+      "started_at": "2026-10-07T11:49:54.192713+00:00",
+      "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+      "mib": 32,
+      "pairs": 6,
+      "consume_damage": false,
+      "timeout_seconds": 120,
+      "min_ratio": 0.95,
+      "baseline_backend": "custom",
+      "baseline_requested_backend": "alacritty",
+      "baseline": {
+        "path": "baseline-facade",
+        "sha256": "fe219312434c7c627610ddeef0ac9539e646b1ac3f898caa15a185d8a5842b33",
+        "engine": "custom"
+      },
+      "candidate": {
+        "path": "candidate-facade",
+        "sha256": "aac2258fe5ffe8de1d723a1e7c0defab96068748ee5a9f5ced2a0b58c95ebddd",
+        "engine": "custom"
+      },
+      "samples": [
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 420.427,
+          "bytes": 33574912,
+          "seconds": 0.07616,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 420.427 MiB/s; 33574912 bytes; 0.076160 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 316.282,
+          "bytes": 33574912,
+          "seconds": 0.101237,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 316.282 MiB/s; 33574912 bytes; 0.101237 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 411.769,
+          "bytes": 33574912,
+          "seconds": 0.077761,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 411.769 MiB/s; 33574912 bytes; 0.077761 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 416.913,
+          "bytes": 33574912,
+          "seconds": 0.076802,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 416.913 MiB/s; 33574912 bytes; 0.076802 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 413.955,
+          "bytes": 33574912,
+          "seconds": 0.07735,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 413.955 MiB/s; 33574912 bytes; 0.077350 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 413.871,
+          "bytes": 33574912,
+          "seconds": 0.077366,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 413.871 MiB/s; 33574912 bytes; 0.077366 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 411.825,
+          "bytes": 33574912,
+          "seconds": 0.07775,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 411.825 MiB/s; 33574912 bytes; 0.077750 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 414.064,
+          "bytes": 33574912,
+          "seconds": 0.07733,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 414.064 MiB/s; 33574912 bytes; 0.077330 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 415.21,
+          "bytes": 33574912,
+          "seconds": 0.077116,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 415.210 MiB/s; 33574912 bytes; 0.077116 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 411.826,
+          "bytes": 33574912,
+          "seconds": 0.07775,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 411.826 MiB/s; 33574912 bytes; 0.077750 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 410.336,
+          "bytes": 33574912,
+          "seconds": 0.078032,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 410.336 MiB/s; 33574912 bytes; 0.078032 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 412.778,
+          "bytes": 33574912,
+          "seconds": 0.077571,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nplain: 412.778 MiB/s; 33574912 bytes; 0.077571 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 219.875,
+          "bytes": 33596416,
+          "seconds": 0.14572,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 219.875 MiB/s; 33596416 bytes; 0.145720 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 235.117,
+          "bytes": 33596416,
+          "seconds": 0.136273,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 235.117 MiB/s; 33596416 bytes; 0.136273 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 234.312,
+          "bytes": 33596416,
+          "seconds": 0.136741,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 234.312 MiB/s; 33596416 bytes; 0.136741 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 228.952,
+          "bytes": 33596416,
+          "seconds": 0.139942,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 228.952 MiB/s; 33596416 bytes; 0.139942 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 225.518,
+          "bytes": 33596416,
+          "seconds": 0.142073,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 225.518 MiB/s; 33596416 bytes; 0.142073 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 231.685,
+          "bytes": 33596416,
+          "seconds": 0.138291,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 231.685 MiB/s; 33596416 bytes; 0.138291 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 233.317,
+          "bytes": 33596416,
+          "seconds": 0.137324,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 233.317 MiB/s; 33596416 bytes; 0.137324 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 218.656,
+          "bytes": 33596416,
+          "seconds": 0.146532,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 218.656 MiB/s; 33596416 bytes; 0.146532 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 226.731,
+          "bytes": 33596416,
+          "seconds": 0.141313,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 226.731 MiB/s; 33596416 bytes; 0.141313 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 236.113,
+          "bytes": 33596416,
+          "seconds": 0.135698,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 236.113 MiB/s; 33596416 bytes; 0.135698 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 233.851,
+          "bytes": 33596416,
+          "seconds": 0.13701,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 233.851 MiB/s; 33596416 bytes; 0.137010 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 220.594,
+          "bytes": 33596416,
+          "seconds": 0.145245,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nstyled: 220.594 MiB/s; 33596416 bytes; 0.145245 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 188.706,
+          "bytes": 33566720,
+          "seconds": 0.169638,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 188.706 MiB/s; 33566720 bytes; 0.169638 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 176.213,
+          "bytes": 33566720,
+          "seconds": 0.181665,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 176.213 MiB/s; 33566720 bytes; 0.181665 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 185.618,
+          "bytes": 33566720,
+          "seconds": 0.17246,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 185.618 MiB/s; 33566720 bytes; 0.172460 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 195.155,
+          "bytes": 33566720,
+          "seconds": 0.164033,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 195.155 MiB/s; 33566720 bytes; 0.164033 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 188.106,
+          "bytes": 33566720,
+          "seconds": 0.170179,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 188.106 MiB/s; 33566720 bytes; 0.170179 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 179.049,
+          "bytes": 33566720,
+          "seconds": 0.178787,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 179.049 MiB/s; 33566720 bytes; 0.178787 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 180.897,
+          "bytes": 33566720,
+          "seconds": 0.176961,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 180.897 MiB/s; 33566720 bytes; 0.176961 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 187.49,
+          "bytes": 33566720,
+          "seconds": 0.170739,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 187.490 MiB/s; 33566720 bytes; 0.170739 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 192.525,
+          "bytes": 33566720,
+          "seconds": 0.166273,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 192.525 MiB/s; 33566720 bytes; 0.166273 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 186.647,
+          "bytes": 33566720,
+          "seconds": 0.17151,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 186.647 MiB/s; 33566720 bytes; 0.171510 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 179.8,
+          "bytes": 33566720,
+          "seconds": 0.17804,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 179.800 MiB/s; 33566720 bytes; 0.178040 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 191.336,
+          "bytes": 33566720,
+          "seconds": 0.167307,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nunicode: 191.336 MiB/s; 33566720 bytes; 0.167307 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 213.124,
+          "bytes": 33579840,
+          "seconds": 0.150261,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 213.124 MiB/s; 33579840 bytes; 0.150261 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 202.162,
+          "bytes": 33579840,
+          "seconds": 0.158409,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 202.162 MiB/s; 33579840 bytes; 0.158409 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 196.569,
+          "bytes": 33579840,
+          "seconds": 0.162916,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 196.569 MiB/s; 33579840 bytes; 0.162916 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 215.823,
+          "bytes": 33579840,
+          "seconds": 0.148382,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 215.823 MiB/s; 33579840 bytes; 0.148382 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 207.516,
+          "bytes": 33579840,
+          "seconds": 0.154322,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 207.516 MiB/s; 33579840 bytes; 0.154322 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 212.63,
+          "bytes": 33579840,
+          "seconds": 0.15061,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 212.630 MiB/s; 33579840 bytes; 0.150610 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 211.127,
+          "bytes": 33579840,
+          "seconds": 0.151682,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 211.127 MiB/s; 33579840 bytes; 0.151682 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 208.703,
+          "bytes": 33579840,
+          "seconds": 0.153444,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 208.703 MiB/s; 33579840 bytes; 0.153444 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 210.555,
+          "bytes": 33579840,
+          "seconds": 0.152094,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 210.555 MiB/s; 33579840 bytes; 0.152094 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 206.647,
+          "bytes": 33579840,
+          "seconds": 0.154971,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 206.647 MiB/s; 33579840 bytes; 0.154971 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 182.637,
+          "bytes": 33579840,
+          "seconds": 0.175344,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 182.637 MiB/s; 33579840 bytes; 0.175344 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 215.569,
+          "bytes": 33579840,
+          "seconds": 0.148557,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-unicode: 215.569 MiB/s; 33579840 bytes; 0.148557 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 148.277,
+          "bytes": 33556992,
+          "seconds": 0.215829,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 148.277 MiB/s; 33556992 bytes; 0.215829 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 154.442,
+          "bytes": 33556992,
+          "seconds": 0.207214,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 154.442 MiB/s; 33556992 bytes; 0.207214 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 154.999,
+          "bytes": 33556992,
+          "seconds": 0.206468,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 154.999 MiB/s; 33556992 bytes; 0.206468 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 147.617,
+          "bytes": 33556992,
+          "seconds": 0.216793,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 147.617 MiB/s; 33556992 bytes; 0.216793 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 145.76,
+          "bytes": 33556992,
+          "seconds": 0.219555,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 145.760 MiB/s; 33556992 bytes; 0.219555 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 154.385,
+          "bytes": 33556992,
+          "seconds": 0.20729,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 154.385 MiB/s; 33556992 bytes; 0.207290 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 152.792,
+          "bytes": 33556992,
+          "seconds": 0.209451,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 152.792 MiB/s; 33556992 bytes; 0.209451 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 147.948,
+          "bytes": 33556992,
+          "seconds": 0.216308,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 147.948 MiB/s; 33556992 bytes; 0.216308 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 147.636,
+          "bytes": 33556992,
+          "seconds": 0.216765,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 147.636 MiB/s; 33556992 bytes; 0.216765 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 153.495,
+          "bytes": 33556992,
+          "seconds": 0.208491,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 153.495 MiB/s; 33556992 bytes; 0.208491 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 154.719,
+          "bytes": 33556992,
+          "seconds": 0.206842,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 154.719 MiB/s; 33556992 bytes; 0.206842 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 146.36,
+          "bytes": 33556992,
+          "seconds": 0.218656,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\ncombining: 146.360 MiB/s; 33556992 bytes; 0.218656 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 155.196,
+          "bytes": 33591296,
+          "seconds": 0.206418,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 155.196 MiB/s; 33591296 bytes; 0.206418 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 158.35,
+          "bytes": 33591296,
+          "seconds": 0.202307,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 158.350 MiB/s; 33591296 bytes; 0.202307 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 159.919,
+          "bytes": 33591296,
+          "seconds": 0.200321,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 159.919 MiB/s; 33591296 bytes; 0.200321 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 154.044,
+          "bytes": 33591296,
+          "seconds": 0.207961,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 154.044 MiB/s; 33591296 bytes; 0.207961 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 153.217,
+          "bytes": 33591296,
+          "seconds": 0.209084,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 153.217 MiB/s; 33591296 bytes; 0.209084 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 159.086,
+          "bytes": 33591296,
+          "seconds": 0.20137,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 159.086 MiB/s; 33591296 bytes; 0.201370 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 160.829,
+          "bytes": 33591296,
+          "seconds": 0.199188,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 160.829 MiB/s; 33591296 bytes; 0.199188 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 153.753,
+          "bytes": 33591296,
+          "seconds": 0.208355,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 153.753 MiB/s; 33591296 bytes; 0.208355 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 156.129,
+          "bytes": 33591296,
+          "seconds": 0.205184,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 156.129 MiB/s; 33591296 bytes; 0.205184 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 158.339,
+          "bytes": 33591296,
+          "seconds": 0.20232,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 158.339 MiB/s; 33591296 bytes; 0.202320 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 161.41,
+          "bytes": 33591296,
+          "seconds": 0.198471,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 161.410 MiB/s; 33591296 bytes; 0.198471 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 155.234,
+          "bytes": 33591296,
+          "seconds": 0.206367,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nvaried-combining: 155.234 MiB/s; 33591296 bytes; 0.206367 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 24.676,
+          "bytes": 33574912,
+          "seconds": 1.297619,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 24.676 MiB/s; 33574912 bytes; 1.297619 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 25.303,
+          "bytes": 33574912,
+          "seconds": 1.265456,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 25.303 MiB/s; 33574912 bytes; 1.265456 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 25.343,
+          "bytes": 33574912,
+          "seconds": 1.263453,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 25.343 MiB/s; 33574912 bytes; 1.263453 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 24.528,
+          "bytes": 33574912,
+          "seconds": 1.305444,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 24.528 MiB/s; 33574912 bytes; 1.305444 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 24.86,
+          "bytes": 33574912,
+          "seconds": 1.287968,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 24.860 MiB/s; 33574912 bytes; 1.287968 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 25.285,
+          "bytes": 33574912,
+          "seconds": 1.266342,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 25.285 MiB/s; 33574912 bytes; 1.266342 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 25.254,
+          "bytes": 33574912,
+          "seconds": 1.267923,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 25.254 MiB/s; 33574912 bytes; 1.267923 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 24.926,
+          "bytes": 33574912,
+          "seconds": 1.284597,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 24.926 MiB/s; 33574912 bytes; 1.284597 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 24.59,
+          "bytes": 33574912,
+          "seconds": 1.302146,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 24.590 MiB/s; 33574912 bytes; 1.302146 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 25.331,
+          "bytes": 33574912,
+          "seconds": 1.264039,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 25.331 MiB/s; 33574912 bytes; 1.264039 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 25.368,
+          "bytes": 33574912,
+          "seconds": 1.262217,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 25.368 MiB/s; 33574912 bytes; 1.262217 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 24.967,
+          "bytes": 33574912,
+          "seconds": 1.282467,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=false\nengine: custom\nfragmented: 24.967 MiB/s; 33574912 bytes; 1.282467 seconds\n",
+          "stderr": ""
+        }
+      ],
+      "summary": {
+        "plain": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 414.637,
+            "min": 412.778,
+            "max": 420.427
+          },
+          "candidate_mib_per_second": {
+            "median": 411.797,
+            "min": 316.282,
+            "max": 413.871
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 0.7522875552711885
+            },
+            {
+              "pair": 2,
+              "ratio": 0.987661694406267
+            },
+            {
+              "pair": 3,
+              "ratio": 0.9997970793926876
+            },
+            {
+              "pair": 4,
+              "ratio": 0.9945926233625719
+            },
+            {
+              "pair": 5,
+              "ratio": 0.9918499072758364
+            },
+            {
+              "pair": 6,
+              "ratio": 0.9940839870341927
+            }
+          ],
+          "ratio": {
+            "median": 0.9929669471550145,
+            "min": 0.7522875552711885,
+            "max": 0.9997970793926876
+          },
+          "ratio_of_medians": 0.993150635375039
+        },
+        "styled": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 223.05599999999998,
+            "min": 218.656,
+            "max": 228.952
+          },
+          "candidate_mib_per_second": {
+            "median": 234.0815,
+            "min": 231.685,
+            "max": 236.113
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 1.0693212052302443
+            },
+            {
+              "pair": 2,
+              "ratio": 1.0234110206506168
+            },
+            {
+              "pair": 3,
+              "ratio": 1.0273459324754566
+            },
+            {
+              "pair": 4,
+              "ratio": 1.0670505268549686
+            },
+            {
+              "pair": 5,
+              "ratio": 1.041379432014149
+            },
+            {
+              "pair": 6,
+              "ratio": 1.0600968294695232
+            }
+          ],
+          "ratio": {
+            "median": 1.050738130741836,
+            "min": 1.0234110206506168,
+            "max": 1.0693212052302443
+          },
+          "ratio_of_medians": 1.0494292912990462
+        },
+        "unicode": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 190.02100000000002,
+            "min": 187.49,
+            "max": 195.155
+          },
+          "candidate_mib_per_second": {
+            "median": 180.3485,
+            "min": 176.213,
+            "max": 186.647
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 0.9337964876580501
+            },
+            {
+              "pair": 2,
+              "ratio": 0.9511311521611027
+            },
+            {
+              "pair": 3,
+              "ratio": 0.9518516155784505
+            },
+            {
+              "pair": 4,
+              "ratio": 0.9648354578910874
+            },
+            {
+              "pair": 5,
+              "ratio": 0.9694689001428385
+            },
+            {
+              "pair": 6,
+              "ratio": 0.9397081573775975
+            }
+          ],
+          "ratio": {
+            "median": 0.9514913838697766,
+            "min": 0.9337964876580501,
+            "max": 0.9694689001428385
+          },
+          "ratio_of_medians": 0.9490977313033822
+        },
+        "varied-unicode": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 211.8395,
+            "min": 207.516,
+            "max": 215.823
+          },
+          "candidate_mib_per_second": {
+            "median": 204.40449999999998,
+            "min": 182.637,
+            "max": 212.63
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 0.94856515455791
+            },
+            {
+              "pair": 2,
+              "ratio": 0.9107880068389373
+            },
+            {
+              "pair": 3,
+              "ratio": 1.02464388288132
+            },
+            {
+              "pair": 4,
+              "ratio": 1.0116145910696062
+            },
+            {
+              "pair": 5,
+              "ratio": 0.9814395288641922
+            },
+            {
+              "pair": 6,
+              "ratio": 0.8472322087127556
+            }
+          ],
+          "ratio": {
+            "median": 0.9650023417110511,
+            "min": 0.8472322087127556,
+            "max": 1.02464388288132
+          },
+          "ratio_of_medians": 0.9649026739583505
+        },
+        "combining": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 147.6265,
+            "min": 145.76,
+            "max": 148.277
+          },
+          "candidate_mib_per_second": {
+            "median": 154.4135,
+            "min": 152.792,
+            "max": 154.999
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 1.0415775878929303
+            },
+            {
+              "pair": 2,
+              "ratio": 1.0500077904306415
+            },
+            {
+              "pair": 3,
+              "ratio": 1.059172612513721
+            },
+            {
+              "pair": 4,
+              "ratio": 1.032741233406332
+            },
+            {
+              "pair": 5,
+              "ratio": 1.0396854425749817
+            },
+            {
+              "pair": 6,
+              "ratio": 1.0571125990707841
+            }
+          ],
+          "ratio": {
+            "median": 1.045792689161786,
+            "min": 1.032741233406332,
+            "max": 1.059172612513721
+          },
+          "ratio_of_medians": 1.0459741306608232
+        },
+        "varied-combining": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 154.62,
+            "min": 153.217,
+            "max": 156.129
+          },
+          "candidate_mib_per_second": {
+            "median": 159.5025,
+            "min": 158.339,
+            "max": 161.41
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 1.020322688729091
+            },
+            {
+              "pair": 2,
+              "ratio": 1.0381384539482226
+            },
+            {
+              "pair": 3,
+              "ratio": 1.038305148906453
+            },
+            {
+              "pair": 4,
+              "ratio": 1.0460218662400085
+            },
+            {
+              "pair": 5,
+              "ratio": 1.014154961602265
+            },
+            {
+              "pair": 6,
+              "ratio": 1.039785098625301
+            }
+          ],
+          "ratio": {
+            "median": 1.0382218014273379,
+            "min": 1.014154961602265,
+            "max": 1.0460218662400085
+          },
+          "ratio_of_medians": 1.0315774155995343
+        },
+        "fragmented": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 24.768,
+            "min": 24.528,
+            "max": 24.967
+          },
+          "candidate_mib_per_second": {
+            "median": 25.317,
+            "min": 25.254,
+            "max": 25.368
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 1.0254093045874535
+            },
+            {
+              "pair": 2,
+              "ratio": 1.033227332028702
+            },
+            {
+              "pair": 3,
+              "ratio": 1.0170957361222848
+            },
+            {
+              "pair": 4,
+              "ratio": 1.0131589504934608
+            },
+            {
+              "pair": 5,
+              "ratio": 1.0301342008946726
+            },
+            {
+              "pair": 6,
+              "ratio": 1.0160612007850363
+            }
+          ],
+          "ratio": {
+            "median": 1.021252520354869,
+            "min": 1.0131589504934608,
+            "max": 1.033227332028702
+          },
+          "ratio_of_medians": 1.0221656976744187
+        }
+      },
+      "status": "completed",
+      "failed_cases": []
+    },
+    "damage": {
+      "schema_version": 1,
+      "started_at": "2026-10-07T11:50:22.042818+00:00",
+      "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+      "mib": 32,
+      "pairs": 6,
+      "consume_damage": true,
+      "timeout_seconds": 120,
+      "min_ratio": 0.95,
+      "baseline_backend": "custom",
+      "baseline_requested_backend": "alacritty",
+      "baseline": {
+        "path": "baseline-facade",
+        "sha256": "fe219312434c7c627610ddeef0ac9539e646b1ac3f898caa15a185d8a5842b33",
+        "engine": "custom"
+      },
+      "candidate": {
+        "path": "candidate-facade",
+        "sha256": "aac2258fe5ffe8de1d723a1e7c0defab96068748ee5a9f5ced2a0b58c95ebddd",
+        "engine": "custom"
+      },
+      "samples": [
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 347.946,
+          "bytes": 33574912,
+          "seconds": 0.092024,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 347.946 MiB/s; 33574912 bytes; 0.092024 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 347.167,
+          "bytes": 33574912,
+          "seconds": 0.092231,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 347.167 MiB/s; 33574912 bytes; 0.092231 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 347.884,
+          "bytes": 33574912,
+          "seconds": 0.092041,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 347.884 MiB/s; 33574912 bytes; 0.092041 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 349.384,
+          "bytes": 33574912,
+          "seconds": 0.091646,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 349.384 MiB/s; 33574912 bytes; 0.091646 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 350.013,
+          "bytes": 33574912,
+          "seconds": 0.091481,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 350.013 MiB/s; 33574912 bytes; 0.091481 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 347.153,
+          "bytes": 33574912,
+          "seconds": 0.092235,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 347.153 MiB/s; 33574912 bytes; 0.092235 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 344.772,
+          "bytes": 33574912,
+          "seconds": 0.092871,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 344.772 MiB/s; 33574912 bytes; 0.092871 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 344.68,
+          "bytes": 33574912,
+          "seconds": 0.092896,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 344.680 MiB/s; 33574912 bytes; 0.092896 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 347.337,
+          "bytes": 33574912,
+          "seconds": 0.092186,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 347.337 MiB/s; 33574912 bytes; 0.092186 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 348.388,
+          "bytes": 33574912,
+          "seconds": 0.091908,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 348.388 MiB/s; 33574912 bytes; 0.091908 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "plain",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 346.33,
+          "bytes": 33574912,
+          "seconds": 0.092454,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 346.330 MiB/s; 33574912 bytes; 0.092454 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "plain",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 349.728,
+          "bytes": 33574912,
+          "seconds": 0.091556,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nplain: 349.728 MiB/s; 33574912 bytes; 0.091556 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 212.674,
+          "bytes": 33596416,
+          "seconds": 0.150653,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 212.674 MiB/s; 33596416 bytes; 0.150653 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 224.869,
+          "bytes": 33596416,
+          "seconds": 0.142483,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 224.869 MiB/s; 33596416 bytes; 0.142483 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 230.98,
+          "bytes": 33596416,
+          "seconds": 0.138714,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 230.980 MiB/s; 33596416 bytes; 0.138714 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 217.285,
+          "bytes": 33596416,
+          "seconds": 0.147456,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 217.285 MiB/s; 33596416 bytes; 0.147456 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 210.364,
+          "bytes": 33596416,
+          "seconds": 0.152308,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 210.364 MiB/s; 33596416 bytes; 0.152308 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 227.089,
+          "bytes": 33596416,
+          "seconds": 0.141091,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 227.089 MiB/s; 33596416 bytes; 0.141091 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 224.521,
+          "bytes": 33596416,
+          "seconds": 0.142704,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 224.521 MiB/s; 33596416 bytes; 0.142704 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 213.411,
+          "bytes": 33596416,
+          "seconds": 0.150133,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 213.411 MiB/s; 33596416 bytes; 0.150133 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 223.947,
+          "bytes": 33596416,
+          "seconds": 0.14307,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 223.947 MiB/s; 33596416 bytes; 0.143070 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 227.461,
+          "bytes": 33596416,
+          "seconds": 0.14086,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 227.461 MiB/s; 33596416 bytes; 0.140860 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "styled",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 229.328,
+          "bytes": 33596416,
+          "seconds": 0.139713,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 229.328 MiB/s; 33596416 bytes; 0.139713 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "styled",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 221.071,
+          "bytes": 33596416,
+          "seconds": 0.144931,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nstyled: 221.071 MiB/s; 33596416 bytes; 0.144931 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 166.485,
+          "bytes": 33566720,
+          "seconds": 0.19228,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 166.485 MiB/s; 33566720 bytes; 0.192280 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 180.355,
+          "bytes": 33566720,
+          "seconds": 0.177492,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 180.355 MiB/s; 33566720 bytes; 0.177492 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 176.911,
+          "bytes": 33566720,
+          "seconds": 0.180948,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 176.911 MiB/s; 33566720 bytes; 0.180948 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 165.406,
+          "bytes": 33566720,
+          "seconds": 0.193535,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 165.406 MiB/s; 33566720 bytes; 0.193535 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 166.39,
+          "bytes": 33566720,
+          "seconds": 0.192389,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 166.390 MiB/s; 33566720 bytes; 0.192389 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 176.037,
+          "bytes": 33566720,
+          "seconds": 0.181847,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 176.037 MiB/s; 33566720 bytes; 0.181847 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 177.847,
+          "bytes": 33566720,
+          "seconds": 0.179996,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 177.847 MiB/s; 33566720 bytes; 0.179996 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 165.296,
+          "bytes": 33566720,
+          "seconds": 0.193663,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 165.296 MiB/s; 33566720 bytes; 0.193663 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 166.272,
+          "bytes": 33566720,
+          "seconds": 0.192527,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 166.272 MiB/s; 33566720 bytes; 0.192527 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 177.354,
+          "bytes": 33566720,
+          "seconds": 0.180497,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 177.354 MiB/s; 33566720 bytes; 0.180497 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "unicode",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 180.517,
+          "bytes": 33566720,
+          "seconds": 0.177333,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 180.517 MiB/s; 33566720 bytes; 0.177333 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "unicode",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 162.897,
+          "bytes": 33566720,
+          "seconds": 0.196515,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nunicode: 162.897 MiB/s; 33566720 bytes; 0.196515 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 207.339,
+          "bytes": 33579840,
+          "seconds": 0.154454,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 207.339 MiB/s; 33579840 bytes; 0.154454 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 221.361,
+          "bytes": 33579840,
+          "seconds": 0.144669,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 221.361 MiB/s; 33579840 bytes; 0.144669 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 224.046,
+          "bytes": 33579840,
+          "seconds": 0.142936,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 224.046 MiB/s; 33579840 bytes; 0.142936 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 206.172,
+          "bytes": 33579840,
+          "seconds": 0.155328,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 206.172 MiB/s; 33579840 bytes; 0.155328 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 205.787,
+          "bytes": 33579840,
+          "seconds": 0.155618,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 205.787 MiB/s; 33579840 bytes; 0.155618 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 224.569,
+          "bytes": 33579840,
+          "seconds": 0.142603,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 224.569 MiB/s; 33579840 bytes; 0.142603 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 224.444,
+          "bytes": 33579840,
+          "seconds": 0.142682,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 224.444 MiB/s; 33579840 bytes; 0.142682 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 206.298,
+          "bytes": 33579840,
+          "seconds": 0.155233,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 206.298 MiB/s; 33579840 bytes; 0.155233 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 197.681,
+          "bytes": 33579840,
+          "seconds": 0.161999,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 197.681 MiB/s; 33579840 bytes; 0.161999 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 222.964,
+          "bytes": 33579840,
+          "seconds": 0.143629,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 222.964 MiB/s; 33579840 bytes; 0.143629 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-unicode",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 222.261,
+          "bytes": 33579840,
+          "seconds": 0.144084,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 222.261 MiB/s; 33579840 bytes; 0.144084 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-unicode",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 206.888,
+          "bytes": 33579840,
+          "seconds": 0.15479,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-unicode: 206.888 MiB/s; 33579840 bytes; 0.154790 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 123.552,
+          "bytes": 33556992,
+          "seconds": 0.259019,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 123.552 MiB/s; 33556992 bytes; 0.259019 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 125.89,
+          "bytes": 33556992,
+          "seconds": 0.254209,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 125.890 MiB/s; 33556992 bytes; 0.254209 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 125.426,
+          "bytes": 33556992,
+          "seconds": 0.25515,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 125.426 MiB/s; 33556992 bytes; 0.255150 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 123.37,
+          "bytes": 33556992,
+          "seconds": 0.259403,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 123.370 MiB/s; 33556992 bytes; 0.259403 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 123.326,
+          "bytes": 33556992,
+          "seconds": 0.259495,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 123.326 MiB/s; 33556992 bytes; 0.259495 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 125.399,
+          "bytes": 33556992,
+          "seconds": 0.255205,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 125.399 MiB/s; 33556992 bytes; 0.255205 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 125.873,
+          "bytes": 33556992,
+          "seconds": 0.254243,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 125.873 MiB/s; 33556992 bytes; 0.254243 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 124.281,
+          "bytes": 33556992,
+          "seconds": 0.257501,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 124.281 MiB/s; 33556992 bytes; 0.257501 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 123.814,
+          "bytes": 33556992,
+          "seconds": 0.258472,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 123.814 MiB/s; 33556992 bytes; 0.258472 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 125.092,
+          "bytes": 33556992,
+          "seconds": 0.255831,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 125.092 MiB/s; 33556992 bytes; 0.255831 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "combining",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 125.846,
+          "bytes": 33556992,
+          "seconds": 0.254299,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 125.846 MiB/s; 33556992 bytes; 0.254299 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "combining",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 124.592,
+          "bytes": 33556992,
+          "seconds": 0.256857,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\ncombining: 124.592 MiB/s; 33556992 bytes; 0.256857 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 135.724,
+          "bytes": 33591296,
+          "seconds": 0.236031,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 135.724 MiB/s; 33591296 bytes; 0.236031 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 139.704,
+          "bytes": 33591296,
+          "seconds": 0.229307,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 139.704 MiB/s; 33591296 bytes; 0.229307 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 138.209,
+          "bytes": 33591296,
+          "seconds": 0.231788,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 138.209 MiB/s; 33591296 bytes; 0.231788 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 135.245,
+          "bytes": 33591296,
+          "seconds": 0.236868,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 135.245 MiB/s; 33591296 bytes; 0.236868 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 136.366,
+          "bytes": 33591296,
+          "seconds": 0.234921,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 136.366 MiB/s; 33591296 bytes; 0.234921 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 141.285,
+          "bytes": 33591296,
+          "seconds": 0.226742,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 141.285 MiB/s; 33591296 bytes; 0.226742 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 139.052,
+          "bytes": 33591296,
+          "seconds": 0.230382,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 139.052 MiB/s; 33591296 bytes; 0.230382 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 134.824,
+          "bytes": 33591296,
+          "seconds": 0.237608,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 134.824 MiB/s; 33591296 bytes; 0.237608 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 136.884,
+          "bytes": 33591296,
+          "seconds": 0.234032,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 136.884 MiB/s; 33591296 bytes; 0.234032 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 140.144,
+          "bytes": 33591296,
+          "seconds": 0.228587,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 140.144 MiB/s; 33591296 bytes; 0.228587 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "varied-combining",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 128.893,
+          "bytes": 33591296,
+          "seconds": 0.24854,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 128.893 MiB/s; 33591296 bytes; 0.248540 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "varied-combining",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 136.546,
+          "bytes": 33591296,
+          "seconds": 0.234611,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nvaried-combining: 136.546 MiB/s; 33591296 bytes; 0.234611 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 1,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 24.745,
+          "bytes": 33574912,
+          "seconds": 1.293968,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.745 MiB/s; 33574912 bytes; 1.293968 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 1,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 24.648,
+          "bytes": 33574912,
+          "seconds": 1.299053,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.648 MiB/s; 33574912 bytes; 1.299053 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 2,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 24.68,
+          "bytes": 33574912,
+          "seconds": 1.297377,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.680 MiB/s; 33574912 bytes; 1.297377 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 2,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 24.781,
+          "bytes": 33574912,
+          "seconds": 1.292077,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.781 MiB/s; 33574912 bytes; 1.292077 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 3,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 24.714,
+          "bytes": 33574912,
+          "seconds": 1.295593,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.714 MiB/s; 33574912 bytes; 1.295593 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 3,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 24.752,
+          "bytes": 33574912,
+          "seconds": 1.293589,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.752 MiB/s; 33574912 bytes; 1.293589 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 4,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 24.687,
+          "bytes": 33574912,
+          "seconds": 1.29702,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.687 MiB/s; 33574912 bytes; 1.297020 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 4,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 24.742,
+          "bytes": 33574912,
+          "seconds": 1.294137,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.742 MiB/s; 33574912 bytes; 1.294137 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 5,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 24.527,
+          "bytes": 33574912,
+          "seconds": 1.305473,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.527 MiB/s; 33574912 bytes; 1.305473 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 5,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 23.566,
+          "bytes": 33574912,
+          "seconds": 1.358746,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 23.566 MiB/s; 33574912 bytes; 1.358746 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "candidate",
+          "case": "fragmented",
+          "pair": 6,
+          "order": 1,
+          "engine": "custom",
+          "mib_per_second": 24.577,
+          "bytes": 33574912,
+          "seconds": 1.302834,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.577 MiB/s; 33574912 bytes; 1.302834 seconds\n",
+          "stderr": ""
+        },
+        {
+          "label": "baseline",
+          "case": "fragmented",
+          "pair": 6,
+          "order": 2,
+          "engine": "custom",
+          "mib_per_second": 24.628,
+          "bytes": 33574912,
+          "seconds": 1.300117,
+          "stdout": "terminal_facade: 120x40, 1000 history rows, 32 MiB per case, consume_damage=true\nengine: custom\nfragmented: 24.628 MiB/s; 33574912 bytes; 1.300117 seconds\n",
+          "stderr": ""
+        }
+      ],
+      "summary": {
+        "plain": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 348.665,
+            "min": 344.68,
+            "max": 350.013
+          },
+          "candidate_mib_per_second": {
+            "median": 347.15999999999997,
+            "min": 344.772,
+            "max": 348.388
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 0.9977611468446251
+            },
+            {
+              "pair": 2,
+              "ratio": 0.9957067295583083
+            },
+            {
+              "pair": 3,
+              "ratio": 0.9918288749275028
+            },
+            {
+              "pair": 4,
+              "ratio": 1.0002669142392944
+            },
+            {
+              "pair": 5,
+              "ratio": 1.0030258797651848
+            },
+            {
+              "pair": 6,
+              "ratio": 0.9902838777564278
+            }
+          ],
+          "ratio": {
+            "median": 0.9967339382014667,
+            "min": 0.9902838777564278,
+            "max": 1.0030258797651848
+          },
+          "ratio_of_medians": 0.9956835357721594
+        },
+        "styled": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 215.348,
+            "min": 210.364,
+            "max": 223.947
+          },
+          "candidate_mib_per_second": {
+            "median": 227.275,
+            "min": 224.521,
+            "max": 230.98
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 1.0573412829024704
+            },
+            {
+              "pair": 2,
+              "ratio": 1.0630278206042754
+            },
+            {
+              "pair": 3,
+              "ratio": 1.0795050483923105
+            },
+            {
+              "pair": 4,
+              "ratio": 1.052059172207618
+            },
+            {
+              "pair": 5,
+              "ratio": 1.0156912126529938
+            },
+            {
+              "pair": 6,
+              "ratio": 1.0373499916316478
+            }
+          ],
+          "ratio": {
+            "median": 1.0547002275550441,
+            "min": 1.0156912126529938,
+            "max": 1.0795050483923105
+          },
+          "ratio_of_medians": 1.0553847725541914
+        },
+        "unicode": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 165.839,
+            "min": 162.897,
+            "max": 166.485
+          },
+          "candidate_mib_per_second": {
+            "median": 177.6005,
+            "min": 176.037,
+            "max": 180.517
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 1.0833108087815717
+            },
+            {
+              "pair": 2,
+              "ratio": 1.0695561225106707
+            },
+            {
+              "pair": 3,
+              "ratio": 1.057978243884849
+            },
+            {
+              "pair": 4,
+              "ratio": 1.075930452037557
+            },
+            {
+              "pair": 5,
+              "ratio": 1.0666498267898386
+            },
+            {
+              "pair": 6,
+              "ratio": 1.1081665101260305
+            }
+          ],
+          "ratio": {
+            "median": 1.0727432872741138,
+            "min": 1.057978243884849,
+            "max": 1.1081665101260305
+          },
+          "ratio_of_medians": 1.0709211946526451
+        },
+        "varied-unicode": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 206.235,
+            "min": 197.681,
+            "max": 207.339
+          },
+          "candidate_mib_per_second": {
+            "median": 223.505,
+            "min": 221.361,
+            "max": 224.569
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 1.0676283767163919
+            },
+            {
+              "pair": 2,
+              "ratio": 1.0866946045049763
+            },
+            {
+              "pair": 3,
+              "ratio": 1.0912691277874695
+            },
+            {
+              "pair": 4,
+              "ratio": 1.0879601353382
+            },
+            {
+              "pair": 5,
+              "ratio": 1.127897977043823
+            },
+            {
+              "pair": 6,
+              "ratio": 1.0743059046440586
+            }
+          ],
+          "ratio": {
+            "median": 1.0873273699215882,
+            "min": 1.0676283767163919,
+            "max": 1.127897977043823
+          },
+          "ratio_of_medians": 1.0837394234732223
+        },
+        "combining": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 123.68299999999999,
+            "min": 123.326,
+            "max": 124.592
+          },
+          "candidate_mib_per_second": {
+            "median": 125.636,
+            "min": 125.092,
+            "max": 125.89
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 1.0189232064232063
+            },
+            {
+              "pair": 2,
+              "ratio": 1.016665315716949
+            },
+            {
+              "pair": 3,
+              "ratio": 1.0168091075685581
+            },
+            {
+              "pair": 4,
+              "ratio": 1.0128096812867615
+            },
+            {
+              "pair": 5,
+              "ratio": 1.0103219345146752
+            },
+            {
+              "pair": 6,
+              "ratio": 1.0100648516758701
+            }
+          ],
+          "ratio": {
+            "median": 1.0147374985018551,
+            "min": 1.0100648516758701,
+            "max": 1.0189232064232063
+          },
+          "ratio_of_medians": 1.015790367309978
+        },
+        "varied-combining": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 136.04500000000002,
+            "min": 134.824,
+            "max": 136.884
+          },
+          "candidate_mib_per_second": {
+            "median": 139.378,
+            "min": 128.893,
+            "max": 141.285
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 1.0293242167929033
+            },
+            {
+              "pair": 2,
+              "ratio": 1.0219157824688527
+            },
+            {
+              "pair": 3,
+              "ratio": 1.0360720414179487
+            },
+            {
+              "pair": 4,
+              "ratio": 1.0313594018869043
+            },
+            {
+              "pair": 5,
+              "ratio": 1.0238157856287076
+            },
+            {
+              "pair": 6,
+              "ratio": 0.9439529535834078
+            }
+          ],
+          "ratio": {
+            "median": 1.0265700012108054,
+            "min": 0.9439529535834078,
+            "max": 1.0360720414179487
+          },
+          "ratio_of_medians": 1.0244992465728249
+        },
+        "fragmented": {
+          "completed_pairs": 6,
+          "baseline_mib_per_second": {
+            "median": 24.728,
+            "min": 24.527,
+            "max": 24.781
+          },
+          "candidate_mib_per_second": {
+            "median": 24.664,
+            "min": 23.566,
+            "max": 24.752
+          },
+          "paired_ratios": [
+            {
+              "pair": 1,
+              "ratio": 0.9960800161648817
+            },
+            {
+              "pair": 2,
+              "ratio": 0.9959242968403212
+            },
+            {
+              "pair": 3,
+              "ratio": 1.0015375900299426
+            },
+            {
+              "pair": 4,
+              "ratio": 0.9977770592514752
+            },
+            {
+              "pair": 5,
+              "ratio": 0.9608186896073714
+            },
+            {
+              "pair": 6,
+              "ratio": 0.9979291862920254
+            }
+          ],
+          "ratio": {
+            "median": 0.9969285377081785,
+            "min": 0.9608186896073714,
+            "max": 1.0015375900299426
+          },
+          "ratio_of_medians": 0.9974118408282109
+        }
+      },
+      "status": "completed",
+      "failed_cases": []
+    }
+  }
+}

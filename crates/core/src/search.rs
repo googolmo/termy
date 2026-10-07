@@ -1,6 +1,7 @@
 use crate::frame::TermyFrame;
-use crate::search_engine::{SearchConfig, SearchEngine, SearchMode};
+use crate::search_engine::{SearchConfig, SearchEngine, SearchLineMapping, SearchMode};
 use std::sync::Arc;
+use unicode_width::UnicodeWidthChar;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TermySearchMatch {
@@ -73,14 +74,17 @@ pub fn search_frame_shared_with_options(
     let cols = usize::from(frame.cols);
     let rows = usize::from(frame.rows);
     search_lines_shared(
-        (0..rows).map(|row| (row, line_text(frame, row, cols))),
+        (0..rows).map(|row| {
+            let (text, mapping) = line_text(frame, row, cols);
+            (row, text, mapping)
+        }),
         query,
         options,
     )
 }
 
 pub(crate) fn search_lines_shared(
-    lines: impl IntoIterator<Item = (usize, String)>,
+    lines: impl IntoIterator<Item = (usize, String, SearchLineMapping)>,
     query: &str,
     options: TermySearchOptions,
 ) -> Vec<TermySharedSearchMatch> {
@@ -101,8 +105,8 @@ pub(crate) fn search_lines_shared(
     }
 
     let mut matches = Vec::new();
-    for (row, line) in lines {
-        let line_matches = engine.search_line(row as i32, &line);
+    for (row, line, mapping) in lines {
+        let line_matches = engine.search_line_mapped(row as i32, &line, &mapping);
         if line_matches.is_empty() {
             continue;
         }
@@ -124,20 +128,29 @@ pub(crate) fn search_lines_shared(
     matches
 }
 
-fn line_text(frame: &TermyFrame, row: usize, cols: usize) -> String {
+fn line_text(frame: &TermyFrame, row: usize, cols: usize) -> (String, SearchLineMapping) {
     let start = row.saturating_mul(cols);
     let end = start.saturating_add(cols);
     if end > frame.cells.len() {
-        return String::new();
+        return (String::new(), SearchLineMapping::default());
     }
 
-    let mut text = frame.cells[start..end]
-        .iter()
-        .map(|cell| if cell.render_text { cell.char } else { ' ' })
-        .collect::<String>();
+    let cells = &frame.cells[start..end];
+    let mut text = String::with_capacity(cols);
+    let mut mapping = SearchLineMapping::default();
+    let mut previous_start = 0;
+    for (col, cell) in cells.iter().enumerate() {
+        if cell.wide_character_spacer && col > 0 && cells[col - 1].char.width() == Some(2) {
+            mapping.record_cell(&text, previous_start, col - 1, 2);
+            continue;
+        }
+        previous_start = text.len();
+        text.push(if cell.render_text { cell.char } else { ' ' });
+        mapping.record_cell(&text, previous_start, col, 1);
+    }
     let trimmed_len = text.trim_end().len();
     text.truncate(trimmed_len);
-    text
+    (text, mapping)
 }
 
 #[cfg(test)]

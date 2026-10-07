@@ -1,3 +1,4 @@
+use crate::search_engine::SearchLineMapping;
 use crate::search_engine::engine::{SearchConfig, SearchEngine, SearchMode};
 use crate::search_engine::matcher::SearchResults;
 
@@ -131,6 +132,16 @@ impl SearchState {
 
     pub fn next_match(&mut self) {
         self.results.next_match();
+    }
+
+    pub fn search_mapped<'a, F>(&mut self, start_line: i32, end_line: i32, line_provider: F)
+    where
+        F: Fn(i32) -> Option<(&'a str, &'a SearchLineMapping)>,
+    {
+        self.results = self
+            .engine
+            .search_mapped(start_line, end_line, line_provider);
+        self.results_revision = self.results_revision.wrapping_add(1);
     }
 
     pub fn previous_match(&mut self) {

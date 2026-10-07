@@ -17,6 +17,7 @@ use crate::{
     TerminalViewportScrollDirection, TermyCell, TermyColor, TermyFrame, TermyFrameUpdate,
     TermySearchMatch, TermySearchOptions, TermySharedSearchMatch,
     search::search_lines_shared,
+    search_engine::SearchLineMapping,
     terminal_engine::transport::{PtySize, SpawnConfig, Transport},
     terminal_engine::{self as engine, Engine},
 };
@@ -1141,9 +1142,23 @@ impl CustomBackend {
         search_lines_shared(
             (-history..i32::from(state.size.rows)).filter_map(|line| {
                 state.engine.with_line(line, &mut scratch, |cells| {
-                    let mut text: String = cells.iter().map(search_character).collect();
+                    let mut text = String::with_capacity(cells.len());
+                    let mut mapping = SearchLineMapping::default();
+                    for (col, cell) in cells.iter().enumerate() {
+                        if cell.flags & engine::Cell::WIDE_SPACER != 0 {
+                            continue;
+                        }
+                        let start = text.len();
+                        append_search_cell(&mut text, cell);
+                        mapping.record_cell(
+                            &text,
+                            start,
+                            col,
+                            1 + usize::from(cell.flags & engine::Cell::WIDE != 0),
+                        );
+                    }
                     text.truncate(text.trim_end().len());
-                    ((line + history) as usize, text)
+                    ((line + history) as usize, text, mapping)
                 })
             }),
             query,
@@ -1384,14 +1399,18 @@ fn legacy_cell(
     }
 }
 
-fn search_character(cell: &engine::Cell) -> char {
-    if cell.flags & (engine::Cell::WIDE_SPACER | engine::Cell::LEADING_WIDE_SPACER) != 0
+fn append_search_cell(text: &mut String, cell: &engine::Cell) {
+    if cell.flags & engine::Cell::WIDE_SPACER != 0 {
+        return;
+    }
+    if cell.flags & engine::Cell::LEADING_WIDE_SPACER != 0
         || cell.style.attributes & engine::Style::HIDDEN != 0
         || cell.character.is_control()
     {
-        ' '
+        text.push(' ');
     } else {
-        cell.character
+        text.push(cell.character);
+        text.push_str(cell.combining());
     }
 }
 // Legacy frame consumers replay only cell patches, so include the rows moved

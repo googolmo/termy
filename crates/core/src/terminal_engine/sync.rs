@@ -6,16 +6,27 @@
 
 use std::time::{Duration, Instant};
 
-use super::parser::{Handler, Param, Parser};
+use super::parser::{Handler, MAX_APC_BYTES, Param, Parser};
 
 pub(super) const MAX_SYNC_BYTES: usize = 2 * 1024 * 1024;
 pub(super) const SYNC_TIMEOUT: Duration = Duration::from_millis(150);
 
-#[derive(Default)]
 pub(super) struct SynchronizedUpdate {
     scanner: Parser,
     bytes: Vec<u8>,
     deadline: Option<Instant>,
+    saved_mode: Option<bool>,
+}
+
+impl Default for SynchronizedUpdate {
+    fn default() -> Self {
+        Self {
+            scanner: Parser::scanner(MAX_APC_BYTES),
+            bytes: Vec::new(),
+            deadline: None,
+            saved_mode: None,
+        }
+    }
 }
 
 pub(super) struct Buffered {
@@ -28,17 +39,22 @@ impl SynchronizedUpdate {
         self.deadline
     }
 
-    pub(super) fn begin(&mut self, now: Instant) {
+    pub(super) fn begin(&mut self, now: Instant, saved_mode: Option<bool>) {
         self.bytes.clear();
         self.scanner.reset();
         self.deadline = Some(now + SYNC_TIMEOUT);
+        self.saved_mode = saved_mode;
     }
 
     pub(super) fn push(&mut self, bytes: &[u8], now: Instant) -> Buffered {
         debug_assert!(self.deadline.is_some());
         let admitted = bytes.len().min(MAX_SYNC_BYTES - self.bytes.len());
-        let mut marker = Marker::default();
+        let mut marker = Marker {
+            saved_mode: self.saved_mode,
+            ..Marker::default()
+        };
         let consumed = self.scanner.advance(&mut marker, &bytes[..admitted]);
+        self.saved_mode = marker.saved_mode;
         let required = self.bytes.len() + consumed;
         if required > self.bytes.capacity() {
             let capacity = required.next_power_of_two().min(MAX_SYNC_BYTES);
@@ -70,6 +86,7 @@ impl SynchronizedUpdate {
 struct Marker {
     refreshed: bool,
     ended: bool,
+    saved_mode: Option<bool>,
 }
 
 impl Handler for Marker {
@@ -99,6 +116,12 @@ impl Handler for Marker {
         match final_byte {
             b'h' => self.refreshed = true,
             b'l' => self.ended = true,
+            b's' => self.saved_mode = Some(true),
+            b'r' => match self.saved_mode {
+                Some(true) => self.refreshed = true,
+                Some(false) => self.ended = true,
+                None => {}
+            },
             _ => {}
         }
     }

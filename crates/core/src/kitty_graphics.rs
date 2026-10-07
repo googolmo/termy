@@ -36,6 +36,12 @@ const MAX_PIXELS: u64 = (MAX_IMAGE_BYTES / 4) as u64;
 const MAX_PLACEMENTS: usize = 4_096;
 const MAX_RELATIVE_DEPTH: usize = 8;
 
+impl KittyGraphicsCommand {
+    pub(crate) fn needs_placeholder_positions(&self) -> bool {
+        self.char_value('a') == Some('d') && !matches!(self.char_value('d'), Some('f' | 'F'))
+    }
+}
+
 #[derive(Clone, Debug)]
 struct StoredImage {
     image: Arc<crate::terminal_engine::media::GraphicsImage>,
@@ -668,6 +674,12 @@ impl KittyGraphicsState {
         self.placements
             .iter()
             .any(|placement| matches!(placement.location, PlacementLocation::Virtual))
+    }
+
+    pub(crate) fn has_virtual_placements_on_screen(&self, screen: KittyGraphicsScreen) -> bool {
+        self.placements.iter().any(|placement| {
+            placement.screen == screen && matches!(placement.location, PlacementLocation::Virtual)
+        })
     }
 
     pub fn reset(&mut self) -> bool {
