@@ -152,3 +152,22 @@ assembly. They do not measure presented frames, input-to-display latency, or
 OS RSS. This patch does not establish that the earlier native graphics hitch
 is resolved; the [previous presentation measurements](unicode-history-performance-2026-10-05.md)
 remain a separate limitation.
+
+## Application latency measurement follow-up
+
+The final engine revision passed hosted architecture checks and all parser,
+allocation, and facade throughput gates. The application echo-train check
+failed twice: baseline/candidate p95 render-callback latency was 20.69/89.07 ms
+and 18.13/33.48 ms. These results remain failures, not evidence of parity.
+
+Investigation found that the driver timestamped output before serializing and
+flushing its marker file. That filesystem work therefore counted as terminal
+latency. The driver now prepares each payload, timestamps immediately before
+writing and flushing stdout, and persists the original timestamps after the
+measurement interval. The same correction applies to idle-burst. Trace retries
+clear earlier application metrics, and CI retains raw frame and timeline events
+alongside markers so future tails can be investigated. The latency threshold
+and percentile calculation are unchanged. The earlier artifacts did not retain
+the raw frames, so they cannot establish how much of either tail came from
+marker overhead. Render-callback timing still does not measure presentation
+or match a specific glyph to a displayed frame.

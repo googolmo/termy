@@ -96,4 +96,6 @@ jobs:
             benchmark-output-${{ matrix.scenario }}/raw/**/driver/*.ndjson
             benchmark-output-${{ matrix.scenario }}/raw/**/*-target.log
             benchmark-output-${{ matrix.scenario }}/raw/**/app/summary.json
+            benchmark-output-${{ matrix.scenario }}/raw/**/app/frames.ndjson
+            benchmark-output-${{ matrix.scenario }}/raw/**/app/timeline.ndjson
           if-no-files-found: ignore
