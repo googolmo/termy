@@ -1323,7 +1323,10 @@ fn fragmented_output_leaves_on_scroll_packing_after_a_bounded_burst() {
         }
         grid.prepare_output(8);
         print(&mut grid, "\r\nlast\r\n");
-        assert!(grid.history.back().unwrap().packed.is_none(), "{chunk_size}");
+        assert!(
+            grid.history.back().unwrap().packed.is_none(),
+            "{chunk_size}"
+        );
 
         // A subsequent quiet interval still packs isolated short log lines.
         grid.compact_history(usize::MAX);

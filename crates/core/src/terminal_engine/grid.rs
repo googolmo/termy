@@ -378,7 +378,8 @@ impl Grid {
         if line < 0 && row.packed.is_some() {
             let index = self.history.len() - line.unsigned_abs() as usize;
             self.history_read_start.fetch_min(index, Ordering::Relaxed);
-            self.history_read_end.fetch_max(index + 1, Ordering::Relaxed);
+            self.history_read_end
+                .fetch_max(index + 1, Ordering::Relaxed);
         }
         Some(row.cells())
     }
