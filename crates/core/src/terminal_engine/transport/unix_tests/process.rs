@@ -726,17 +726,26 @@ enum SignalObservation {
 #[test]
 fn child_resets_inherited_ignored_signals() {
     const HELPER_ENV: &str = "TERMY_NATIVE_SIGNAL_RESET_TEST_HELPER";
-    if std::env::var_os(HELPER_ENV).as_deref() != Some(OsStr::new("1")) {
-        let status = Command::new(std::env::current_exe().expect("test executable should exist"))
-            .arg("terminal_engine::transport::unix::tests::process::child_resets_inherited_ignored_signals")
-            .arg("--exact")
-            .arg("--nocapture")
-            .env(HELPER_ENV, "1")
-            .status()
-            .expect("isolated signal test should start");
-        assert!(status.success(), "isolated signal test failed: {status}");
-        return;
-    }
+    let (signal_number, signal_name) = match std::env::var(HELPER_ENV).as_deref() {
+        Ok("TERM") => (SIGTERM, "TERM"),
+        Ok("PIPE") => (SIGPIPE, "PIPE"),
+        _ => {
+            for signal_name in ["TERM", "PIPE"] {
+                let status = Command::new(std::env::current_exe().expect("test executable should exist"))
+                    .arg("terminal_engine::transport::unix::tests::process::child_resets_inherited_ignored_signals")
+                    .arg("--exact")
+                    .arg("--nocapture")
+                    .env(HELPER_ENV, signal_name)
+                    .status()
+                    .expect("isolated signal test should start");
+                assert!(
+                    status.success(),
+                    "isolated SIG{signal_name} test failed: {status}"
+                );
+            }
+            return;
+        }
+    };
 
     const READY: &[u8] = b"TERMY_NATIVE_SIGNAL_READY";
     const SURVIVED: &[u8] = b"TERMY_NATIVE_SIGNAL_SURVIVED";
@@ -749,14 +758,16 @@ fn child_resets_inherited_ignored_signals() {
         program: "/bin/sh".to_string(),
         args: vec![
             "-c".to_string(),
-            concat!(
-                "printf TERMY_NATIVE_SIGNAL_READY\n",
-                "read ready\n",
-                "kill -TERM $$\n",
-                "printf TERMY_NATIVE_SIGNAL_SURVIVED\n",
-                "read survived\n",
-            )
-            .to_string(),
+            format!(
+                concat!(
+                    "printf TERMY_NATIVE_SIGNAL_READY\n",
+                    "read ready\n",
+                    "kill -{} $$\n",
+                    "printf TERMY_NATIVE_SIGNAL_SURVIVED\n",
+                    "read survived\n",
+                ),
+                signal_name,
+            ),
         ],
         working_directory: None,
         environment: Vec::new(),
@@ -766,8 +777,11 @@ fn child_resets_inherited_ignored_signals() {
     // process-wide disposition cannot interfere with the main test runner.
     // SAFETY: SIG_IGN is the POSIX sentinel value, and the exact prior
     // disposition is restored immediately after forkpty returns.
-    let previous = unsafe { signal(SIGTERM, SIGNAL_IGNORE) };
-    assert_ne!(previous, SIGNAL_ERROR, "ignoring SIGTERM should succeed");
+    let previous = unsafe { signal(signal_number, SIGNAL_IGNORE) };
+    assert_ne!(
+        previous, SIGNAL_ERROR,
+        "ignoring SIG{signal_name} should succeed"
+    );
     let terminal = Transport::spawn(
         config,
         test_size(),
@@ -791,10 +805,10 @@ fn child_resets_inherited_ignored_signals() {
         },
     );
     // SAFETY: `previous` is the handler returned by the successful signal call above.
-    let restore_result = unsafe { signal(SIGTERM, previous) };
+    let restore_result = unsafe { signal(signal_number, previous) };
     assert_ne!(
         restore_result, SIGNAL_ERROR,
-        "restoring SIGTERM should succeed"
+        "restoring SIG{signal_name} should succeed"
     );
     let terminal = terminal.expect("PTY should start");
 
@@ -806,11 +820,11 @@ fn child_resets_inherited_ignored_signals() {
     );
     exit_rx
         .recv_timeout(Duration::from_secs(2))
-        .expect("SIGTERM should terminate the child promptly");
+        .expect("the signal should terminate the child promptly");
     assert_ne!(
         observation_rx.try_recv(),
         Ok(SignalObservation::Survived),
-        "the child inherited SIG_IGN instead of resetting SIGTERM"
+        "the child inherited SIG_IGN instead of resetting SIG{signal_name}"
     );
     drop(terminal);
 }

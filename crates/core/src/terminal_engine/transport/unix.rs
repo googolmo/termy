@@ -42,6 +42,8 @@ const SIGINT: c_int = 2;
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 const SIGQUIT: c_int = 3;
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+const SIGPIPE: c_int = 13;
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 const SIGALRM: c_int = 14;
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 const SIGTERM: c_int = 15;
@@ -1259,7 +1261,7 @@ fn reset_child_process_state() {
     // `tcsetattr` are async-signal-safe, and this code performs no allocation
     // or locking between forkpty and execve.
     unsafe {
-        for signal_number in [SIGCHLD, SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGALRM] {
+        for signal_number in [SIGCHLD, SIGHUP, SIGINT, SIGQUIT, SIGPIPE, SIGTERM, SIGALRM] {
             let _ = signal(signal_number, SIGNAL_DEFAULT);
         }
 
