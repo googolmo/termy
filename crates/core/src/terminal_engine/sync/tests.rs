@@ -4,7 +4,7 @@ use super::*;
 fn scanner_stops_at_grouped_end_marker_and_refreshes_on_nested_begin() {
     let now = Instant::now();
     let mut update = SynchronizedUpdate::default();
-    update.begin(now);
+    update.begin(now, None);
     let later = now + Duration::from_millis(20);
     let result = update.push(b"frame\x1b[?2004;2026hmore\x1b[?25;2026lafter", later);
     assert!(result.commit);
@@ -22,7 +22,7 @@ fn scanner_matches_every_end_marker_split_boundary() {
     for split in 0..=bytes.len() {
         let now = Instant::now();
         let mut update = SynchronizedUpdate::default();
-        update.begin(now);
+        update.begin(now, None);
         let first = update.push(&bytes[..split], now);
         if !first.commit {
             let second = update.push(&bytes[split..], now);
@@ -37,7 +37,7 @@ fn scanner_matches_every_end_marker_split_boundary() {
 fn malformed_and_cancelled_markers_do_not_end_buffering() {
     let now = Instant::now();
     let mut update = SynchronizedUpdate::default();
-    update.begin(now);
+    update.begin(now, None);
     for bytes in [
         b"\x1b[2026l".as_slice(),
         b"\x1b[?2026:1l",
@@ -54,7 +54,7 @@ fn oversized_string_embedded_marker_is_discarded_until_st() {
     for introducer in [b"\x1b]", b"\x1bP"] {
         let now = Instant::now();
         let mut update = SynchronizedUpdate::default();
-        update.begin(now);
+        update.begin(now, None);
         assert!(!update.push(introducer, now).commit);
         assert!(!update.push(&vec![b'x'; 64 * 1024 + 1], now).commit);
         assert!(!update.push(b"\x1b[?2026l", now).commit);
@@ -66,7 +66,7 @@ fn oversized_string_embedded_marker_is_discarded_until_st() {
 fn byte_budget_commits_at_exact_bound_and_reuses_allocation() {
     let now = Instant::now();
     let mut update = SynchronizedUpdate::default();
-    update.begin(now);
+    update.begin(now, None);
     let bytes = vec![b'x'; MAX_SYNC_BYTES + 100];
     let result = update.push(&bytes, now);
     assert_eq!(result.consumed, MAX_SYNC_BYTES);
@@ -75,7 +75,7 @@ fn byte_budget_commits_at_exact_bound_and_reuses_allocation() {
     let buffer = update.take_buffer().unwrap();
     let allocation = buffer.as_ptr();
     update.recycle_buffer(buffer);
-    update.begin(now);
+    update.begin(now, None);
     assert!(!update.push(b"small next frame", now).commit);
     assert_eq!(update.bytes.as_ptr(), allocation);
 }
@@ -126,6 +126,44 @@ mod engine {
             assert_eq!(text(&engine, 0), "END             ", "split {split}");
             assert_eq!(replies(&mut engine), b"\x1b[1;4R", "split {split}");
         }
+    }
+
+    #[test]
+    fn restoring_saved_disabled_sync_mode_commits_every_fragmentation() {
+        let ending = b"\x1b[?2026rEND";
+        for split in 0..=ending.len() {
+            let now = Instant::now();
+            let mut engine = engine();
+            engine.feed_at(b"old\x1b[?2026s\x1b[?2026h\r", now);
+            engine.feed_at(&ending[..split], now);
+            engine.feed_at(&ending[split..], now);
+            assert!(
+                engine.synchronized_update_deadline().is_none(),
+                "split {split}"
+            );
+            assert_eq!(text(&engine, 0), "END             ", "split {split}");
+        }
+    }
+
+    #[test]
+    fn saves_inside_sync_batches_replace_the_scanners_prior_saved_mode() {
+        let now = Instant::now();
+        let mut engine = engine();
+        engine.feed_at(b"old\x1b[?2026s\x1b[?2026h\rnew\x1b[?2026s", now);
+        // Saving while active overwrites the disabled state inherited at begin.
+        for byte in b"\x1b[?2026r" {
+            engine.feed_at(&[*byte], now);
+        }
+        assert!(engine.synchronized_update_deadline().is_some());
+        assert_eq!(text(&engine, 0), "old             ");
+        engine.feed_at(b"\x1b[?2026l", now);
+        assert_eq!(text(&engine, 0), "new             ");
+        // The authoritative parser must retain that same saved enabled state.
+        engine.feed_at(b"\x1b[?2026r\rnext", now);
+        assert!(engine.synchronized_update_deadline().is_some());
+        assert_eq!(text(&engine, 0), "new             ");
+        engine.feed_at(b"\x1b[?2026l", now);
+        assert_eq!(text(&engine, 0), "next            ");
     }
 
     #[test]

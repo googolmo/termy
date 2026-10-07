@@ -7,8 +7,8 @@ use super::{
 };
 
 impl State {
-    pub(super) fn report_mode(&mut self, private: bool, mode: u16) {
-        let enabled = if private {
+    pub(super) fn mode_state(&self, private: bool, mode: u16) -> Option<bool> {
+        if private {
             match mode {
                 1 => Some(self.modes.application_cursor),
                 6 => Some(self.grid.origin_mode),
@@ -36,7 +36,11 @@ impl State {
                 20 => Some(self.grid.newline_mode),
                 _ => None,
             }
-        };
+        }
+    }
+
+    pub(super) fn report_mode(&mut self, private: bool, mode: u16) {
+        let enabled = self.mode_state(private, mode);
         let status = enabled.map_or(0, |enabled| if enabled { 1 } else { 2 });
         let prefix = if private { "?" } else { "" };
         self.reply(format!("\x1b[{prefix}{mode};{status}$y").as_bytes());

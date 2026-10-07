@@ -137,7 +137,8 @@ impl Engine {
                 self.state.flush_graphics_effects();
                 self.generation = self.generation.wrapping_add(1);
                 if self.state.modes.synchronized_update {
-                    self.synchronized_update.begin(now);
+                    self.synchronized_update
+                        .begin(now, self.state.saved_private_mode(2026));
                 }
             }
         }

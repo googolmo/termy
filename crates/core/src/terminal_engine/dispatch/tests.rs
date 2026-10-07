@@ -319,3 +319,54 @@ fn soft_reset_preserves_alternate_screen_and_extended_session_modes() {
     engine.feed(b"\x1b[?1049l");
     assert_eq!(text(&engine, 0), "primary   ");
 }
+
+#[test]
+fn private_mode_restore_changes_only_modes_previously_saved() {
+    let mut engine = engine(10, 4);
+    for byte in b"\x1b[?1;25;2004s\x1b[?1;2004;1003;1006h\x1b[?25l\x1b[?1;25r" {
+        engine.feed(&[*byte]);
+    }
+    assert!(engine.cursor().visible);
+    assert!(!engine.modes().application_cursor);
+    assert!(engine.modes().bracketed_paste);
+    assert_eq!(engine.modes().mouse_tracking, MouseTracking::Motion);
+    assert_eq!(engine.modes().mouse_encoding, MouseEncoding::Sgr);
+    engine.feed(b"\x1b[?2004;1003;1006;9999r");
+    assert!(!engine.modes().bracketed_paste);
+    assert_eq!(engine.modes().mouse_tracking, MouseTracking::Motion);
+    assert_eq!(engine.modes().mouse_encoding, MouseEncoding::Sgr);
+}
+
+#[test]
+fn private_mode_saves_overwrite_independently_and_ris_forgets_them() {
+    let mut engine = engine(10, 4);
+    engine.feed(b"\x1b[?25;2004s\x1b[?25l\x1b[?25s\x1b[?25;2004h\x1b[?25;2004r");
+    assert!(!engine.cursor().visible);
+    assert!(!engine.modes().bracketed_paste);
+    // Unsupported subparameters must neither overwrite nor restore a mode.
+    engine.feed(b"\x1b[?25h\x1b[?25:1s\x1b[?25r\x1b[?25:1r");
+    assert!(!engine.cursor().visible);
+    engine.feed(b"\x1bc\x1b[?25r");
+    assert!(engine.cursor().visible);
+}
+
+#[test]
+fn restoring_private_modes_applies_screen_and_clipboard_side_effects() {
+    let mut engine = engine(10, 4);
+    engine.feed(b"primary\x1b[?1049;5522s\x1b[?1049;5522h\x1b[?1049;5522r");
+    assert!(!engine.alternate_screen());
+    assert_eq!(text(&engine, 0), "primary   ");
+    assert!(!engine.modes().clipboard_paste_events);
+    assert_eq!(
+        engine.pop_event(),
+        Some(super::super::Event::KittyClipboardControl(
+            crate::KittyClipboardControl::Set(true)
+        ))
+    );
+    assert_eq!(
+        engine.pop_event(),
+        Some(super::super::Event::KittyClipboardControl(
+            crate::KittyClipboardControl::Set(false)
+        ))
+    );
+}
