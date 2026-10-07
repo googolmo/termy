@@ -256,9 +256,7 @@ impl Parser {
                 } else {
                     // ESC interrupts an unfinished string. Reconsume the byte
                     // as part of the new escape sequence, including C0 and CSI.
-                    self.clear_string();
-                    self.begin_escape();
-                    self.sequence_byte(handler, byte);
+                    self.interrupt_string(handler, byte);
                 }
             }
             State::Escape | State::Csi => self.sequence_byte(handler, byte),
@@ -353,8 +351,7 @@ impl Parser {
                         _ => None,
                     };
                     if let Some(kind) = string_kind {
-                        self.clear_string();
-                        self.state = State::String(kind);
+                        self.begin_string(kind);
                         return;
                     }
                 }
@@ -459,6 +456,25 @@ impl Parser {
         self.string.extend_from_slice(bytes);
     }
 
+    // Keep allocation cleanup and string dispatch out of the ordinary CSI
+    // byte path, including the registers needed across their allocator calls.
+    #[cold]
+    #[inline(never)]
+    fn begin_string(&mut self, kind: StringKind) {
+        self.clear_string();
+        self.state = State::String(kind);
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn interrupt_string(&mut self, handler: &mut impl Handler, byte: u8) {
+        self.clear_string();
+        self.begin_escape();
+        self.sequence_byte(handler, byte);
+    }
+
+    #[cold]
+    #[inline(never)]
     fn finish_string(&mut self, handler: &mut impl Handler, kind: StringKind, bell: bool) {
         if !self.discarded {
             match kind {
@@ -473,6 +489,8 @@ impl Parser {
         self.state = State::Ground;
     }
 
+    #[cold]
+    #[inline(never)]
     fn cancel(&mut self) {
         self.clear_string();
         self.discarded = false;
@@ -484,10 +502,16 @@ impl Parser {
         // Large APC transfers must not permanently raise every session's
         // retained heap. Ordinary OSC/DCS buffers still reuse their allocation.
         if self.string.capacity() > MAX_STRING_BYTES {
-            self.string = Vec::new();
+            self.release_large_string();
         } else {
             self.string.clear();
         }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn release_large_string(&mut self) {
+        self.string = Vec::new();
     }
 }
 
