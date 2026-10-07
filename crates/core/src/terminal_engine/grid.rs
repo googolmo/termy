@@ -14,6 +14,7 @@ use row::PackedCells;
 
 const MAX_HISTORY_ROWS: usize = 20_000;
 const MAX_SCROLL_DAMAGE: usize = 32;
+const COMPACT_OUTPUT_BURST_BYTES: usize = 4096;
 
 #[derive(Clone, Debug)]
 pub(super) struct Row {
@@ -174,6 +175,7 @@ pub(super) struct Grid {
     history_limit: usize,
     pending_compaction: usize,
     compact_on_scroll: bool,
+    output_since_compaction: usize,
     display_offset: usize,
     tabs: Vec<bool>,
     scroll_top: usize,
@@ -208,9 +210,13 @@ pub(super) struct Grid {
 
 impl Grid {
     pub(super) fn prepare_output(&mut self, bytes: usize) {
-        // Compress quiet history, not each row of a sustained output flood.
-        if bytes >= 4096 {
-            self.compact_on_scroll = false;
+        // PTY reads can fragment a sustained burst into small pieces. Count
+        // the whole burst so on-scroll packing stops regardless of chunking.
+        if self.compact_on_scroll {
+            self.output_since_compaction = self.output_since_compaction.saturating_add(bytes);
+            if self.output_since_compaction >= COMPACT_OUTPUT_BURST_BYTES {
+                self.compact_on_scroll = false;
+            }
         }
         self.release_history_read_cache();
     }
@@ -222,6 +228,7 @@ impl Grid {
     pub(super) fn compact_history(&mut self, limit: usize) {
         self.compact_pending_history(limit);
         self.compact_on_scroll = true;
+        self.output_since_compaction = 0;
     }
 
     /// Pack queued history without switching scrolling rows to immediate
@@ -257,6 +264,7 @@ impl Grid {
             history_limit: Self::bounded_history(size, history_limit),
             pending_compaction: 0,
             compact_on_scroll: false,
+            output_since_compaction: 0,
             display_offset: 0,
             tabs: Self::default_tabs(size.cols),
             scroll_top: 0,

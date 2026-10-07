@@ -1307,3 +1307,42 @@ fn forced_compaction_does_not_pack_rows_as_they_scroll() {
     print(&mut grid, "quiet\r\n");
     assert!(grid.history.back().unwrap().packed.is_some());
 }
+
+#[test]
+fn fragmented_output_leaves_on_scroll_packing_after_a_bounded_burst() {
+    for chunk_size in [1, 17, COMPACT_OUTPUT_BURST_BYTES - 1] {
+        let mut grid = grid(120, 4, 100);
+        for _ in 0..20 {
+            print(&mut grid, "a short line\r\n");
+        }
+        grid.compact_history(usize::MAX);
+        let burst = vec![b'x'; COMPACT_OUTPUT_BURST_BYTES];
+        for chunk in burst.chunks(chunk_size) {
+            grid.prepare_output(chunk.len());
+            grid.write_ascii(chunk);
+        }
+        grid.prepare_output(8);
+        print(&mut grid, "\r\nlast\r\n");
+        assert!(grid.history.back().unwrap().packed.is_none(), "{chunk_size}");
+
+        // A subsequent quiet interval still packs isolated short log lines.
+        grid.compact_history(usize::MAX);
+        grid.prepare_output(7);
+        print(&mut grid, "quiet\r\n");
+        assert!(grid.history.back().unwrap().packed.is_some());
+    }
+}
+
+#[test]
+fn forced_compaction_does_not_restart_the_fragmented_output_budget() {
+    let mut grid = grid(120, 4, 100);
+    for _ in 0..20 {
+        print(&mut grid, "a short line\r\n");
+    }
+    grid.compact_history(usize::MAX);
+    grid.prepare_output(COMPACT_OUTPUT_BURST_BYTES / 2);
+    grid.compact_pending_history(256);
+    grid.prepare_output(COMPACT_OUTPUT_BURST_BYTES / 2);
+    print(&mut grid, "continued\r\n");
+    assert!(grid.history.back().unwrap().packed.is_none());
+}
