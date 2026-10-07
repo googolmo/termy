@@ -17,6 +17,7 @@ use crate::{
     TerminalViewportScrollDirection, TermyCell, TermyColor, TermyFrame, TermyFrameUpdate,
     TermySearchMatch, TermySearchOptions, TermySharedSearchMatch,
     search::search_lines_shared,
+    search_engine::SearchLineMapping,
     terminal_engine::transport::{PtySize, SpawnConfig, Transport},
     terminal_engine::{self as engine, Engine},
 };
@@ -1142,11 +1143,22 @@ impl CustomBackend {
             (-history..i32::from(state.size.rows)).filter_map(|line| {
                 state.engine.with_line(line, &mut scratch, |cells| {
                     let mut text = String::with_capacity(cells.len());
-                    for cell in cells {
+                    let mut mapping = SearchLineMapping::default();
+                    for (col, cell) in cells.iter().enumerate() {
+                        if cell.flags & engine::Cell::WIDE_SPACER != 0 {
+                            continue;
+                        }
+                        let start = text.len();
                         append_search_cell(&mut text, cell);
+                        mapping.record_cell(
+                            &text,
+                            start,
+                            col,
+                            1 + usize::from(cell.flags & engine::Cell::WIDE != 0),
+                        );
                     }
                     text.truncate(text.trim_end().len());
-                    ((line + history) as usize, text)
+                    ((line + history) as usize, text, mapping)
                 })
             }),
             query,
@@ -1396,9 +1408,6 @@ fn append_search_cell(text: &mut String, cell: &engine::Cell) {
         || cell.character.is_control()
     {
         text.push(' ');
-        if cell.flags & engine::Cell::WIDE != 0 {
-            text.push(' ');
-        }
     } else {
         text.push(cell.character);
         text.push_str(cell.combining());

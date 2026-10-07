@@ -1,6 +1,7 @@
 use super::*;
 use gpui_kit::prelude::FluentBuilder as _;
 use std::ops::Range;
+use termy_core::search_engine::SearchLineMapping;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SearchKeyAction {
@@ -332,7 +333,9 @@ impl TerminalView {
         let start_line = line_texts.first_line;
         let end_line = line_texts.last_line();
         self.search_state
-            .search(start_line, end_line, |line_idx| line_texts.line(line_idx));
+            .search_mapped(start_line, end_line, |line_idx| {
+                line_texts.mapped_line(line_idx)
+            });
         self.search_scan_incomplete = matches!(kind, SearchScanKind::Viewport)
             && search_line_span(full_bounds.0, full_bounds.1) > search_line_span(first, last);
 
@@ -834,6 +837,7 @@ struct SearchLineSnapshot {
     first_line: i32,
     text: String,
     ranges: Vec<Range<usize>>,
+    mappings: Vec<SearchLineMapping>,
 }
 
 impl SearchLineSnapshot {
@@ -844,6 +848,7 @@ impl SearchLineSnapshot {
             first_line,
             text: String::new(),
             ranges: Vec::with_capacity(line_count),
+            mappings: vec![SearchLineMapping::default(); line_count],
         }
     }
 
@@ -861,6 +866,11 @@ impl SearchLineSnapshot {
             .ok()
             .and_then(|offset| self.first_line.checked_add(offset))
             .unwrap_or(self.first_line)
+    }
+
+    fn mapped_line(&self, line_idx: i32) -> Option<(&str, &SearchLineMapping)> {
+        let offset = usize::try_from(line_idx.checked_sub(self.first_line)?).ok()?;
+        Some((self.line(line_idx)?, self.mappings.get(offset)?))
     }
 
     #[cfg(test)]
@@ -883,8 +893,9 @@ fn collect_search_line_texts(
     end_line: i32,
 ) -> SearchLineSnapshot {
     let mut line_texts = None;
+    let mut previous_cell_start = 0;
     let captured_range =
-        terminal.for_each_line_cell_range(start_line, end_line, |range, line_idx, _, cell| {
+        terminal.for_each_line_cell_range(start_line, end_line, |range, line_idx, col, cell| {
             let snapshot = line_texts.get_or_insert_with(|| {
                 let first = start_line.max(range.first_line);
                 let last = end_line.min(range.last_line);
@@ -913,14 +924,33 @@ fn collect_search_line_texts(
             }
             let character = cell.character();
             if cell.is_trailing_wide_spacer() {
+                if col > 0 {
+                    snapshot.mappings[index].record_cell(
+                        &snapshot.text[cell_range.start..],
+                        previous_cell_start - cell_range.start,
+                        col - 1,
+                        2,
+                    );
+                }
                 return;
             }
-            if character == '\0' || character.is_control() {
+            previous_cell_start = snapshot.text.len();
+            if cell.is_hidden()
+                || cell.is_wide_spacer()
+                || character == '\0'
+                || character.is_control()
+            {
                 snapshot.text.push(' ');
             } else {
                 snapshot.text.push(character);
                 cell.append_combining_to(&mut snapshot.text);
             }
+            snapshot.mappings[index].record_cell(
+                &snapshot.text[cell_range.start..],
+                previous_cell_start - cell_range.start,
+                col,
+                1,
+            );
             cell_range.end = snapshot.text.len();
         });
 
@@ -1085,6 +1115,44 @@ mod tests {
         terminal.hydrate_output("A日本語 e\u{301} 👩🏽‍💻Z".as_bytes());
         let lines = collect_search_line_texts(&terminal, 0, 0);
         assert_eq!(lines.line(0).unwrap().trim_end(), "A日本語 e\u{301} 👩🏽‍💻Z");
+    }
+
+    #[test]
+    fn terminal_search_maps_hidden_and_separate_cells_without_resegmenting() {
+        let terminal = Terminal::new_test_display(TerminalSize::default());
+        terminal.hydrate_output("A\x1b[8m界\x1b[0mZ\r\n👩\x07\u{200d}💻Z".as_bytes());
+        let lines = collect_search_line_texts(&terminal, 0, 1);
+        let mut state = termy_core::search_engine::SearchState::new();
+        state.set_query("Z");
+        state.search_mapped(0, 1, |line| lines.mapped_line(line));
+        let positions: Vec<_> = state
+            .results()
+            .matches()
+            .iter()
+            .map(|found| (found.line, found.start_col, found.end_col))
+            .collect();
+        assert_eq!(positions, [(1, 4, 5), (0, 3, 4)]);
+        state.set_query("界");
+        state.search_mapped(0, 1, |line| lines.mapped_line(line));
+        assert!(state.results().is_empty());
+    }
+
+    #[test]
+    fn terminal_search_maps_wide_clusters_in_one_physical_column() {
+        let terminal = Terminal::new_test_display(TerminalSize {
+            cols: 1,
+            rows: 4,
+            ..Default::default()
+        });
+        terminal.hydrate_output("界\r\n👩🏽‍💻".as_bytes());
+        let lines = collect_search_line_texts(&terminal, 0, 3);
+        let mut state = termy_core::search_engine::SearchState::new();
+        for query in ["界", "💻"] {
+            state.set_query(query);
+            state.search_mapped(0, 3, |line| lines.mapped_line(line));
+            let found = &state.results().matches()[0];
+            assert_eq!((found.start_col, found.end_col), (0, 1));
+        }
     }
 
     #[test]

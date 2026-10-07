@@ -2,6 +2,7 @@ use regex::{Regex, RegexBuilder};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+use crate::search_engine::SearchLineMapping;
 use crate::search_engine::matcher::{SearchMatch, SearchResults};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -131,9 +132,53 @@ impl SearchEngine {
             .collect()
     }
 
+    pub fn search_line_mapped(
+        &self,
+        line_idx: i32,
+        text: &str,
+        mapping: &SearchLineMapping,
+    ) -> Vec<SearchMatch> {
+        let Some(regex) = &self.compiled_regex else {
+            return Vec::new();
+        };
+        regex
+            .find_iter(text)
+            .map(|found| {
+                SearchMatch::new(
+                    line_idx,
+                    mapping.column(found.start(), false),
+                    mapping.column(found.end(), !found.is_empty()),
+                )
+            })
+            .collect()
+    }
+
     pub fn search<'a, F>(&self, start_line: i32, end_line: i32, line_provider: F) -> SearchResults
     where
         F: Fn(i32) -> Option<&'a str>,
+    {
+        self.search_using(start_line, end_line, |line| {
+            line_provider(line).map(|text| (text, None))
+        })
+    }
+
+    pub fn search_mapped<'a, F>(
+        &self,
+        start_line: i32,
+        end_line: i32,
+        line_provider: F,
+    ) -> SearchResults
+    where
+        F: Fn(i32) -> Option<(&'a str, &'a SearchLineMapping)>,
+    {
+        self.search_using(start_line, end_line, |line| {
+            line_provider(line).map(|(text, mapping)| (text, Some(mapping)))
+        })
+    }
+
+    fn search_using<'a, F>(&self, start_line: i32, end_line: i32, line_provider: F) -> SearchResults
+    where
+        F: Fn(i32) -> Option<(&'a str, Option<&'a SearchLineMapping>)>,
     {
         if !self.has_pattern() {
             return SearchResults::new();
@@ -142,13 +187,17 @@ impl SearchEngine {
         let mut matches = Vec::new();
 
         for line_idx in start_line..=end_line {
-            if let Some(text) = line_provider(line_idx) {
+            if let Some((text, mapping)) = line_provider(line_idx) {
                 if self.config.mode == SearchMode::Literal
                     && literal_line_can_skip(text, &self.pattern)
                 {
                     continue;
                 }
-                let line_matches = self.search_line(line_idx, text);
+                let line_matches = if let Some(mapping) = mapping {
+                    self.search_line_mapped(line_idx, text, mapping)
+                } else {
+                    self.search_line(line_idx, text)
+                };
                 matches.extend(line_matches);
             }
         }
