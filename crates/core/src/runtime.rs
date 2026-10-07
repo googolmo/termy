@@ -684,25 +684,7 @@ pub enum TerminalDamageSnapshot {
     Partial(Vec<TerminalDirtySpan>),
 }
 
-/// Terminal dimensions in cells and pixels
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq)]
-pub struct TerminalSize {
-    pub cols: u16,
-    pub rows: u16,
-    pub cell_width: f32,
-    pub cell_height: f32,
-}
-
-impl Default for TerminalSize {
-    fn default() -> Self {
-        Self {
-            cols: 80,
-            rows: 24,
-            cell_width: 9.0,
-            cell_height: 18.0,
-        }
-    }
-}
+pub use crate::terminal_types::TerminalSize;
 
 impl TerminalSize {
     /// Clamp the cell dimensions into the supported range. Applied at every

@@ -12,12 +12,14 @@ pub mod media;
 mod parser;
 mod queries;
 mod sync;
+#[cfg(feature = "native")]
 pub(crate) mod transport;
 mod types;
 #[cfg(test)]
 mod unicode_tests;
 
-use std::{collections::VecDeque, time::Instant};
+use std::collections::VecDeque;
+use web_time::Instant;
 
 pub use types::{
     Cell, CellExtra, Color, Cursor, CursorShape, Damage, DirtySpan, Hyperlink, Size, Style,

@@ -4,7 +4,7 @@
 
 pub(crate) mod unicode;
 
-use std::time::Instant;
+use web_time::Instant;
 
 use super::{Color, dispatch::State, types::GridEffect};
 use crate::{

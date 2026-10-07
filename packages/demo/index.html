@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Termy web demo</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "@termysh/core": "../core/dist/index.js",
+        "@termysh/web": "../web/dist/index.js",
+        "@termysh/xterm": "../xterm/dist/index.js"
+      }
+    }
+  </script>
+  <style>
+    body { margin: 0; background: #111; color: #ddd; font: 13px system-ui, sans-serif; }
+    header { display: flex; gap: 12px; align-items: center; padding: 8px 16px; }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 16px; height: calc(100vh - 48px); box-sizing: border-box; }
+    section { display: flex; flex-direction: column; min-height: 0; }
+    h2 { font-size: 12px; margin: 4px 0; font-weight: 600; }
+    .term { flex: 1; min-height: 0; border-radius: 6px; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>@termysh</strong>
+    <label>Theme <select id="theme"></select></label>
+    <label>Font size <input id="size" type="number" value="14" min="8" max="32" /></label>
+    <label>Cursor <select id="cursor"><option>block</option><option>bar</option><option>underline</option></select></label>
+    <label><input id="blink" type="checkbox" /> blink</label>
+  </header>
+  <main>
+    <section><h2>@termysh/web</h2><div id="web" class="term"></div></section>
+    <section><h2>@termysh/xterm (xterm.js API)</h2><div id="xterm" class="term"></div></section>
+  </main>
+  <script type="module" src="./demo.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+{
+  "name": "@termysh/xterm",
+  "version": "0.1.0",
+  "description": "xterm.js-compatible API on the Termy wasm terminal. Drop-in replacement for @xterm/xterm.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/termylabs/termy.git",
+    "directory": "packages/xterm"
+  },
+  "keywords": [
+    "terminal",
+    "wasm",
+    "xterm",
+    "xterm.js",
+    "kitty"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown"
+  },
+  "dependencies": {
+    "@termysh/core": "workspace:^",
+    "@termysh/web": "workspace:^"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
