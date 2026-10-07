@@ -488,6 +488,10 @@ impl Grid {
 
     fn mark(&mut self, row: usize, start: usize, end: usize) {
         self.visual_dirty = true;
+        self.mark_damage(row, start, end);
+    }
+
+    fn mark_damage(&mut self, row: usize, start: usize, end: usize) {
         if self.full_damage || row >= self.size.rows || start >= end {
             return;
         }
@@ -503,7 +507,8 @@ impl Grid {
 
     fn mark_cursor(&mut self, cursor: Cursor) {
         if cursor.visible {
-            self.mark(cursor.row, cursor.col, cursor.col.saturating_add(1));
+            // Cursor overlays need text damage but do not edit placeholder cells.
+            self.mark_damage(cursor.row, cursor.col, cursor.col.saturating_add(1));
         }
     }
 

@@ -329,6 +329,45 @@ mod tests {
     }
 
     #[test]
+    fn cursor_only_damage_preserves_virtual_graphics_revision() {
+        for consume_damage in [false, true] {
+            let mut engine = Engine::new(Size { cols: 10, rows: 4 }, Options::default());
+            engine.feed(b"\x1b_Ga=T,f=32,s=1,v=1,i=1,c=1,r=1,U=1,q=2;AQID/w==\x1b\\");
+            engine.feed("\x1b[38;5;1m\u{10eeee}\u{0305}\u{0305}".as_bytes());
+            let (before, placements) = engine.graphics_snapshot();
+            assert_eq!(placements.len(), 1);
+            if consume_damage {
+                engine.take_damage();
+            }
+            for sequence in [
+                b"\x1b[2;3H".as_slice(),
+                b"\r",
+                b"\t",
+                b"\x08",
+                b"\n",
+                b"\x1bM",
+                b"\x1b[?25l",
+                b"\x1b[?25h",
+                b"\x1b[5 q",
+                b"\x1b[?12l",
+            ] {
+                engine.feed(sequence);
+                assert_eq!(engine.graphics_revision(), before, "{sequence:?}");
+                if consume_damage {
+                    assert!(
+                        matches!(engine.take_damage(), super::super::Damage::Partial(spans) if !spans.is_empty()),
+                        "{sequence:?}"
+                    );
+                }
+            }
+            assert_eq!(engine.graphics_placements().len(), 1);
+            engine.feed("\x1b[H界".as_bytes());
+            assert_ne!(engine.graphics_revision(), before);
+            assert!(engine.graphics_placements().is_empty());
+        }
+    }
+
+    #[test]
     fn hidden_cursor_unicode_overwrite_invalidates_virtual_graphics_with_full_damage() {
         let mut engine = Engine::new(Size { cols: 10, rows: 4 }, Options::default());
         engine.feed(b"\x1b[?25l\x1b_Ga=T,f=32,s=1,v=1,i=1,c=1,r=1,U=1,q=2;AQID/w==\x1b\\");
