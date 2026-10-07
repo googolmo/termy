@@ -13,7 +13,6 @@ use std::{
         mpsc,
     },
     thread,
-    time::Duration,
 };
 
 #[cfg(test)]
@@ -52,7 +51,6 @@ const EXTENDED_STARTUPINFO_PRESENT: Dword = 0x0008_0000;
 const CREATE_UNICODE_ENVIRONMENT: Dword = 0x0000_0400;
 const STARTF_USESTDHANDLES: Dword = 0x0000_0100;
 const PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE: usize = 0x0002_0016;
-const CONTROL_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const MAX_COMMAND_LINE_UNITS: usize = 32_767;
 const WRITER_CHANNEL_CAPACITY: usize = MAX_PENDING_WRITE_ENTRIES + 1;
 
@@ -280,12 +278,33 @@ struct WakeReservation {
 
 #[derive(Clone)]
 struct ControlHandle {
-    sender: mpsc::SyncSender<ControlCommand>,
+    wake: Arc<ControlEvent>,
     state: Arc<ControlState>,
 }
 
-enum ControlCommand {
-    Wake,
+struct ControlEvent(OwnedHandle);
+
+// SAFETY: Event signaling and waiting are thread-safe Windows kernel operations.
+// The last Arc owns CloseHandle, so concurrent waiters retain a live handle.
+unsafe impl Sync for ControlEvent {}
+
+impl ControlEvent {
+    fn new() -> io::Result<Self> {
+        // SAFETY: No name or security attributes, initially clear and auto-reset.
+        let event = unsafe { CreateEventW(ptr::null_mut(), FALSE, FALSE, ptr::null()) };
+        OwnedHandle::new(event)
+            .map(Self)
+            .ok_or_else(io::Error::last_os_error)
+    }
+
+    fn signal(&self) -> io::Result<()> {
+        // SAFETY: This object owns a live event handle for the entire call.
+        if unsafe { SetEvent(self.0.raw()) } == FALSE {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[derive(Default)]
@@ -331,24 +350,24 @@ impl ControlState {
 }
 
 impl ControlHandle {
+    fn new() -> io::Result<Self> {
+        Ok(Self {
+            wake: Arc::new(ControlEvent::new()?),
+            state: Arc::new(ControlState::default()),
+        })
+    }
+
     fn request_resize(&self, size: Coord) -> io::Result<()> {
         if !self.state.request_resize(size) {
             return Err(pty_closed_error());
         }
-        match self.sender.try_send(ControlCommand::Wake) {
-            Ok(()) | Err(mpsc::TrySendError::Full(_)) => Ok(()),
-            Err(mpsc::TrySendError::Disconnected(_)) => {
-                self.state.request_close();
-                Err(pty_closed_error())
-            }
-        }
+        self.wake.signal()
     }
 
     fn close(&self) {
         self.state.request_close();
-        // A full one-slot channel already contains the only notification the
-        // watcher needs. Close itself is sticky in shared state.
-        let _ = self.sender.try_send(ControlCommand::Wake);
+        // Repeated signals coalesce; close itself remains sticky in shared state.
+        let _ = self.wake.signal();
     }
 }
 
@@ -716,6 +735,9 @@ impl Transport {
             )
         })?;
         let coord = Coord::try_from(size)?;
+        // Create the wake handle before launching a child, so allocation failure
+        // cannot leave a process without its control worker.
+        let control = ControlHandle::new()?;
         let working_directory = normalize_working_directory(config.working_directory.as_deref())?;
         let lookup_directory = working_directory
             .clone()
@@ -792,12 +814,8 @@ impl Transport {
         drop(pseudo_output);
         drop(attributes);
 
-        let state = Arc::new(ControlState::default());
-        let (control_sender, control_receiver) = mpsc::sync_channel(1);
-        let control = ControlHandle {
-            sender: control_sender,
-            state: state.clone(),
-        };
+        let state = control.state.clone();
+        let control_wake = control.wake.clone();
         let (writer, writer_receiver) = WriterHandle::channel(control.clone());
         let gate = Arc::new(StartGate::new());
         let (control_finished_sender, control_finished_receiver) = mpsc::channel();
@@ -870,7 +888,7 @@ impl Transport {
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .take();
                 if let Some(resources) = resources {
-                    run_control(resources, control_receiver, control_state);
+                    run_control(resources, control_wake, control_state);
                 }
                 let _ = control_finished_sender.send(());
             });
@@ -1033,11 +1051,7 @@ fn run_writer(
     protocol_replies.close(&control);
 }
 
-fn run_control(
-    mut resources: ChildResources,
-    receiver: mpsc::Receiver<ControlCommand>,
-    state: Arc<ControlState>,
-) {
+fn run_control(mut resources: ChildResources, wake: Arc<ControlEvent>, state: Arc<ControlState>) {
     loop {
         match resources.process_signaled() {
             Ok(true) => {
@@ -1061,9 +1075,13 @@ fn run_control(
             break;
         }
 
-        match receiver.recv_timeout(CONTROL_POLL_INTERVAL) {
-            Ok(ControlCommand::Wake) | Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
+        match wait_for_control(resources.process(), &wake) {
+            Ok(true) => {
+                resources.process_exited = true;
+                break;
+            }
+            Ok(false) => {}
+            Err(_) => {
                 state.request_close();
                 break;
             }
@@ -1078,6 +1096,24 @@ fn run_control(
     // dedicated reader keeps draining. Older Windows releases can block here
     // until all final pseudoconsole output has been consumed.
     resources.close_pseudo_console();
+}
+
+/// Sleep until the child exits or a resize/close request signals the event.
+/// An auto-reset event preserves requests published before this wait starts.
+fn wait_for_control(process: &OwnedHandle, wake: &ControlEvent) -> io::Result<bool> {
+    let handles = [process.raw(), wake.0.raw()];
+    // SAFETY: Both owned handles remain live throughout this blocking wait.
+    // The process comes first so simultaneous child exit takes precedence.
+    match unsafe {
+        WaitForMultipleObjects(handles.len() as Dword, handles.as_ptr(), FALSE, INFINITE)
+    } {
+        WAIT_OBJECT_0 => Ok(true),
+        value if value == WAIT_OBJECT_0 + 1 => Ok(false),
+        WAIT_FAILED => Err(io::Error::last_os_error()),
+        value => Err(io::Error::other(format!(
+            "WaitForMultipleObjects returned unexpected status 0x{value:08X}"
+        ))),
+    }
 }
 
 fn read_handle(handle: &OwnedHandle, buffer: &mut [u8]) -> io::Result<usize> {

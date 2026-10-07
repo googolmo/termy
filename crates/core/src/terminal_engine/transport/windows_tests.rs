@@ -314,10 +314,8 @@ fn writer_harness_with_limits(
     protocol_reply_bytes: usize,
     protocol_reply_entries: usize,
 ) -> (WriterHandle, mpsc::Receiver<WriterCommand>) {
-    let state = Arc::new(ControlState::default());
-    let (sender, _receiver) = mpsc::sync_channel(1);
     WriterHandle::channel_with_limits(
-        ControlHandle { sender, state },
+        ControlHandle::new().expect("control event should be created"),
         write_bytes,
         write_entries,
         protocol_reply_bytes,
@@ -557,12 +555,7 @@ fn writer_and_control_wakes_coalesce_while_latest_resize_wins() {
         Ok(WriterCommand::Wake(_))
     ));
 
-    let state = Arc::new(ControlState::default());
-    let (sender, receiver) = mpsc::sync_channel(1);
-    let control = ControlHandle {
-        sender,
-        state: state.clone(),
-    };
+    let control = ControlHandle::new().expect("control event should be created");
     for size in [
         Coord { x: 80, y: 24 },
         Coord { x: 100, y: 30 },
@@ -572,22 +565,44 @@ fn writer_and_control_wakes_coalesce_while_latest_resize_wins() {
             .request_resize(size)
             .expect("coalesced resize should succeed");
     }
-    assert!(matches!(receiver.try_recv(), Ok(ControlCommand::Wake)));
-    assert!(matches!(
-        receiver.try_recv(),
-        Err(mpsc::TryRecvError::Empty)
-    ));
-    assert_eq!(state.take_resize(), Some(Coord { x: 132, y: 44 }));
+    // SAFETY: The test owns the live event; zero-timeout waits never block.
+    assert_eq!(
+        unsafe { WaitForSingleObject(control.wake.0.raw(), 0) },
+        WAIT_OBJECT_0
+    );
+    assert_eq!(
+        unsafe { WaitForSingleObject(control.wake.0.raw(), 0) },
+        WAIT_TIMEOUT
+    );
+    assert_eq!(control.state.take_resize(), Some(Coord { x: 132, y: 44 }));
 
     for _ in 0..128 {
         control.close();
     }
-    assert!(state.is_closed());
-    assert!(matches!(receiver.try_recv(), Ok(ControlCommand::Wake)));
-    assert!(matches!(
-        receiver.try_recv(),
-        Err(mpsc::TryRecvError::Empty)
-    ));
+    assert!(control.state.is_closed());
+    assert_eq!(
+        unsafe { WaitForSingleObject(control.wake.0.raw(), 0) },
+        WAIT_OBJECT_0
+    );
+    assert_eq!(
+        unsafe { WaitForSingleObject(control.wake.0.raw(), 0) },
+        WAIT_TIMEOUT
+    );
+}
+
+#[test]
+fn control_wait_wakes_for_preexisting_requests_and_child_exit() {
+    // An event can stand in for a process's signaled kernel-handle state.
+    let process = ControlEvent::new().expect("process surrogate event should be created");
+    let control = ControlHandle::new().expect("control event should be created");
+    control.request_resize(Coord { x: 100, y: 30 }).unwrap();
+    assert!(!wait_for_control(&process.0, &control.wake).unwrap());
+    assert_eq!(control.state.take_resize(), Some(Coord { x: 100, y: 30 }));
+
+    process.signal().unwrap();
+    control.close();
+    assert!(wait_for_control(&process.0, &control.wake).unwrap());
+    assert!(!wait_for_control(&process.0, &control.wake).unwrap());
 }
 
 #[test]

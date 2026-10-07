@@ -487,6 +487,13 @@ unsafe extern "system" {
         size: Dword,
     ) -> Bool;
     fn CloseHandle(object: Handle) -> Bool;
+    fn CreateEventW(
+        attributes: *mut c_void,
+        manual_reset: Bool,
+        initial_state: Bool,
+        name: *const u16,
+    ) -> Handle;
+    fn SetEvent(event: Handle) -> Bool;
     fn ReadFile(
         file: Handle,
         buffer: *mut c_void,
@@ -530,5 +537,11 @@ unsafe extern "system" {
         process_information: *mut ProcessInformation,
     ) -> Bool;
     fn WaitForSingleObject(handle: Handle, milliseconds: Dword) -> Dword;
+    fn WaitForMultipleObjects(
+        count: Dword,
+        handles: *const Handle,
+        wait_all: Bool,
+        milliseconds: Dword,
+    ) -> Dword;
     fn TerminateProcess(process: Handle, exit_code: u32) -> Bool;
 }
