@@ -2855,6 +2855,7 @@ impl Render for TerminalView {
         let ui_font_family = self.ui_font_family.clone();
         let font_size = self.font_size;
         self.sync_window_background_appearance(window);
+        self.native_titlebar.sync(&self.colors);
         let effective_background_opacity = self.background_opacity_factor();
         let mut terminal_surface_bg = colors.background;
         terminal_surface_bg.a = self.scaled_background_alpha(terminal_surface_bg.a);

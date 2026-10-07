@@ -51,6 +51,8 @@ libsqlite3-sys = "0.30.1"
 
 [target."cfg(target_os = \"linux\")".dependencies]
 font-kit = { package = "zed-font-kit", version = "0.14.1-zed", features = ["source-fontconfig-dlopen"] }
+raw-window-handle = "0.6"
+x11rb = "0.13"
 
 
 [target."cfg(target_os = \"macos\")".dependencies]
