@@ -225,13 +225,7 @@ impl Engine {
 
     /// The lifetime of the slice prevents mutation while the renderer reads it.
     pub fn viewport_row(&self, row: usize) -> Option<&[Cell]> {
-        if self.display_offset() != 0 {
-            self.state
-                .grid
-                .history_read_cache
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-        self.state.grid.visible_row(row).map(|row| row.cells())
+        self.state.grid.visible_row_cells(row)
     }
 
     /// Visit a viewport row without retaining a dense copy of cold history.
@@ -260,13 +254,7 @@ impl Engine {
     /// on the next output, resize, or scroll; the borrowed slice remains valid
     /// until that exclusive mutation.
     pub fn line(&self, line: i32) -> Option<&[Cell]> {
-        if line < 0 {
-            self.state
-                .grid
-                .history_read_cache
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-        self.state.grid.row(line).map(|row| row.cells())
+        self.state.grid.row_cells(line)
     }
 
     /// Visit a line without retaining a dense copy of cold history. Scratch

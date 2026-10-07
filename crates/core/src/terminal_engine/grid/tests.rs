@@ -1346,3 +1346,69 @@ fn forced_compaction_does_not_restart_the_fragmented_output_budget() {
     print(&mut grid, "continued\r\n");
     assert!(grid.history.back().unwrap().packed.is_none());
 }
+
+#[test]
+fn borrowed_history_caches_release_before_output_trimming_and_clear() {
+    use std::sync::Arc;
+
+    let mut grid = grid(40, 4, 100);
+    for _ in 0..110 {
+        print(&mut grid, "older line\r\n");
+    }
+    let mut marked = Cell::default();
+    marked.push_combining('\u{301}');
+    let extra = marked.extra.take().unwrap();
+    grid.pen.extra = Some(Arc::clone(&extra));
+    print(&mut grid, "x\r\n");
+    grid.pen.extra = None;
+    for _ in 1..grid.size.rows {
+        grid.linefeed();
+    }
+    grid.compact_history(usize::MAX);
+    assert_eq!(Arc::strong_count(&extra), 2);
+
+    assert_eq!(grid.row_cells(-1).unwrap()[0].combining(), "\u{301}");
+    assert_eq!(Arc::strong_count(&extra), 3);
+    grid.set_history_limit(2);
+    assert_eq!(Arc::strong_count(&extra), 2);
+
+    grid.row_cells(-1).unwrap();
+    assert_eq!(Arc::strong_count(&extra), 3);
+    grid.prepare_output(1);
+    assert_eq!(Arc::strong_count(&extra), 2);
+
+    grid.scroll_display(1);
+    assert_eq!(grid.visible_row_cells(0).unwrap()[0].combining(), "\u{301}");
+    assert_eq!(Arc::strong_count(&extra), 3);
+    grid.clear_scrollback();
+    assert_eq!(Arc::strong_count(&extra), 1);
+    grid.prepare_output(1);
+}
+
+#[test]
+fn history_cache_tracking_survives_sparse_reads_resize_and_reset() {
+    let mut grid = grid(40, 4, 100);
+    for line in 0..110 {
+        print(&mut grid, &format!("line {line}\r\n"));
+    }
+    grid.compact_history(usize::MAX);
+    let first = grid.row_cells(-100).unwrap().to_vec();
+    let last = grid.row_cells(-1).unwrap().to_vec();
+    grid.prepare_output(1);
+    assert_eq!(grid.row_cells(-100).unwrap(), first);
+    assert_eq!(grid.row_cells(-1).unwrap(), last);
+
+    grid.resize(Size { cols: 40, rows: 6 });
+    grid.compact_history(usize::MAX);
+    grid.row_cells(-1).unwrap();
+    grid.resize(Size { cols: 80, rows: 4 });
+    grid.compact_history(usize::MAX);
+    grid.scroll_display(2);
+    grid.visible_row_cells(0).unwrap();
+    assert!(grid.visible_row_cells(usize::MAX).is_none());
+    assert!(grid.row_cells(i32::MIN).is_none());
+    grid.reset();
+    grid.prepare_output(1);
+    assert_eq!(grid.history_size(), 0);
+    assert_eq!(text(&grid, 0), " ".repeat(80));
+}

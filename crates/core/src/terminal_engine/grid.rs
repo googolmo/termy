@@ -1,6 +1,9 @@
 //! Row-oriented terminal storage. Scrolling moves row handles, not cells.
 
-use std::{collections::VecDeque, sync::atomic::AtomicBool};
+use std::{
+    collections::VecDeque,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use super::types::{
     Cell, Color, Cursor, CursorShape, Damage, DirtySpan, GridEffect, Size, Style, ViewportScroll,
@@ -195,7 +198,10 @@ pub(super) struct Grid {
     // margin marks a wide base dropped there with autowrap disabled.
     grapheme_at_margin: bool,
     pub(super) history_activity: bool,
-    pub(super) history_read_cache: AtomicBool,
+    // Borrowed history reads usually decode one contiguous viewport. Track
+    // that interval so the next mutation does not scan untouched history.
+    history_read_start: AtomicUsize,
+    history_read_end: AtomicUsize,
     track_effects: bool,
     effects: Vec<GridEffect>,
     #[cfg(test)]
@@ -244,11 +250,15 @@ impl Grid {
     }
 
     pub(super) fn release_history_read_cache(&mut self) {
-        if *self.history_read_cache.get_mut() {
-            for row in &mut self.history {
+        if *self.history_read_end.get_mut() == 0 {
+            return;
+        }
+        let start = std::mem::replace(self.history_read_start.get_mut(), usize::MAX);
+        let end = std::mem::take(self.history_read_end.get_mut());
+        if start < end {
+            for row in self.history.range_mut(start..end) {
                 row.release_read_cache();
             }
-            *self.history_read_cache.get_mut() = false;
         }
     }
 
@@ -280,7 +290,8 @@ impl Grid {
             grapheme_ordinary: true,
             grapheme_at_margin: false,
             history_activity: false,
-            history_read_cache: AtomicBool::new(false),
+            history_read_start: AtomicUsize::new(usize::MAX),
+            history_read_end: AtomicUsize::new(0),
             track_effects: false,
             effects: Vec::new(),
             #[cfg(test)]
@@ -360,6 +371,23 @@ impl Grid {
             return None;
         }
         self.row(row as i32 - self.display_offset() as i32)
+    }
+
+    pub(super) fn row_cells(&self, line: i32) -> Option<&[Cell]> {
+        let row = self.row(line)?;
+        if line < 0 && row.packed.is_some() {
+            let index = self.history.len() - line.unsigned_abs() as usize;
+            self.history_read_start.fetch_min(index, Ordering::Relaxed);
+            self.history_read_end.fetch_max(index + 1, Ordering::Relaxed);
+        }
+        Some(row.cells())
+    }
+
+    pub(super) fn visible_row_cells(&self, row: usize) -> Option<&[Cell]> {
+        if row >= self.size.rows {
+            return None;
+        }
+        self.row_cells(row as i32 - self.display_offset() as i32)
     }
 
     pub(super) fn mark_full_damage(&mut self) {
@@ -1020,6 +1048,7 @@ impl Grid {
         if self.alternate_active {
             return false;
         }
+        self.release_history_read_cache();
         self.clear_anchor = false;
         let removed = self.history.len();
         let changed = removed != 0 || self.display_offset != 0;
@@ -1036,6 +1065,7 @@ impl Grid {
     }
 
     pub(super) fn set_history_limit(&mut self, limit: usize) {
+        self.release_history_read_cache();
         let previous = self.history.len();
         self.requested_history_limit = limit.min(MAX_HISTORY_ROWS);
         self.history_limit = Self::bounded_history(self.size, limit);
@@ -1084,6 +1114,7 @@ impl Grid {
     }
 
     pub(super) fn reset(&mut self) {
+        self.release_history_read_cache();
         self.alternate_active = false;
         self.alternate = None;
         self.history.clear();
