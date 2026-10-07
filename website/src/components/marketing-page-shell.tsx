@@ -83,6 +83,9 @@ function MarketingNav() {
           <Link to="/docs/$" params={{ _splat: '' }} className={navLinkClass}>
             Docs
           </Link>
+          <Link to="/demo" className={navLinkClass}>
+            Demo
+          </Link>
           <Link to="/releases" className={navLinkClass}>
             Releases
           </Link>
