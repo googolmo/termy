@@ -1,0 +1,60 @@
+name: Publish AUR package (termy-bin)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without leading v (e.g. 0.2.11)"
+        required: true
+        type: string
+
+jobs:
+  publish-aur:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release assets and compute checksums
+        id: sums
+        run: |
+          set -euo pipefail
+          v="${{ inputs.version }}"
+          curl -fsSL -o termy.tar.gz \
+            "https://github.com/lassejlv/termy/releases/download/v${v}/Termy-v${v}-linux-x86_64.tar.gz"
+          curl -fsSL -o termy_icon.png \
+            "https://raw.githubusercontent.com/lassejlv/termy/v${v}/assets/termy_icon.png"
+          curl -fsSL -o LICENSE \
+            "https://raw.githubusercontent.com/lassejlv/termy/v${v}/LICENSE"
+          echo "tarball=$(b2sum termy.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "desktop=$(b2sum scripts/aur/termy.desktop | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "license=$(b2sum LICENSE | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "icon=$(b2sum termy_icon.png | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Render PKGBUILD
+        run: |
+          set -euo pipefail
+          sed -e "s/@PKGVER@/${{ inputs.version }}/" \
+              -e "s/@TARBALL_B2SUM@/${{ steps.sums.outputs.tarball }}/" \
+              -e "s/@DESKTOP_B2SUM@/${{ steps.sums.outputs.desktop }}/" \
+              -e "s/@LICENSE_B2SUM@/${{ steps.sums.outputs.license }}/" \
+              -e "s/@ICON_B2SUM@/${{ steps.sums.outputs.icon }}/" \
+              scripts/aur/PKGBUILD.template > scripts/aur/PKGBUILD
+          cat scripts/aur/PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        with:
+          pkgname: termy-bin
+          pkgbuild: scripts/aur/PKGBUILD
+          assets: |
+            scripts/aur/termy.desktop
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to v${{ inputs.version }}"
+          test: true
+          # The test build leaves makepkg outputs (downloaded sources, built
+          # *.pkg.tar.zst) in the repo clone; with `assets` set the action runs
+          # `git add --all`, and AUR rejects blobs over 488KiB. Drop everything
+          # that is not part of the AUR package before the commit step.
+          post_process: rm -f ./*.pkg.tar.zst ./*.tar.gz ./LICENSE ./termy_icon.png

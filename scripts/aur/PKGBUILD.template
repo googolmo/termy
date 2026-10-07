@@ -1,0 +1,46 @@
+# Maintainer: Lasse Vestergaard <hello@lassejlv.dk>
+pkgname=termy-bin
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc="Minimal GPUI-powered terminal (pre-compiled binary)"
+arch=('x86_64')
+url="https://github.com/lassejlv/termy"
+license=('MIT')
+depends=('bash' 'glibc' 'gcc-libs' 'glib2'
+         'freetype2' 'fontconfig' 'libxcb' 'wayland' 'libxkbcommon'
+         'libxkbcommon-x11' 'vulkan-icd-loader')
+provides=('termy')
+conflicts=('termy')
+source=("termy.desktop"
+        "LICENSE::https://raw.githubusercontent.com/lassejlv/termy/v${pkgver}/LICENSE"
+        "termy_icon.png::https://raw.githubusercontent.com/lassejlv/termy/v${pkgver}/assets/termy_icon.png")
+b2sums=('@DESKTOP_B2SUM@'
+        '@LICENSE_B2SUM@'
+        '@ICON_B2SUM@')
+source_x86_64=("termy-${pkgver}-${CARCH}.tar.gz::https://github.com/lassejlv/termy/releases/download/v${pkgver}/Termy-v${pkgver}-linux-${CARCH}.tar.gz")
+b2sums_x86_64=('@TARBALL_B2SUM@')
+
+package() {
+  cd "$srcdir/termy"
+
+  # The launcher execs the sibling termy-bin binary, and the CLI integration
+  # expects termy-cli to be installed alongside it.
+  install -Dm755 "termy" "$pkgdir/usr/bin/termy"
+  install -Dm755 "termy-bin" "$pkgdir/usr/bin/termy-bin"
+  install -Dm755 "termy-cli" "$pkgdir/usr/bin/termy-cli"
+
+  # Install desktop file, icon, and file-manager context actions
+  install -Dm644 "$srcdir/termy.desktop" "$pkgdir/usr/share/applications/termy.desktop"
+  install -Dm644 "$srcdir/termy_icon.png" "$pkgdir/usr/share/pixmaps/termy.png"
+  install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$srcdir/termy/file-manager/termy-open-tab.desktop" \
+    "$pkgdir/usr/share/kio/servicemenus/termy-open-tab.desktop"
+  install -Dm644 "$srcdir/termy/file-manager/termy-open-tab.desktop" \
+    "$pkgdir/usr/share/kservices5/ServiceMenus/termy-open-tab.desktop"
+  install -Dm644 "$srcdir/termy/file-manager/termy-open-tab.nemo_action" \
+    "$pkgdir/usr/share/nemo/actions/termy-open-tab.nemo_action"
+  install -Dm755 "$srcdir/termy/file-manager/nautilus-open-tab.sh" \
+    "$pkgdir/usr/share/nautilus/scripts/Open new Termy tab here"
+  install -Dm755 "$srcdir/termy/file-manager/nautilus-open-tab.sh" \
+    "$pkgdir/usr/share/caja/scripts/Open new Termy tab here"
+}
