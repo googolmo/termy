@@ -107,6 +107,17 @@ impl State {
         };
     }
 
+    fn soft_reset(&mut self) {
+        self.grid.soft_reset(self.default_cursor_shape);
+        self.cursor_shape_overridden = false;
+        self.modes.application_cursor = false;
+        self.modes.application_keypad = false;
+        self.charsets = [false; 2];
+        self.active_charset = 0;
+        self.saved_charsets[usize::from(self.alternate_screen)] = ([false; 2], 0);
+        self.last_printed = None;
+    }
+
     fn mouse_tracking(&mut self, mode: MouseTracking, enabled: bool) {
         if enabled {
             self.modes.mouse_tracking = mode;
@@ -500,6 +511,10 @@ impl Handler for State {
                 1 => self.grid.pen.style.set(Style::PROTECTED, true),
                 _ => {}
             }
+            return;
+        }
+        if intermediates == b"!" && private.is_none() && final_byte == b'p' {
+            self.soft_reset();
             return;
         }
         if !intermediates.is_empty() {

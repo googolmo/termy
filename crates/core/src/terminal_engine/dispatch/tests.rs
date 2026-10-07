@@ -263,3 +263,59 @@ fn full_reset_clears_saved_character_sets_keyboard_flags_and_styles() {
     assert_eq!(engine.cursor().shape, CursorShape::Block);
     assert_eq!(engine.viewport_row(0).unwrap()[0].style, Style::default());
 }
+
+#[test]
+fn soft_reset_restores_vt_modes_without_erasing_or_moving_content() {
+    let mut engine = engine(10, 4);
+    engine.set_default_cursor_shape(CursorShape::Beam);
+    engine.feed(b"history\r\nfirst\r\nsecond\r\nthird\r\nfourth");
+    engine.feed(b"\x1b[?25l\x1b[2 q\x1b[?1h\x1b=\x1b[4h\x1b[?7l\x1b[2;3r\x1b[?6h\x1b[31;1;4m\x1b[1\"q\x1b(0\x1b7\x1b[2;5H");
+    let screen: Vec<_> = (0..4)
+        .map(|row| engine.viewport_row(row).unwrap().to_vec())
+        .collect();
+    let history = engine.line(-1).unwrap().to_vec();
+    let position = (engine.cursor().row, engine.cursor().col);
+    engine.take_damage();
+    // Exercise the parser's fragmented intermediate/final handling too.
+    for byte in b"\x1b[!p" {
+        engine.feed(&[*byte]);
+    }
+    assert_eq!((engine.cursor().row, engine.cursor().col), position);
+    assert!(engine.cursor().visible);
+    assert_eq!(engine.cursor().shape, CursorShape::Beam);
+    assert!(!engine.cursor().blinking);
+    assert!(!engine.modes().application_keypad);
+    assert_eq!(engine.history_size(), 1);
+    assert_eq!(engine.line(-1).unwrap(), history);
+    for (row, expected) in screen.iter().enumerate() {
+        assert_eq!(engine.viewport_row(row).unwrap(), expected);
+    }
+    assert!(matches!(engine.take_damage(), Damage::Partial(spans) if !spans.is_empty()));
+    engine.feed(b"\x1b[?25;6;1;7$p\x1b[4$p\x1bP$qr\x1b\\\x1bP$qm\x1b\\\x1bP$q\"q\x1b\\");
+    assert_eq!(replies(&mut engine), b"\x1b[?25;1$y\x1b[?6;2$y\x1b[?1;2$y\x1b[?7;1$y\x1b[4;2$y\x1bP1$r1;4r\x1b\\\x1bP1$r0m\x1b\\\x1bP1$r0\"q\x1b\\");
+    engine.feed(b"q");
+    assert_eq!(
+        engine.viewport_row(position.0).unwrap()[position.1].character,
+        'q'
+    );
+    engine.feed(b"\x1b8q");
+    assert_eq!(engine.viewport_row(0).unwrap()[0].character, 'q');
+    assert_eq!(engine.viewport_row(0).unwrap()[0].style, Style::default());
+}
+
+#[test]
+fn soft_reset_preserves_alternate_screen_and_extended_session_modes() {
+    let mut engine = engine(10, 4);
+    engine.feed(b"primary\x1b[?1049h\x1b[?2004;1003;1006;1004;5522h\x1b[>7u\x1b]4;1;#123456\x07alternate\x1b[!p");
+    assert!(engine.alternate_screen());
+    assert_eq!(text(&engine, 0), "alternate ");
+    assert!(engine.modes().bracketed_paste);
+    assert!(engine.modes().focus_events);
+    assert!(engine.modes().clipboard_paste_events);
+    assert_eq!(engine.modes().mouse_tracking, MouseTracking::Motion);
+    assert_eq!(engine.modes().mouse_encoding, MouseEncoding::Sgr);
+    assert_eq!(engine.modes().kitty_keyboard, 7);
+    assert_eq!(engine.palette()[1], Some(Color::rgb(0x12, 0x34, 0x56)));
+    engine.feed(b"\x1b[?1049l");
+    assert_eq!(text(&engine, 0), "primary   ");
+}

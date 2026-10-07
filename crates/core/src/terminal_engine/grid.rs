@@ -3,7 +3,7 @@
 use std::{collections::VecDeque, sync::atomic::AtomicBool};
 
 use super::types::{
-    Cell, Color, Cursor, Damage, DirtySpan, GridEffect, Size, Style, ViewportScroll,
+    Cell, Color, Cursor, CursorShape, Damage, DirtySpan, GridEffect, Size, Style, ViewportScroll,
 };
 
 mod combining;
@@ -1044,6 +1044,35 @@ impl Grid {
             self.history.pop_front();
         }
         self.display_offset = self.display_offset.min(self.history.len());
+    }
+
+    pub(super) fn soft_reset(&mut self, cursor_shape: CursorShape) {
+        let old = self.cursor;
+        self.cursor = Cursor {
+            row: old.row,
+            col: old.col,
+            shape: cursor_shape,
+            ..Cursor::default()
+        };
+        self.pen = Cell::default();
+        self.scroll_top = 0;
+        self.scroll_bottom = self.size.rows;
+        self.autowrap = true;
+        self.origin_mode = false;
+        self.insert_mode = false;
+        self.pending_wrap = false;
+        self.end_grapheme();
+        self.screen_mut().saved = SavedCursor {
+            cursor: Cursor {
+                shape: cursor_shape,
+                ..Cursor::default()
+            },
+            autowrap: true,
+            ..SavedCursor::default()
+        };
+        if self.cursor != old {
+            self.cursor_changed(old);
+        }
     }
 
     pub(super) fn reset(&mut self) {
