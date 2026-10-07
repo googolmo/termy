@@ -14,6 +14,7 @@ use std::{
 };
 
 pub use error::ConfigIoError;
+pub(crate) use io::write_atomic;
 pub use io::{ensure_config_file, open_config_file, subscribe_config_changes};
 pub use mutate::{
     import_colors_from_json, prettify_config_file, remove_root_setting,

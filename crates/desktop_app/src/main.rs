@@ -22,6 +22,7 @@ mod linux_prompt;
 mod macos_titlebar_drag;
 mod menus;
 mod multiplexer;
+mod native_titlebar;
 mod settings_view;
 mod ssh;
 mod startup;
@@ -30,6 +31,7 @@ mod text_editing;
 mod text_input;
 mod theme_store;
 mod ui;
+mod window_state;
 mod workspace_store;
 
 use crate::terminal_ui::TmuxClient;
@@ -272,8 +274,27 @@ pub(crate) fn open_terminal_window(
     multiplexer::initialize(&startup_config, cx)?;
     let window_background = initial_window_background_appearance(&startup_config);
     let startup_window_size = normalized_startup_window_size(&startup_config);
-    let bounds = Bounds::centered(None, startup_window_size, cx);
     let benchmark_mode = std::env::var_os("TERMY_BENCHMARK_COMMAND").is_some();
+    // Benchmarks compare fixed-size windows, so they neither restore nor
+    // save geometry. Only the first window gets the saved position back.
+    let restored_geometry = (!benchmark_mode)
+        .then(|| {
+            window_state::restored_window_geometry(
+                cx,
+                size(px(MIN_WINDOW_WIDTH), px(MIN_WINDOW_HEIGHT)),
+                cx.windows().is_empty(),
+            )
+        })
+        .flatten();
+    #[cfg(target_os = "windows")]
+    let apply_windows_startup_resize = restored_geometry.is_none();
+    let (window_bounds, display_id) = match restored_geometry {
+        Some(geometry) => (geometry.bounds, geometry.display_id),
+        None => (
+            WindowBounds::Windowed(Bounds::centered(None, startup_window_size, cx)),
+            None,
+        ),
+    };
 
     #[cfg(target_os = "macos")]
     let titlebar = Some(gpui_kit::TitlebarOptions {
@@ -296,7 +317,8 @@ pub(crate) fn open_terminal_window(
 
     cx.open_window(
         WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            window_bounds: Some(window_bounds),
+            display_id,
             titlebar,
             window_background,
             app_id: Some(APP_ID.to_string()),
@@ -341,8 +363,10 @@ pub(crate) fn open_terminal_window(
                     window.activate_window();
                 }
             }
+            // A restored size already came from this window's own bounds, so
+            // only the config size needs the post-open correction.
             #[cfg(target_os = "windows")]
-            {
+            if apply_windows_startup_resize {
                 let startup_window_size = startup_window_size;
                 window.defer(cx, move |window, _cx| {
                     if should_apply_windows_startup_resize(
@@ -403,7 +427,19 @@ pub(crate) fn open_terminal_window(
                 }
             }
 
+            if !benchmark_mode {
+                view.update(cx, |_, cx| {
+                    cx.observe_window_bounds(window, |_, window, cx| {
+                        window_state::schedule_save(window, cx);
+                    })
+                    .detach();
+                });
+            }
+
             window.on_window_should_close(cx, move |window, cx| {
+                if !benchmark_mode {
+                    window_state::save_now(window, cx);
+                }
                 view_handle
                     .update(cx, |view, cx| {
                         view.handle_window_should_close_request(window, cx)
@@ -733,6 +769,13 @@ fn main() {
         keybindings::install_keybindings(cx, &app_config, tmux_runtime_active);
         launch_probe::record_stage("keybindings_installed");
         let startup_config = app_config;
+        // Quitting right after a move or resize would otherwise drop the
+        // geometry that is still waiting for its delayed save.
+        cx.on_app_quit(|cx| {
+            window_state::flush(cx);
+            async {}
+        })
+        .detach();
 
         if let Err(error) = open_main_window(cx, startup_config) {
             log::error!("{error}");
