@@ -57,6 +57,13 @@ both with and without damage consumption. Focused probes are checked in under
 and run in baseline/candidate/candidate/baseline order. Raw logs, binary/source
 hashes, and the measurement manifest are retained with the local evidence.
 
+Hosted macOS CI produced 8–24% sample variation and inconsistent per-case
+failures across two runs of identical production code. Its facade gate now uses
+twelve alternating 128 MiB pairs to improve temporal averaging; Linux retains
+six 32 MiB pairs. Both retain the same 0.95 threshold, every raw sample, and
+identical baseline/candidate workloads. The local results below use the original
+six-pair 32 MiB method and do not substitute for the larger CI run.
+
 ## Local results
 
 Median elapsed times; lower is better. Focused probes ran in ABBA order with
