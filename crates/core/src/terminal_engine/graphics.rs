@@ -19,7 +19,6 @@ pub(super) struct Graphics {
     effects: Vec<GridEffect>,
     placeholders: Vec<KittyGraphicsPlaceholder>,
     last_view: Option<(bool, usize, usize, usize, usize)>,
-    last_visual_revision: u64,
     size: Option<TerminalSize>,
     #[cfg(test)]
     placeholder_scans: usize,
@@ -177,12 +176,11 @@ impl State {
         self.graphics.last_view = Some(view);
         // A text edit may remove/recolor a Unicode placeholder without changing
         // any image commands or scroll geometry. Direct images avoid this cost.
-        let visual_revision = self.grid.visual_revision();
-        changed |= self.graphics.last_visual_revision != visual_revision
+        let visual_dirty = self.grid.take_visual_dirty();
+        changed |= visual_dirty
             && self.graphics.state.has_virtual_placements_on_screen(
                 KittyGraphicsScreen::from_alternate_screen(self.alternate_screen),
             );
-        self.graphics.last_visual_revision = visual_revision;
         if changed {
             self.graphics.changed();
         }

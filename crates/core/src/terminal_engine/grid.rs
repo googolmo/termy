@@ -188,7 +188,7 @@ pub(super) struct Grid {
     // cross when choosing the new live viewport.
     clear_anchor: bool,
     full_damage: bool,
-    visual_revision: u64,
+    visual_dirty: bool,
     dirty: Vec<Option<(usize, usize)>>,
     pending_scrolls: Vec<ViewportScroll>,
     combining_cache: CombiningCache,
@@ -282,7 +282,7 @@ impl Grid {
             pending_wrap: false,
             clear_anchor: false,
             full_damage: true,
-            visual_revision: 0,
+            visual_dirty: false,
             dirty: vec![None; size.rows],
             pending_scrolls: Vec::with_capacity(MAX_SCROLL_DAMAGE),
             combining_cache: CombiningCache::default(),
@@ -392,13 +392,13 @@ impl Grid {
     }
 
     pub(super) fn mark_full_damage(&mut self) {
-        self.visual_revision = self.visual_revision.wrapping_add(1);
+        self.visual_dirty = true;
         self.full_damage = true;
         self.pending_scrolls.clear();
     }
 
     fn mark_scroll_damage(&mut self, top: usize, bottom: usize, lines: i32) {
-        self.visual_revision = self.visual_revision.wrapping_add(1);
+        self.visual_dirty = true;
         if self.full_damage {
             return;
         }
@@ -487,7 +487,7 @@ impl Grid {
     }
 
     fn mark(&mut self, row: usize, start: usize, end: usize) {
-        self.visual_revision = self.visual_revision.wrapping_add(1);
+        self.visual_dirty = true;
         if self.full_damage || row >= self.size.rows || start >= end {
             return;
         }
@@ -507,10 +507,10 @@ impl Grid {
         }
     }
 
-    /// Changes independently of damage consumption, including while full damage
-    /// is already pending. Graphics use it to notice placeholder cell edits.
-    pub(super) fn visual_revision(&self) -> u64 {
-        self.visual_revision
+    /// Tracks edits independently of damage consumption, including while full
+    /// damage is already pending. Graphics consume it to notice placeholder edits.
+    pub(super) fn take_visual_dirty(&mut self) -> bool {
+        std::mem::take(&mut self.visual_dirty)
     }
 
     pub(super) fn end_grapheme(&mut self) {
