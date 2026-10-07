@@ -984,6 +984,23 @@ fn ordered_scroll_damage_replays_edits_before_between_and_after_scrolls() {
 }
 
 #[test]
+fn hidden_cursor_deferred_wrap_damages_the_previous_row_metadata() {
+    for next in ["X", "界"] {
+        let mut grid = grid(4, 3, 10);
+        grid.cursor.visible = false;
+        grid.write_ascii(b"abcd");
+        let mut cached = Vec::new();
+        replay_damage(&mut grid, &mut cached);
+        assert!(!cached[0][3].1);
+
+        print(&mut grid, next);
+        assert!(grid.row(0).unwrap().wrapped);
+        replay_damage(&mut grid, &mut cached);
+        assert!(cached[0][3].1);
+    }
+}
+
+#[test]
 fn scroll_damage_coalesces_and_falls_back_at_a_bounded_record_count() {
     let mut grid = grid(8, 5, 0);
     grid.take_damage();

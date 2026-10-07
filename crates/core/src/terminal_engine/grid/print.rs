@@ -186,6 +186,9 @@ impl Grid {
         if self.pending_wrap {
             if self.autowrap {
                 self.screen_mut().rows[old.row].wrapped = true;
+                // Wrap metadata belongs to the last cell even when a hidden
+                // cursor produces no damage at its previous position.
+                self.mark(old.row, self.size.cols - 1, self.size.cols);
                 self.cursor.col = 0;
                 self.linefeed();
             }
