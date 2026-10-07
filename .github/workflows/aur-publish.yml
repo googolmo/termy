@@ -33,7 +33,9 @@ jobs:
       - name: Render PKGBUILD
         run: |
           set -euo pipefail
-          sed -e "s/@PKGVER@/${{ inputs.version }}/" \
+          v="${{ inputs.version }}"
+          sed -e "s/@VERSION@/${v}/" \
+              -e "s/@PKGVER@/${v//-/}/" \
               -e "s/@TARBALL_B2SUM@/${{ steps.sums.outputs.tarball }}/" \
               -e "s/@DESKTOP_B2SUM@/${{ steps.sums.outputs.desktop }}/" \
               -e "s/@LICENSE_B2SUM@/${{ steps.sums.outputs.license }}/" \

@@ -61,6 +61,9 @@ if [[ -z "$version" ]]; then
   [[ -n "$version" ]] || die "could not read version from crates/desktop_app/Cargo.toml"
 fi
 
+# makepkg forbids '-' in pkgver; 1.0.0-rc.1 becomes 1.0.0rc.1.
+pkgver="${version//-/}"
+
 carch="$(uname -m)"
 [[ "$carch" == "x86_64" ]] || die "AUR package template currently supports x86_64 only (got: $carch)"
 
@@ -96,7 +99,8 @@ license_sum="$(b2sum "$license_path" | cut -d' ' -f1)"
 icon_sum="$(b2sum "$icon_path" | cut -d' ' -f1)"
 tarball_sum="$(b2sum "$tarball_path" | cut -d' ' -f1)"
 
-sed -e "s|@PKGVER@|$version|g" \
+sed -e "s|@VERSION@|$version|g" \
+    -e "s|@PKGVER@|$pkgver|g" \
     -e "s|@TARBALL_B2SUM@|$tarball_sum|g" \
     -e "s|@DESKTOP_B2SUM@|$desktop_sum|g" \
     -e "s|@LICENSE_B2SUM@|$license_sum|g" \
@@ -112,7 +116,7 @@ fi
 read -r -a makepkg_flags <<< "${MAKEPKG_FLAGS:---nodeps --force --noconfirm --skippgpcheck -C}"
 (cd "$aur_dir" && makepkg "${makepkg_flags[@]}")
 
-pkgfile="$(find "$aur_dir" -maxdepth 1 -type f -name "termy-bin-${version}-*.pkg.tar.*" | sort -V | tail -n1)"
+pkgfile="$(find "$aur_dir" -maxdepth 1 -type f -name "termy-bin-${pkgver}-*.pkg.tar.*" | sort -V | tail -n1)"
 [[ -n "$pkgfile" ]] || die "package artifact not found in $aur_dir"
 
 echo "Built $pkgfile"
