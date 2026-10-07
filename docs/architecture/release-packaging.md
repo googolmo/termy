@@ -16,6 +16,8 @@ Release packaging is rooted in `scripts/`. GitHub release workflows should call 
 
 The app version used by packaging scripts comes from `crates/desktop_app/Cargo.toml` unless an explicit version is passed.
 
+Pre-release tags such as `v1.0.0-rc.1` are supported. Artifact file names keep the tag as is, while the Linux deb and RPM package versions become `1.0.0~rc.1` so package managers order the pre-release before `1.0.0`. Publish pre-releases with GitHub's pre-release flag so stable finalization (latest release and AUR) skips them. The in-app version still comes from `crates/desktop_app/Cargo.toml`.
+
 ## Update installation
 
 The macOS updater stages the new app bundle on the destination filesystem before

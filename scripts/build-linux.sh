@@ -51,6 +51,15 @@ read_version_from_cargo_toml() {
   ' "$REPO_ROOT/crates/desktop_app/Cargo.toml"
 }
 
+# deb and RPM versions take no leading 'v', and both formats sort '~' before the
+# release it precedes. Turning the SemVer pre-release dash into '~' (and any
+# later dashes into '.') makes 1.0.0-rc.1 -> 1.0.0~rc.1, which upgrades cleanly
+# to 1.0.0. A plain dash would be a deb revision (sorting after 1.0.0) and is
+# rejected by RPM.
+package_version() {
+  printf '%s\n' "${1#v}" | sed -e 's/-/~/' -e 's/-/./g'
+}
+
 arch_to_target() {
   case "$1" in
     x86_64|amd64) echo "x86_64-unknown-linux-gnu" ;;
@@ -407,8 +416,7 @@ APP_RUN
     DEB_NAME="${APP_NAME}-${VERSION}-${OS_NAME}-${ARCH}.deb"
     OUTPUT_PATH="$DIST_DIR/$DEB_NAME"
 
-    # Debian version strings must start with a digit.
-    DEB_VERSION="${VERSION#v}"
+    DEB_VERSION="$(package_version "$VERSION")"
     case "$ARCH" in
       x86_64) DEB_ARCH="amd64" ;;
       aarch64) DEB_ARCH="arm64" ;;
@@ -452,9 +460,7 @@ EOF
     RPM_NAME="${APP_NAME}-${VERSION}-${OS_NAME}-${ARCH}.rpm"
     OUTPUT_PATH="$DIST_DIR/$RPM_NAME"
 
-    # RPM version strings must not contain dashes or a leading 'v'.
-    RPM_VERSION="${VERSION#v}"
-    [[ "$RPM_VERSION" != *-* ]] || die "RPM version must not contain dashes: $RPM_VERSION"
+    RPM_VERSION="$(package_version "$VERSION")"
 
     log "Creating rpm staging directory"
     rm -rf "$RPM_STAGING_ROOT"
