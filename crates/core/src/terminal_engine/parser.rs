@@ -9,7 +9,7 @@ const MAX_PARAMS: usize = 32;
 const MAX_SUBPARAMS: usize = 8;
 const MAX_INTERMEDIATES: usize = 2;
 const MAX_STRING_BYTES: usize = 64 * 1024;
-const MAX_APC_BYTES: usize = 256 * 1024 * 1024;
+pub(super) const MAX_APC_BYTES: usize = 256 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Param {
@@ -105,6 +105,8 @@ pub(super) struct Parser {
     intermediate_len: usize,
     discarded: bool,
     string: Vec<u8>,
+    string_len: usize,
+    collect_strings: bool,
     apc_limit: usize,
     utf8_value: u32,
     utf8_remaining: u8,
@@ -123,6 +125,8 @@ impl Default for Parser {
             intermediate_len: 0,
             discarded: false,
             string: Vec::new(),
+            string_len: 0,
+            collect_strings: true,
             apc_limit: MAX_STRING_BYTES,
             utf8_value: 0,
             utf8_remaining: 0,
@@ -139,6 +143,15 @@ impl Parser {
         Self {
             apc_limit: limit.clamp(1, MAX_APC_BYTES),
             ..Self::default()
+        }
+    }
+
+    /// Recognize identical string boundaries without retaining their payloads.
+    /// String callbacks receive empty slices; marker scanners ignore them.
+    pub(super) fn scanner(apc_limit: usize) -> Self {
+        Self {
+            collect_strings: false,
+            ..Self::with_apc_limit(apc_limit)
         }
     }
 
@@ -427,12 +440,16 @@ impl Parser {
         } else {
             MAX_STRING_BYTES
         };
-        if bytes.len() > limit - self.string.len() {
+        if bytes.len() > limit - self.string_len {
             self.discarded = true;
             self.clear_string();
             return;
         }
-        let required = self.string.len() + bytes.len();
+        self.string_len += bytes.len();
+        if !self.collect_strings {
+            return;
+        }
+        let required = self.string_len;
         if required > self.string.capacity() {
             // Control geometric growth explicitly so a large chunk cannot
             // double capacity beyond the payload limit.
@@ -463,6 +480,7 @@ impl Parser {
     }
 
     fn clear_string(&mut self) {
+        self.string_len = 0;
         // Large APC transfers must not permanently raise every session's
         // retained heap. Ordinary OSC/DCS buffers still reuse their allocation.
         if self.string.capacity() > MAX_STRING_BYTES {

@@ -499,13 +499,7 @@ fn configured_apc_limit_does_not_expand_osc_or_dcs_limits() {
 
 #[test]
 fn large_apc_storage_is_released_after_completion_or_interruption() {
-    for ending in [
-        b"\x1b\\".as_slice(),
-        b"\x18",
-        b"\x1a",
-        b"\x1b[2J",
-        b"\x1bc",
-    ] {
+    for ending in [b"\x1b\\".as_slice(), b"\x18", b"\x1a", b"\x1b[2J", b"\x1bc"] {
         let mut parser = Parser::with_apc_limit(MAX_STRING_BYTES * 2);
         let mut recorder = Recorder::default();
         parser.advance(&mut recorder, b"\x1b_");
@@ -537,5 +531,22 @@ fn large_apc_storage_is_released_on_overflow_and_parser_reset() {
         assert_eq!(parser.string.capacity(), 0);
         parser.advance(&mut recorder, b"OK");
         assert_eq!(recorder.events, vec![Event::Print('O'), Event::Print('K')]);
+    }
+}
+
+#[test]
+fn scanner_tracks_large_string_limits_without_allocating_payloads() {
+    for introducer in *b"]P_" {
+        let mut parser = Parser::scanner(MAX_STRING_BYTES * 2);
+        let mut recorder = Recorder::default();
+        parser.advance(&mut recorder, &[0x1b, introducer]);
+        parser.advance(&mut recorder, &vec![b'x'; MAX_STRING_BYTES + 1]);
+        assert_eq!(parser.string.capacity(), 0);
+        parser.advance(&mut recorder, b"\x1b[?2026lEND");
+        if introducer == b'_' {
+            assert_eq!(printed(&recorder.events), "END");
+        } else {
+            assert!(recorder.events.is_empty());
+        }
     }
 }

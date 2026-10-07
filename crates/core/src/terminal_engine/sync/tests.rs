@@ -51,13 +51,15 @@ fn malformed_and_cancelled_markers_do_not_end_buffering() {
 
 #[test]
 fn oversized_string_embedded_marker_is_discarded_until_st() {
-    let now = Instant::now();
-    let mut update = SynchronizedUpdate::default();
-    update.begin(now);
-    assert!(!update.push(b"\x1b_", now).commit);
-    assert!(!update.push(&vec![b'x'; 64 * 1024 + 1], now).commit);
-    assert!(!update.push(b"\x1b[?2026l", now).commit);
-    assert!(update.push(b"\x1b\\\x1b[?2026l", now).commit);
+    for introducer in [b"\x1b]", b"\x1bP"] {
+        let now = Instant::now();
+        let mut update = SynchronizedUpdate::default();
+        update.begin(now);
+        assert!(!update.push(introducer, now).commit);
+        assert!(!update.push(&vec![b'x'; 64 * 1024 + 1], now).commit);
+        assert!(!update.push(b"\x1b[?2026l", now).commit);
+        assert!(update.push(b"\x1b\\\x1b[?2026l", now).commit);
+    }
 }
 
 #[test]
@@ -104,6 +106,26 @@ mod engine {
         let mut bytes = Vec::new();
         engine.drain_replies(&mut bytes);
         bytes
+    }
+
+    #[test]
+    fn interrupted_large_apc_commits_at_each_end_marker_boundary() {
+        let ending = b"\x1b[?2026lEND\x1b[6n";
+        for split in 0..=ending.len() {
+            let now = Instant::now();
+            let mut engine = engine();
+            engine.feed_at(b"old\x1b[?2026h\r\x1b_", now);
+            engine.feed_at(&vec![b'x'; 64 * 1024 + 1], now);
+            assert_eq!(text(&engine, 0), "old             ");
+            engine.feed_at(&ending[..split], now);
+            engine.feed_at(&ending[split..], now);
+            assert!(
+                engine.synchronized_update_deadline().is_none(),
+                "split {split}"
+            );
+            assert_eq!(text(&engine, 0), "END             ", "split {split}");
+            assert_eq!(replies(&mut engine), b"\x1b[1;4R", "split {split}");
+        }
     }
 
     #[test]

@@ -6,16 +6,25 @@
 
 use std::time::{Duration, Instant};
 
-use super::parser::{Handler, Param, Parser};
+use super::parser::{Handler, MAX_APC_BYTES, Param, Parser};
 
 pub(super) const MAX_SYNC_BYTES: usize = 2 * 1024 * 1024;
 pub(super) const SYNC_TIMEOUT: Duration = Duration::from_millis(150);
 
-#[derive(Default)]
 pub(super) struct SynchronizedUpdate {
     scanner: Parser,
     bytes: Vec<u8>,
     deadline: Option<Instant>,
+}
+
+impl Default for SynchronizedUpdate {
+    fn default() -> Self {
+        Self {
+            scanner: Parser::scanner(MAX_APC_BYTES),
+            bytes: Vec::new(),
+            deadline: None,
+        }
+    }
 }
 
 pub(super) struct Buffered {

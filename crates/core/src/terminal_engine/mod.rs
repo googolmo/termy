@@ -103,7 +103,7 @@ pub struct Engine {
 impl Engine {
     pub fn new(size: Size, options: Options) -> Self {
         Self {
-            parser: Parser::with_apc_limit(256 * 1024 * 1024),
+            parser: Parser::with_apc_limit(parser::MAX_APC_BYTES),
             synchronized_update: SynchronizedUpdate::default(),
             state: State::new(size, options),
             generation: 0,
